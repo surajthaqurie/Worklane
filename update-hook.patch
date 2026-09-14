@@ -1,0 +1,27 @@
+--- apps/web/src/hooks/useWorkItems.ts
++++ apps/web/src/hooks/useWorkItems.ts
+@@ -34,8 +34,20 @@
+       if (!res.ok) throw new Error('Failed to update work item');
+       return res.json();
+     },
+-    onSuccess: () => {
++    onMutate: async ({ id, data }) => {
++      await queryClient.cancelQueries({ queryKey: ['projects', projectId, 'work-items'] });
++      const previousQueries = queryClient.getQueriesData({ queryKey: ['projects', projectId, 'work-items'] });
++      queryClient.setQueriesData({ queryKey: ['projects', projectId, 'work-items'] }, (old: any) => {
++        if (!old || !Array.isArray(old)) return old;
++        return old.map((item: any) => (item.id === id ? { ...item, ...data } : item));
++      });
++      return { previousQueries };
++    },
++    onError: (_err, _newTodo, context) => {
++      if (context?.previousQueries) {
++        context.previousQueries.forEach(([queryKey, data]) => {
++          queryClient.setQueryData(queryKey, data);
++        });
++      }
++    },
++    onSettled: () => {
+       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
+     }
+   });

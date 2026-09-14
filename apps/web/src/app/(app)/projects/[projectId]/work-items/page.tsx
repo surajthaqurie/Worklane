@@ -1,0 +1,113 @@
+'use client';
+import { use, useState } from 'react';
+import { useWorkItems, WorkItem } from '@/hooks/useWorkItems';
+import { WorkItemDrawer } from '@/components/WorkItemDrawer';
+import { Search } from 'lucide-react';
+
+export default function WorkItemsPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const resolvedParams = use(params);
+  const { data: workItems = [], isLoading } = useWorkItems(resolvedParams.projectId);
+  const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
+  const [search, setSearch] = useState('');
+
+  const filteredItems = workItems.filter((i: WorkItem) => 
+    i.title.toLowerCase().includes(search.toLowerCase()) || 
+    i.key.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="w-full flex flex-col h-full">
+      <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 mb-4 border-b border-[var(--border-subtle)] shrink-0">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[24px] font-semibold text-[var(--text-primary)]">
+            Work Items
+          </h1>
+          <p className="mt-1 text-[14px] text-[var(--text-secondary)]">
+            All work items across the project.
+          </p>
+        </div>
+        <div className="mt-4 flex md:ml-4 md:mt-0 gap-3">
+          <button className="px-4 py-2 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white text-[13px] font-medium rounded-[var(--radius-button)] transition-colors">
+            + New Work Item
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-4 relative w-72">
+        <Search className="absolute left-3 top-2.5 w-4 h-4 text-[var(--text-muted)]" />
+        <input
+          type="text"
+          placeholder="Search items..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full pl-9 pr-3 py-2 text-[13px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] transition-colors placeholder:text-[var(--text-muted)]"
+        />
+      </div>
+      
+      <div className="flex-1 overflow-auto">
+        <div className="min-w-full inline-block align-middle">
+          <div className="border border-[var(--border-subtle)] rounded-[var(--radius-card)] overflow-hidden bg-[var(--bg-surface)]">
+            <table className="min-w-full divide-y divide-[var(--border-subtle)]">
+              <thead className="bg-[var(--bg-surface-hover)]">
+                <tr>
+                  <th scope="col" className="px-4 py-3 text-left text-[12px] font-medium text-[var(--text-secondary)]">ID</th>
+                  <th scope="col" className="px-4 py-3 text-left text-[12px] font-medium text-[var(--text-secondary)] w-1/2">Title</th>
+                  <th scope="col" className="px-4 py-3 text-left text-[12px] font-medium text-[var(--text-secondary)]">State</th>
+                  <th scope="col" className="px-4 py-3 text-left text-[12px] font-medium text-[var(--text-secondary)]">Priority</th>
+                  <th scope="col" className="px-4 py-3 text-left text-[12px] font-medium text-[var(--text-secondary)]">Assignee</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-[13px] text-[var(--text-muted)]">Loading work items...</td>
+                  </tr>
+                ) : filteredItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-[13px] text-[var(--text-muted)]">No work items found.</td>
+                  </tr>
+                ) : (
+                  filteredItems.map((item: WorkItem) => (
+                    <tr 
+                      key={item.id} 
+                      onClick={() => setSelectedItem(item)}
+                      className="hover:bg-[var(--bg-surface-hover)] cursor-pointer transition-colors group"
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap text-[13px] font-medium text-[var(--text-secondary)]">{item.key}</td>
+                      <td className="px-4 py-3 text-[13px] text-[var(--text-primary)] font-medium">{item.title}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[var(--bg-surface-hover)] text-[var(--text-primary)]">
+                          {item.state.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <div className={`w-2 h-2 rounded-full ${item.priority === 'HIGH' || item.priority === 'URGENT' ? 'bg-[var(--priority-high)]' : 'bg-[var(--priority-medium)]'}`}></div>
+                          <span className="text-[12px] text-[var(--text-secondary)]">{item.priority}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="w-6 h-6 rounded-[var(--radius-avatar)] bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-[10px] text-[var(--text-primary)]" title={item.assignedTo || 'Unassigned'}>
+                            {item.assignedTo ? item.assignedTo.substring(0,2).toUpperCase() : 'UI'}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {selectedItem && (
+        <WorkItemDrawer 
+          item={selectedItem} 
+          onClose={() => setSelectedItem(null)} 
+        />
+      )}
+    </div>
+  );
+}

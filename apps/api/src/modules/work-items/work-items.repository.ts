@@ -60,7 +60,7 @@ export class WorkItemsRepository {
         query = query.where('assigned_to', '=', filters.assignedTo);
       }
     }
-    if (filters.sprintId)
+    if (filters.sprintId && filters.sprintId !== 'undefined')
       query = query.where(
         'sprint_id',
         '=',

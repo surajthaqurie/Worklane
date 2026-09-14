@@ -29,6 +29,7 @@ export class ProjectsService {
       ...data,
       created_by: userId,
     });
+    await this.repo.addMember(project.id, userId);
     return this.mapProject(project);
   }
 

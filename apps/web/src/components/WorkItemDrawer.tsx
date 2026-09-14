@@ -1,21 +1,22 @@
-import React, { useState } from 'react';
-import { WorkItem, useWorkItemComments, useWorkItemActivity, useAddComment, useUpdateComment, useDeleteComment } from '@/hooks/useWorkItems';
-import { format } from 'date-fns';
+'use client';
 
-export function WorkItemDrawer({ item, onClose }: { item: WorkItem | null, onClose: () => void }) {
+import { useState } from 'react';
+import { format } from 'date-fns';
+import { WorkItem, useWorkItemComments, useWorkItemActivity, useAddComment, useUpdateComment, useDeleteComment } from '@/hooks/useWorkItems';
+import { X } from 'lucide-react';
+
+export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<'comments' | 'activity'>('comments');
   const [newComment, setNewComment] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState('');
 
-  const { data: comments = [], isLoading: isLoadingComments } = useWorkItemComments(item?.id || null);
-  const { data: activity = [], isLoading: isLoadingActivity } = useWorkItemActivity(item?.id || null);
-  
-  const addComment = useAddComment(item?.id || null);
-  const updateComment = useUpdateComment(item?.id || null);
-  const deleteComment = useDeleteComment(item?.id || null);
+  const { data: comments = [], isLoading: isLoadingComments } = useWorkItemComments(item.id);
+  const { data: activity = [], isLoading: isLoadingActivity } = useWorkItemActivity(item.id);
 
-  if (!item) return null;
+  const addComment = useAddComment(item.id);
+  const updateComment = useUpdateComment(item.id);
+  const deleteComment = useDeleteComment(item.id);
 
   const handleAddComment = () => {
     if (!newComment.trim()) return;
@@ -37,134 +38,141 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem | null, onClo
     }
   };
 
-  // Using a hardcoded userId for now or you'd get it from a user context
-  // Let's assume current user is the one making changes. Wait, we don't have user context.
-  // We'll just allow edit/delete for all for simplicity in UI, backend handles permission if it was fully implemented.
-  // The prompt says "Delete their own comment" "No roles or permissions." So we will just show the buttons.
-  
   return (
     <>
-      {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+        className="fixed inset-0 bg-black/40 z-40 transition-opacity backdrop-blur-[1px]"
         onClick={onClose}
       />
       
-      {/* Drawer */}
-      <div className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white dark:bg-gray-900 shadow-xl z-50 flex flex-col transform transition-transform duration-300">
-        <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-800">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-mono text-gray-500">{item.key}</span>
-            <h2 className="text-lg font-semibold">{item.title}</h2>
+      <div className="fixed inset-y-0 right-0 w-full md:w-[600px] bg-[var(--bg-surface)] shadow-2xl z-50 flex flex-col transform transition-transform duration-300 border-l border-[var(--border-subtle)]">
+        <div className="flex justify-between items-start p-6 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-2 pr-8">
+            <div className="flex items-center gap-3">
+              <span className="text-[13px] font-medium text-[var(--text-secondary)]">{item.key}</span>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] text-[var(--text-primary)]">
+                {item.type}
+              </span>
+            </div>
+            <h2 className="text-[18px] font-semibold text-[var(--text-primary)] leading-snug">{item.title}</h2>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-black dark:hover:text-white p-2">✕</button>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors absolute top-6 right-6 p-1 bg-[var(--bg-surface-hover)] rounded-full">
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        <div className="flex border-b border-gray-200 dark:border-gray-800">
+        <div className="flex border-b border-[var(--border-subtle)] px-6">
           <button 
-            className={`flex-1 py-3 text-sm font-medium ${activeTab === 'comments' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-black dark:hover:text-white'}`}
+            className={`py-3 mr-6 text-[13px] font-medium relative ${activeTab === 'comments' ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
             onClick={() => setActiveTab('comments')}
           >
             Comments
+            {activeTab === 'comments' && <div className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-[var(--brand-primary)]"></div>}
           </button>
           <button 
-            className={`flex-1 py-3 text-sm font-medium ${activeTab === 'activity' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-black dark:hover:text-white'}`}
+            className={`py-3 text-[13px] font-medium relative ${activeTab === 'activity' ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
             onClick={() => setActiveTab('activity')}
           >
             Activity
+            {activeTab === 'activity' && <div className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-[var(--brand-primary)]"></div>}
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
           {activeTab === 'comments' && (
             <>
-              <div className="flex flex-col gap-4 flex-1">
+              <div className="flex flex-col gap-6 flex-1">
                 {isLoadingComments ? (
-                  <div className="text-center text-gray-500">Loading comments...</div>
+                  <div className="text-center text-[13px] text-[var(--text-muted)] mt-8">Loading comments...</div>
                 ) : comments.length === 0 ? (
-                  <div className="text-center text-gray-500 py-8">No comments yet.</div>
+                  <div className="text-center text-[13px] text-[var(--text-muted)] py-12">No comments yet. Be the first to start the conversation.</div>
                 ) : (
                   comments.map((comment: any) => (
-                    <div key={comment.id} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg flex flex-col gap-2">
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm">{comment.user_name || 'User'}</span>
-                          <span className="text-xs text-gray-500">{format(new Date(comment.created_at), 'MMM d, yyyy HH:mm')}</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => { setEditingCommentId(comment.id); setEditingCommentContent(comment.content); }}
-                            className="text-xs text-blue-600 hover:underline"
-                          >Edit</button>
-                          <button 
-                            onClick={() => handleDelete(comment.id)}
-                            className="text-xs text-red-600 hover:underline"
-                          >Delete</button>
-                        </div>
+                    <div key={comment.id} className="flex gap-4">
+                      <div className="w-8 h-8 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-[11px] font-medium text-[var(--text-primary)] flex-shrink-0">
+                        {comment.user_name?.substring(0,2).toUpperCase() || 'US'}
                       </div>
-                      
-                      {editingCommentId === comment.id ? (
-                        <div className="flex flex-col gap-2">
-                          <textarea 
-                            className="w-full border border-gray-300 dark:border-gray-700 rounded-md p-2 text-sm bg-white dark:bg-gray-900 min-h-[60px]"
-                            value={editingCommentContent}
-                            onChange={(e) => setEditingCommentContent(e.target.value)}
-                          />
-                          <div className="flex justify-end gap-2">
-                            <button onClick={() => setEditingCommentId(null)} className="text-xs px-3 py-1 text-gray-500">Cancel</button>
-                            <button onClick={() => handleSaveEdit(comment.id)} className="text-xs px-3 py-1 bg-blue-600 text-white rounded">Save</button>
-                          </div>
+                      <div className="flex flex-col flex-1">
+                        <div className="flex items-baseline gap-2 mb-1">
+                          <span className="font-semibold text-[13px] text-[var(--text-primary)]">{comment.user_name || 'User'}</span>
+                          <span className="text-[12px] text-[var(--text-muted)]">{format(new Date(comment.created_at), 'MMM d, yyyy HH:mm')}</span>
                         </div>
-                      ) : (
-                        <p className="text-sm whitespace-pre-wrap">{comment.content}</p>
-                      )}
+                        
+                        {editingCommentId === comment.id ? (
+                          <div className="flex flex-col gap-2 mt-1">
+                            <textarea 
+                              className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] p-2.5 text-[13px] bg-[var(--bg-surface)] min-h-[80px] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
+                              value={editingCommentContent}
+                              onChange={(e) => setEditingCommentContent(e.target.value)}
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button onClick={() => setEditingCommentId(null)} className="text-[12px] px-3 py-1.5 text-[var(--text-secondary)] font-medium hover:bg-[var(--bg-surface-hover)] rounded-[var(--radius-button)] transition-colors">Cancel</button>
+                              <button onClick={() => handleSaveEdit(comment.id)} className="text-[12px] px-3 py-1.5 bg-[var(--brand-primary)] text-white font-medium rounded-[var(--radius-button)] hover:bg-[var(--brand-primary-hover)] transition-colors">Save</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="group relative">
+                            <p className="text-[13px] text-[var(--text-primary)] whitespace-pre-wrap bg-[var(--bg-surface-hover)] p-3 rounded-tr-[var(--radius-card)] rounded-br-[var(--radius-card)] rounded-bl-[var(--radius-card)]">{comment.content}</p>
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 absolute -right-2 top-2 translate-x-full">
+                              <button 
+                                onClick={() => { setEditingCommentId(comment.id); setEditingCommentContent(comment.content); }}
+                                className="text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium"
+                              >Edit</button>
+                              <button 
+                                onClick={() => handleDelete(comment.id)}
+                                className="text-[11px] text-[var(--priority-high)] hover:text-[var(--priority-urgent)] font-medium"
+                              >Delete</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))
                 )}
               </div>
-              <div className="mt-auto border-t border-gray-200 dark:border-gray-800 pt-4 flex flex-col gap-2 bg-white dark:bg-gray-900 sticky bottom-0">
+              <div className="mt-auto border-t border-[var(--border-subtle)] pt-6 flex flex-col gap-3 bg-[var(--bg-surface)] sticky bottom-0">
                 <textarea 
-                  className="w-full border border-gray-300 dark:border-gray-700 rounded-md p-2 text-sm bg-transparent min-h-[80px]"
-                  placeholder="Add a comment..."
+                  className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] p-3 text-[13px] bg-[var(--bg-surface)] min-h-[80px] focus:outline-none focus:border-[var(--border-focus)] transition-colors placeholder:text-[var(--text-muted)]"
+                  placeholder="Write a comment..."
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                 />
                 <button 
                   onClick={handleAddComment}
                   disabled={!newComment.trim() || addComment.isPending}
-                  className="self-end px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  className="self-end px-4 py-2 bg-[var(--brand-primary)] text-white text-[13px] font-medium rounded-[var(--radius-button)] hover:bg-[var(--brand-primary-hover)] disabled:opacity-50 transition-colors"
                 >
-                  Comment
+                  Send
                 </button>
               </div>
             </>
           )}
 
           {activeTab === 'activity' && (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-6">
               {isLoadingActivity ? (
-                <div className="text-center text-gray-500">Loading activity...</div>
+                <div className="text-center text-[13px] text-[var(--text-muted)] mt-8">Loading activity...</div>
               ) : activity.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">No activity yet.</div>
+                <div className="text-center text-[13px] text-[var(--text-muted)] py-12">No activity yet.</div>
               ) : (
                 activity.map((act: any) => (
-                  <div key={act.id} className="flex gap-3 text-sm">
-                    <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                      {act.user_name?.[0]?.toUpperCase() || 'U'}
+                  <div key={act.id} className="flex gap-4">
+                    <div className="w-8 h-8 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center flex-shrink-0 text-[11px] font-medium text-[var(--text-primary)]">
+                      {act.user_name?.substring(0,2).toUpperCase() || 'US'}
                     </div>
-                    <div className="flex flex-col">
-                      <div>
-                        <span className="font-medium">{act.user_name || 'User'}</span>
-                        <span className="text-gray-500 mx-1">
+                    <div className="flex flex-col justify-center">
+                      <div className="text-[13px]">
+                        <span className="font-semibold text-[var(--text-primary)]">{act.user_name || 'User'}</span>
+                        <span className="text-[var(--text-secondary)] mx-1">
                           {act.action === 'CREATED' && 'created this item'}
                           {act.action === 'TITLE_CHANGED' && `changed title`}
-                          {act.action === 'STATE_CHANGED' && `moved from ${act.old_value?.replace('_', ' ')} to ${act.new_value?.replace('_', ' ')}`}
+                          {act.action === 'STATE_CHANGED' && `moved item to ${act.new_value?.replace('_', ' ')}`}
                           {act.action === 'PRIORITY_CHANGED' && `changed priority to ${act.new_value}`}
                           {act.action === 'ASSIGNEE_CHANGED' && `assigned to ${act.new_value || 'unassigned'}`}
                           {act.action === 'DESCRIPTION_CHANGED' && `updated the description`}
                         </span>
                       </div>
-                      <span className="text-xs text-gray-400">{format(new Date(act.created_at), 'MMM d, yyyy HH:mm')}</span>
+                      <span className="text-[12px] text-[var(--text-muted)] mt-0.5">{format(new Date(act.created_at), 'MMM d, yyyy HH:mm')}</span>
                     </div>
                   </div>
                 ))

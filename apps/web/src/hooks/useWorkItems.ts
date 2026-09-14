@@ -1,3 +1,4 @@
+import { fetchWithAuth } from "./fetcher";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -14,7 +15,7 @@ export function useWorkItems(projectId: string, filters: Record<string, string> 
       if (filters.sprintId) searchParams.set('sprintId', filters.sprintId);
       if (filters.search) searchParams.set('search', filters.search);
       
-      const res = await fetch(`${API_URL}/projects/${projectId}/work-items?${searchParams.toString()}`);
+      const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/work-items?${searchParams.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch work items');
       return res.json();
     }
@@ -25,7 +26,7 @@ export function useCreateWorkItem(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
-      const res = await fetch(`${API_URL}/projects/${projectId}/work-items`, {
+      const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/work-items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -61,7 +62,7 @@ export function useUpdateWorkItem(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
-      const res = await fetch(`${API_URL}/work-items/${id}`, {
+      const res = await fetchWithAuth(`${API_URL}/work-items/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -96,7 +97,7 @@ export function useWorkItemComments(workItemId: string | null) {
     queryKey: ['work-items', workItemId, 'comments'],
     queryFn: async () => {
       if (!workItemId) return [];
-      const res = await fetch(`${API_URL}/work-items/${workItemId}/comments`);
+      const res = await fetchWithAuth(`${API_URL}/work-items/${workItemId}/comments`);
       if (!res.ok) throw new Error('Failed to fetch comments');
       return res.json();
     },
@@ -109,7 +110,7 @@ export function useAddComment(workItemId: string | null) {
   return useMutation({
     mutationFn: async (content: string) => {
       if (!workItemId) throw new Error('No work item id');
-      const res = await fetch(`${API_URL}/work-items/${workItemId}/comments`, {
+      const res = await fetchWithAuth(`${API_URL}/work-items/${workItemId}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content })
@@ -128,7 +129,7 @@ export function useUpdateComment(workItemId: string | null) {
   return useMutation({
     mutationFn: async ({ commentId, content }: { commentId: string, content: string }) => {
       if (!workItemId) throw new Error('No work item id');
-      const res = await fetch(`${API_URL}/work-items/${workItemId}/comments/${commentId}`, {
+      const res = await fetchWithAuth(`${API_URL}/work-items/${workItemId}/comments/${commentId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content })
@@ -147,7 +148,7 @@ export function useDeleteComment(workItemId: string | null) {
   return useMutation({
     mutationFn: async (commentId: string) => {
       if (!workItemId) throw new Error('No work item id');
-      const res = await fetch(`${API_URL}/work-items/${workItemId}/comments/${commentId}`, {
+      const res = await fetchWithAuth(`${API_URL}/work-items/${workItemId}/comments/${commentId}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error('Failed to delete comment');
@@ -164,7 +165,7 @@ export function useWorkItemActivity(workItemId: string | null) {
     queryKey: ['work-items', workItemId, 'activity'],
     queryFn: async () => {
       if (!workItemId) return [];
-      const res = await fetch(`${API_URL}/work-items/${workItemId}/activity`);
+      const res = await fetchWithAuth(`${API_URL}/work-items/${workItemId}/activity`);
       if (!res.ok) throw new Error('Failed to fetch activity');
       return res.json();
     },

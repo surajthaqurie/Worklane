@@ -3,8 +3,8 @@
 import { usePathname, useRouter, useSearchParams, useParams } from 'next/navigation';
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSprints } from '@/hooks/useSprints';
+import { Search } from 'lucide-react';
 
-// A simple debounce hook
 export function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
   useEffect(() => {
@@ -52,22 +52,25 @@ function WorkItemFiltersInner() {
   const sprintId = searchParams.get('sprintId') || '';
   
   return (
-    <div className="flex flex-col gap-4 mb-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          type="text"
-          placeholder="Search by ID, title or description..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="border border-gray-300 dark:border-gray-700 rounded-md px-3 py-1.5 text-sm w-64 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+    <div className="flex flex-col gap-4 mb-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2 w-4 h-4 text-[var(--text-muted)]" />
+          <input
+            type="text"
+            placeholder="Search..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-8 pr-3 py-1.5 text-[13px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] w-64 focus:outline-none focus:border-[var(--border-focus)] transition-colors placeholder:text-[var(--text-muted)]"
+          />
+        </div>
 
         <select
           value={type}
           onChange={(e) => updateParam('type', e.target.value)}
-          className="border border-gray-300 dark:border-gray-700 rounded-md px-3 py-1.5 text-sm bg-transparent"
+          className="px-3 py-1.5 text-[13px] font-medium bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] text-[var(--text-primary)]"
         >
-          <option value="">All Types</option>
+          <option value="">Type</option>
           <option value="TASK">Task</option>
           <option value="BUG">Bug</option>
           <option value="STORY">Story</option>
@@ -76,9 +79,9 @@ function WorkItemFiltersInner() {
         <select
           value={state}
           onChange={(e) => updateParam('state', e.target.value)}
-          className="border border-gray-300 dark:border-gray-700 rounded-md px-3 py-1.5 text-sm bg-transparent"
+          className="px-3 py-1.5 text-[13px] font-medium bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] text-[var(--text-primary)]"
         >
-          <option value="">All States</option>
+          <option value="">State</option>
           <option value="TODO">To Do</option>
           <option value="IN_PROGRESS">In Progress</option>
           <option value="DONE">Done</option>
@@ -87,9 +90,9 @@ function WorkItemFiltersInner() {
         <select
           value={priority}
           onChange={(e) => updateParam('priority', e.target.value)}
-          className="border border-gray-300 dark:border-gray-700 rounded-md px-3 py-1.5 text-sm bg-transparent"
+          className="px-3 py-1.5 text-[13px] font-medium bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] text-[var(--text-primary)]"
         >
-          <option value="">All Priorities</option>
+          <option value="">Priority</option>
           <option value="LOW">Low</option>
           <option value="MEDIUM">Medium</option>
           <option value="HIGH">High</option>
@@ -99,23 +102,13 @@ function WorkItemFiltersInner() {
         <select
           value={assignedTo}
           onChange={(e) => updateParam('assignedTo', e.target.value)}
-          className="border border-gray-300 dark:border-gray-700 rounded-md px-3 py-1.5 text-sm bg-transparent"
+          className="px-3 py-1.5 text-[13px] font-medium bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] text-[var(--text-primary)]"
         >
-          <option value="">All Assignees</option>
+          <option value="">Assignee</option>
           <option value="UNASSIGNED">Unassigned</option>
-          {/* We might want to list users here eventually, but for now we rely on explicit IDs or leave as basic string match if implemented */}
-        </select>
-
-        <select
-          value={sprintId}
-          onChange={(e) => updateParam('sprintId', e.target.value)}
-          className="border border-gray-300 dark:border-gray-700 rounded-md px-3 py-1.5 text-sm bg-transparent"
-        >
-          <option value="">All Sprints</option>
-          <option value="null">Backlog (No Sprint)</option>
-          {sprints.map((s: { id: string; name: string }) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
+          <option value="user-1">Alice Smith</option>
+          <option value="user-2">Bob Jones</option>
+          <option value="user-3">Charlie Brown</option>
         </select>
       </div>
     </div>
@@ -124,7 +117,7 @@ function WorkItemFiltersInner() {
 
 export function WorkItemFilters() {
   return (
-    <Suspense fallback={<div className="h-[46px] w-full animate-pulse bg-gray-100 dark:bg-gray-800 rounded-md mb-6" />}>
+    <Suspense fallback={<div className="h-[34px] w-[600px] animate-pulse bg-[var(--bg-surface-hover)] rounded-[var(--radius-button)] mb-4" />}>
       <WorkItemFiltersInner />
     </Suspense>
   );

@@ -83,7 +83,7 @@ const dialect = new PostgresDialect({
   pool: new Pool({
     connectionString:
       process.env.DATABASE_URL ||
-      'postgresql://postgres:postgres@localhost:5432/todoapp',
+      'postgresql://postgres:postgres@localhost:5434/todoapp',
     max: 10,
   }),
 });

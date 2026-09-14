@@ -59,7 +59,7 @@ export function CreateWorkItemModal({ projectId, onClose }: { projectId: string,
             <label className="text-[13px] font-medium text-[var(--text-secondary)]">Type</label>
             <select 
               value={type}
-              onChange={(e) => setType(e.target.value as any)}
+              onChange={(e) => setType(e.target.value as 'TASK' | 'BUG' | 'STORY')}
               className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
             >
               <option value="TASK">Task</option>
@@ -72,7 +72,7 @@ export function CreateWorkItemModal({ projectId, onClose }: { projectId: string,
             <label className="text-[13px] font-medium text-[var(--text-secondary)]">Priority</label>
             <select 
               value={priority}
-              onChange={(e) => setPriority(e.target.value as any)}
+              onChange={(e) => setPriority(e.target.value as 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT')}
               className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
             >
               <option value="LOW">Low</option>

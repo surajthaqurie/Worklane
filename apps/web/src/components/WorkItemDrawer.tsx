@@ -2,14 +2,17 @@
 
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { WorkItem, useWorkItemComments, useWorkItemActivity, useAddComment, useUpdateComment, useDeleteComment } from '@/hooks/useWorkItems';
+import { WorkItem, useWorkItemComments, useWorkItemActivity, useAddComment, useUpdateComment, useDeleteComment, useUpdateWorkItem } from '@/hooks/useWorkItems';
 import { X } from 'lucide-react';
 
 export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState<'comments' | 'activity'>('comments');
+  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'activity'>('details');
   const [newComment, setNewComment] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState('');
+
+  const [title, setTitle] = useState(item.title);
+  const [description, setDescription] = useState(item.description || '');
 
   const { data: comments = [], isLoading: isLoadingComments } = useWorkItemComments(item.id);
   const { data: activity = [], isLoading: isLoadingActivity } = useWorkItemActivity(item.id);
@@ -17,6 +20,7 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
   const addComment = useAddComment(item.id);
   const updateComment = useUpdateComment(item.id);
   const deleteComment = useDeleteComment(item.id);
+  const updateWorkItem = useUpdateWorkItem(item.projectId);
 
   const handleAddComment = () => {
     if (!newComment.trim()) return;
@@ -38,6 +42,10 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
     }
   };
 
+  const handleUpdate = (field: string, value: string) => {
+    updateWorkItem.mutate({ id: item.id, data: { [field]: value } });
+  };
+
   return (
     <>
       <div 
@@ -47,14 +55,27 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
       
       <div className="fixed inset-y-0 right-0 w-full md:w-[600px] bg-[var(--bg-surface)] shadow-2xl z-50 flex flex-col transform transition-transform duration-300 border-l border-[var(--border-subtle)]">
         <div className="flex justify-between items-start p-6 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-2 pr-8">
+          <div className="flex flex-col gap-3 pr-8 w-full">
             <div className="flex items-center gap-3">
               <span className="text-[13px] font-medium text-[var(--text-secondary)]">{item.key}</span>
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] text-[var(--text-primary)]">
-                {item.type}
-              </span>
+              <select 
+                value={item.type}
+                onChange={(e) => handleUpdate('type', e.target.value)}
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] text-[var(--text-primary)] border-none focus:ring-0 cursor-pointer"
+              >
+                <option value="TASK">TASK</option>
+                <option value="BUG">BUG</option>
+                <option value="STORY">STORY</option>
+              </select>
             </div>
-            <h2 className="text-[18px] font-semibold text-[var(--text-primary)] leading-snug">{item.title}</h2>
+            <input 
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={(e) => {
+                if (e.target.value !== item.title) handleUpdate('title', e.target.value);
+              }}
+              className="text-[18px] font-semibold text-[var(--text-primary)] leading-snug bg-transparent border-none focus:outline-none focus:ring-0 p-0 w-full"
+            />
           </div>
           <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors absolute top-6 right-6 p-1 bg-[var(--bg-surface-hover)] rounded-full">
             <X className="w-4 h-4" />
@@ -62,6 +83,13 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
         </div>
 
         <div className="flex border-b border-[var(--border-subtle)] px-6">
+          <button 
+            className={`py-3 mr-6 text-[13px] font-medium relative ${activeTab === 'details' ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+            onClick={() => setActiveTab('details')}
+          >
+            Details
+            {activeTab === 'details' && <div className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-[var(--brand-primary)]"></div>}
+          </button>
           <button 
             className={`py-3 mr-6 text-[13px] font-medium relative ${activeTab === 'comments' ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
             onClick={() => setActiveTab('comments')}
@@ -79,6 +107,52 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+          {activeTab === 'details' && (
+            <div className="flex flex-col gap-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[12px] font-medium text-[var(--text-secondary)]">State</label>
+                  <select 
+                    value={item.state}
+                    onChange={(e) => handleUpdate('state', e.target.value)}
+                    className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
+                  >
+                    <option value="TODO">To Do</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="DONE">Done</option>
+                  </select>
+                </div>
+                
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[12px] font-medium text-[var(--text-secondary)]">Priority</label>
+                  <select 
+                    value={item.priority}
+                    onChange={(e) => handleUpdate('priority', e.target.value)}
+                    className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="URGENT">Urgent</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[12px] font-medium text-[var(--text-secondary)]">Description</label>
+                <textarea 
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  onBlur={(e) => {
+                    if (e.target.value !== (item.description || '')) handleUpdate('description', e.target.value);
+                  }}
+                  className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] min-h-[150px] focus:outline-none focus:border-[var(--border-focus)] transition-colors placeholder:text-[var(--text-muted)]"
+                  placeholder="Add a description..."
+                />
+              </div>
+            </div>
+          )}
+
           {activeTab === 'comments' && (
             <>
               <div className="flex flex-col gap-6 flex-1">

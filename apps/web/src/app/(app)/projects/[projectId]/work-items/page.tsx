@@ -2,13 +2,17 @@
 import { use, useState } from 'react';
 import { useWorkItems, WorkItem } from '@/hooks/useWorkItems';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
-import { Search } from 'lucide-react';
+import { CreateWorkItemModal } from '@/components/CreateWorkItemModal';
+import { Search, Filter } from 'lucide-react';
 
 export default function WorkItemsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const resolvedParams = use(params);
-  const { data: workItems = [], isLoading } = useWorkItems(resolvedParams.projectId);
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  const { data: workItems = [], isLoading } = useWorkItems(resolvedParams.projectId, statusFilter ? { state: statusFilter } : {});
 
   const filteredItems = workItems.filter((i: WorkItem) => 
     i.title.toLowerCase().includes(search.toLowerCase()) || 
@@ -16,7 +20,7 @@ export default function WorkItemsPage({ params }: { params: Promise<{ projectId:
   );
 
   return (
-    <div className="w-full flex flex-col h-full">
+    <div className="w-full flex flex-col h-full relative">
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 mb-4 border-b border-[var(--border-subtle)] shrink-0">
         <div className="min-w-0 flex-1">
           <h1 className="text-[24px] font-semibold text-[var(--text-primary)]">
@@ -27,21 +31,40 @@ export default function WorkItemsPage({ params }: { params: Promise<{ projectId:
           </p>
         </div>
         <div className="mt-4 flex md:ml-4 md:mt-0 gap-3">
-          <button className="px-4 py-2 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white text-[13px] font-medium rounded-[var(--radius-button)] transition-colors">
+          <button 
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white text-[13px] font-medium rounded-[var(--radius-button)] transition-colors"
+          >
             + New Work Item
           </button>
         </div>
       </div>
 
-      <div className="mb-4 relative w-72">
-        <Search className="absolute left-3 top-2.5 w-4 h-4 text-[var(--text-muted)]" />
-        <input
-          type="text"
-          placeholder="Search items..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-3 py-2 text-[13px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] transition-colors placeholder:text-[var(--text-muted)]"
-        />
+      <div className="mb-4 flex flex-col sm:flex-row gap-3">
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-[var(--text-muted)]" />
+          <input
+            type="text"
+            placeholder="Search items..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-[13px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] transition-colors placeholder:text-[var(--text-muted)]"
+          />
+        </div>
+        
+        <div className="relative w-full sm:w-48">
+          <Filter className="absolute left-3 top-2.5 w-4 h-4 text-[var(--text-muted)]" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-[13px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] transition-colors appearance-none"
+          >
+            <option value="">All Statuses</option>
+            <option value="TODO">To Do</option>
+            <option value="IN_PROGRESS">In Progress</option>
+            <option value="DONE">Done</option>
+          </select>
+        </div>
       </div>
       
       <div className="flex-1 overflow-auto">
@@ -106,6 +129,13 @@ export default function WorkItemsPage({ params }: { params: Promise<{ projectId:
         <WorkItemDrawer 
           item={selectedItem} 
           onClose={() => setSelectedItem(null)} 
+        />
+      )}
+
+      {isCreateModalOpen && (
+        <CreateWorkItemModal
+          projectId={resolvedParams.projectId}
+          onClose={() => setIsCreateModalOpen(false)}
         />
       )}
     </div>

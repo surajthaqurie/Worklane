@@ -18,9 +18,12 @@ type BoardProps = {
   onSelectItem: (item: WorkItem) => void;
   onRemoveItem?: (item: WorkItem) => void;
   storyByParentId?: Record<string, { key: string; title: string }>;
+  disableInternalDnd?: boolean;
 };
 
 const TYPE_COLORS: Record<string, string> = {
+  EPIC: 'bg-[#9333ea]/10 text-[#9333ea]',
+  FEATURE: 'bg-[#ea580c]/10 text-[#ea580c]',
   STORY: 'bg-[var(--brand-primary)]/10 text-[var(--brand-primary)]',
   TASK: 'bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]',
   BUG: 'bg-[var(--priority-high)]/10 text-[var(--priority-high)]',
@@ -33,6 +36,7 @@ export function Board({
   onSelectItem,
   onRemoveItem,
   storyByParentId = {},
+  disableInternalDnd = false,
 }: BoardProps) {
   const [optimistic, setOptimistic] = useState<Record<string, WorkItem>>({});
 
@@ -62,20 +66,31 @@ export function Board({
     onStateChange(item.id, stateKey);
   };
 
+
+
+
+  const content = (
+    <div className="flex gap-4 overflow-x-auto pb-4 items-stretch h-full w-full min-h-[400px]">
+      {states.map((state) => (
+        <StateColumn
+          key={state.id}
+          state={state}
+          items={workingItems.filter((w) => w.state === state.key)}
+          onSelectItem={onSelectItem}
+          onRemoveItem={onRemoveItem}
+          storyByParentId={storyByParentId}
+        />
+      ))}
+    </div>
+  );
+
+  if (disableInternalDnd) {
+    return content;
+  }
+
   return (
     <DndContext onDragEnd={handleDragEnd}>
-      <div className="flex gap-4 overflow-x-auto pb-4 items-stretch">
-        {states.map((state) => (
-          <StateColumn
-            key={state.id}
-            state={state}
-            items={workingItems.filter((w) => w.state === state.key)}
-            onSelectItem={onSelectItem}
-            onRemoveItem={onRemoveItem}
-            storyByParentId={storyByParentId}
-          />
-        ))}
-      </div>
+      {content}
     </DndContext>
   );
 }
@@ -163,17 +178,17 @@ function Card({
     <div
       ref={setNodeRef}
       onClick={() => onSelect(item)}
-      className={`group bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] p-2.5 shadow-sm hover:shadow-md hover:border-[var(--border-strong)] cursor-pointer transition-all ${
+      className={`group bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] p-2.5 shadow-sm hover:shadow-md hover:border-[var(--border-strong)] cursor-grab active:cursor-grabbing transition-all ${
         isDragging ? 'opacity-40 rotate-2' : ''
       }`}
+      {...listeners}
+      {...attributes}
     >
       <div className="flex items-center gap-1.5 mb-1.5">
         <span
-          className="inline-flex items-center px-1.5 py-0.5 rounded-[var(--radius-button)] text-[10px] font-semibold cursor-grab active:cursor-grabbing"
-          {...listeners}
-          {...attributes}
+          className="inline-flex items-center px-1.5 py-0.5 rounded-[var(--radius-button)] text-[10px] font-semibold"
         >
-          <GripVertical className="w-3 h-3" />
+          <GripVertical className="w-3 h-3 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] transition-colors" />
         </span>
         <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[var(--radius-button)] text-[10px] font-semibold ${TYPE_COLORS[item.type] || TYPE_COLORS.TASK}`}>
           {item.type}
@@ -213,6 +228,11 @@ function Card({
           }}
         />
         <span className="text-[11px] text-[var(--text-muted)]">{item.priority}</span>
+        {item.points != null && (
+          <span className="text-[11px] font-medium bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] px-1.5 py-0.5 rounded-full ml-1 border border-[var(--border-subtle)]">
+            {item.points}
+          </span>
+        )}
         <span className="ml-auto">
           {item.assignedTo ? (
             <span className="w-5 h-5 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-[9px] text-[var(--text-primary)]" title={item.assignedTo}>

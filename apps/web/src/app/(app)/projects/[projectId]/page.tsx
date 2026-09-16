@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export default async function ProjectOverviewPage({ params }: { params: Promise<{ projectId: string }> }) {
   const resolvedParams = await params;
   return (
@@ -12,9 +14,12 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
           </p>
         </div>
         <div className="mt-4 flex md:ml-4 md:mt-0 gap-3">
-          <button className="px-4 py-2 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white text-[13px] font-medium rounded-[var(--radius-button)] transition-colors">
+          <Link
+            href={`/projects/${resolvedParams.projectId}/work-items?new=1`}
+            className="px-4 py-2 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white text-[13px] font-medium rounded-[var(--radius-button)] transition-colors inline-block"
+          >
             + New Work Item
-          </button>
+          </Link>
         </div>
       </div>
 

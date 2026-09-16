@@ -42,7 +42,7 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
     }
   };
 
-  const handleUpdate = (field: string, value: string) => {
+  const handleUpdate = (field: string, value: any) => {
     updateWorkItem.mutate({ id: item.id, data: { [field]: value } });
   };
 
@@ -63,9 +63,11 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
                 onChange={(e) => handleUpdate('type', e.target.value)}
                 className="text-[11px] font-semibold px-2 py-0.5 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] text-[var(--text-primary)] border-none focus:ring-0 cursor-pointer"
               >
+                <option value="EPIC">EPIC</option>
+                <option value="FEATURE">FEATURE</option>
+                <option value="STORY">STORY</option>
                 <option value="TASK">TASK</option>
                 <option value="BUG">BUG</option>
-                <option value="STORY">STORY</option>
               </select>
             </div>
             <input 
@@ -135,6 +137,21 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
                     <option value="HIGH">High</option>
                     <option value="URGENT">Urgent</option>
                   </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[12px] font-medium text-[var(--text-secondary)]">Points</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 5"
+                    value={item.points === null ? '' : item.points}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      handleUpdate('points', val === '' ? null : parseInt(val, 10));
+                    }}
+                    className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
+                  />
                 </div>
               </div>
               

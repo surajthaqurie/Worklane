@@ -43,11 +43,12 @@ export interface Database {
     sprint_id: string | null;
     seq_no: number;
     parent_id: string | null;
-    type: 'TASK' | 'BUG' | 'STORY';
+    type: 'EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG';
     title: string;
     description: string | null;
     state: string;
     priority: Generated<'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'>;
+    points: number | null;
     assigned_to: string | null;
     created_by: string;
     created_at: ColumnType<Date, string | undefined, never>;

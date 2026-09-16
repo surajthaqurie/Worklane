@@ -39,6 +39,7 @@ export class WorkItemsRepository {
           description: data.description || null,
           state: initialState.key,
           priority: data.priority || 'MEDIUM',
+          points: data.points || null,
           assigned_to: data.assignedTo || null,
           created_by: userId,
         })
@@ -72,12 +73,13 @@ export class WorkItemsRepository {
         query = query.where('assigned_to', '=', filters.assignedTo);
       }
     }
-    if (filters.sprintId && filters.sprintId !== 'undefined')
-      query = query.where(
-        'sprint_id',
-        '=',
-        filters.sprintId === 'null' ? null : filters.sprintId,
-      );
+    if (filters.sprintId && filters.sprintId !== 'undefined') {
+      if (filters.sprintId === 'null') {
+        query = query.where('sprint_id', 'is', null);
+      } else {
+        query = query.where('sprint_id', '=', filters.sprintId);
+      }
+    }
 
     if (filters.search) {
       const searchStr = String(filters.search).trim();
@@ -158,6 +160,7 @@ export class WorkItemsRepository {
           : null;
       }
       if (data.priority !== undefined) updateData.priority = data.priority;
+      if (data.points !== undefined) updateData.points = data.points;
       if (data.assignedTo !== undefined)
         updateData.assigned_to = data.assignedTo;
       if (data.parentId !== undefined) updateData.parent_id = data.parentId;
@@ -174,6 +177,7 @@ export class WorkItemsRepository {
         { key: 'title', dbKey: 'title', action: 'TITLE_CHANGED' },
         { key: 'state', dbKey: 'state', action: 'STATE_CHANGED' },
         { key: 'priority', dbKey: 'priority', action: 'PRIORITY_CHANGED' },
+        { key: 'points', dbKey: 'points', action: 'POINTS_CHANGED' },
         { key: 'assignedTo', dbKey: 'assigned_to', action: 'ASSIGNEE_CHANGED' },
         {
           key: 'description',

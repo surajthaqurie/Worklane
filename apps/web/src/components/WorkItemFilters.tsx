@@ -71,9 +71,11 @@ function WorkItemFiltersInner() {
           className="px-3 py-1.5 text-[13px] font-medium bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] text-[var(--text-primary)]"
         >
           <option value="">Type</option>
+          <option value="EPIC">Epic</option>
+          <option value="FEATURE">Feature</option>
+          <option value="STORY">Story</option>
           <option value="TASK">Task</option>
           <option value="BUG">Bug</option>
-          <option value="STORY">Story</option>
         </select>
 
         <select

@@ -10,6 +10,11 @@ interface AppTopbarProps {
 
 export function AppTopbar({ onMenuClick }: AppTopbarProps) {
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
@@ -43,9 +48,13 @@ export function AppTopbar({ onMenuClick }: AppTopbarProps) {
         <button
           onClick={toggleTheme}
           className="flex items-center justify-center w-8 h-8 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          title={mounted ? (isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode') : 'Toggle Theme'}
         >
-          {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          {mounted ? (
+            isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />
+          ) : (
+            <div className="w-4 h-4" />
+          )}
         </button>
 
         <button className="flex items-center rounded-full focus:outline-none ring-2 ring-transparent hover:ring-[var(--border-focus)] transition-all">

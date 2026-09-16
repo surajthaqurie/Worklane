@@ -44,11 +44,12 @@ export type WorkItem = {
   id: string;
   key: string;
   projectId: string;
-  type: 'TASK' | 'BUG' | 'STORY';
+  type: 'EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG';
   title: string;
   description: string | null;
   state: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  points: number | null;
   assignedTo: string | null;
   createdBy: string;
   createdAt: string;

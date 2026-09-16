@@ -148,6 +148,8 @@ export function Backlog({ projectId }: { projectId: string }) {
                     value={createForm.type}
                     onChange={e => setCreateForm({ ...createForm, type: e.target.value as WorkItem['type'] })}
                   >
+                    <option value="EPIC">Epic</option>
+                    <option value="FEATURE">Feature</option>
                     <option value="STORY">Story</option>
                     <option value="TASK">Task</option>
                     <option value="BUG">Bug</option>
@@ -198,6 +200,8 @@ export function Backlog({ projectId }: { projectId: string }) {
                     value={createForm.type}
                     onChange={e => setCreateForm({ ...createForm, type: e.target.value as WorkItem['type'] })}
                   >
+                    <option value="EPIC">Epic</option>
+                    <option value="FEATURE">Feature</option>
                     <option value="STORY">Story</option>
                     <option value="TASK">Task</option>
                     <option value="BUG">Bug</option>
@@ -525,9 +529,11 @@ function WorkItemRow({
             value={createForm.type}
             onChange={e => setCreateForm({ ...createForm, type: e.target.value as WorkItem['type'] })}
           >
+            <option value="EPIC">Epic</option>
+            <option value="FEATURE">Feature</option>
+            <option value="STORY">Story</option>
             <option value="TASK">Task</option>
             <option value="BUG">Bug</option>
-            <option value="STORY">Story</option>
           </select>
           <input
             autoFocus

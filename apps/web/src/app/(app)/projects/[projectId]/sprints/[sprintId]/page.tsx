@@ -11,6 +11,10 @@ import { Board } from '@/components/Board';
 import { StatesManager } from '@/components/StatesManager';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
 import { Trash2 } from 'lucide-react';
+import { DndContext, DragEndEvent } from '@dnd-kit/core';
+import { BacklogSidebar } from './BacklogSidebar';
+import { PanelRightOpen } from 'lucide-react';
+
 
 export default function SprintDetailPage() {
   const params = useParams();
@@ -29,6 +33,7 @@ export default function SprintDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({ name: '', goal: '' });
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const storyByParentId = useMemo(() => {
     const map: Record<string, { key: string; title: string }> = {};
@@ -79,9 +84,25 @@ export default function SprintDetailPage() {
     await removeWorkItem.mutateAsync({ sprintId, workItemId: item.id });
   };
 
-  const handleDragState = (itemId: string, state: string) => {
-    updateWorkItem.mutate({ id: itemId, data: { state } });
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+    
+    const overId = over.id.toString();
+    if (!overId.startsWith('state-')) return;
+    
+    const stateKey = overId.slice('state-'.length);
+    const itemId = active.id.toString();
+    const isFromBacklog = active.data.current?.fromBacklog;
+    
+    if (isFromBacklog) {
+      updateWorkItem.mutate({ id: itemId, data: { sprintId, state: stateKey } });
+    } else {
+      updateWorkItem.mutate({ id: itemId, data: { state: stateKey } });
+    }
   };
+
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -159,7 +180,9 @@ export default function SprintDetailPage() {
         </div>
       </div>
 
-      <div className="flex-grow overflow-auto flex flex-col min-h-0">
+      <DndContext onDragEnd={handleDragEnd}>
+      <div className="flex flex-1 overflow-hidden min-h-0">
+        <div className="flex-grow overflow-auto flex flex-col min-h-0 pr-4">
         <div className="flex items-center justify-between mb-4 shrink-0">
           <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">
             Sprint Backlog · <span className="text-[var(--text-secondary)] font-medium">{workItems.length} {workItems.length === 1 ? 'item' : 'items'}</span>
@@ -185,13 +208,16 @@ export default function SprintDetailPage() {
           <Board
             items={workItems}
             states={states}
-            onStateChange={handleDragState}
+            onStateChange={() => {}} disableInternalDnd={true}
             onSelectItem={setSelectedItem}
             onRemoveItem={handleRemoveWorkItem}
             storyByParentId={storyByParentId}
           />
         )}
+        </div>
+        {isSidebarOpen && <BacklogSidebar projectId={projectId} onClose={() => setIsSidebarOpen(false)} />}
       </div>
+    </DndContext>
 
       {selectedItem && (
         <WorkItemDrawer item={selectedItem} onClose={() => setSelectedItem(null)} />

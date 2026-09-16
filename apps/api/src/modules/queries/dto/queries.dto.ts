@@ -22,7 +22,7 @@ export const queryFieldSchema = z.enum([
   'state',
   'priority',
   'assignedTo',
-  'sprintId',
+  'iterationId',
   'parentId',
   'createdBy',
   'createdAt',

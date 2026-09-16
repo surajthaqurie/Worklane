@@ -1,21 +1,25 @@
-import Link from 'next/link';
+'use client';
 
-export default async function ProjectOverviewPage({ params }: { params: Promise<{ projectId: string }> }) {
-  const resolvedParams = await params;
+import Link from 'next/link';
+import { useProjectContext } from './project-layout-client';
+
+export default function ProjectOverviewPage() {
+  const { project, projectId } = useProjectContext();
+
   return (
-    <div className="w-full flex flex-col space-y-8">
+    <div className="w-full flex flex-col space-y-8 p-6 md:p-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-[var(--border-subtle)]">
         <div className="min-w-0 flex-1">
           <h1 className="text-[24px] font-semibold text-[var(--text-primary)]">
-            Fitness Platform
+            {project.name}
           </h1>
           <p className="mt-1 text-[14px] text-[var(--text-secondary)]">
-            FP · 24 open work items
+            {project.key || 'P'} · {project.description || 'No description provided'}
           </p>
         </div>
         <div className="mt-4 flex md:ml-4 md:mt-0 gap-3">
           <Link
-            href={`/projects/${resolvedParams.projectId}/work-items?new=1`}
+            href={`/projects/${projectId}/work-items?new=1`}
             className="px-4 py-2 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white text-[13px] font-medium rounded-[var(--radius-button)] transition-colors inline-block"
           >
             + New Work Item
@@ -43,10 +47,10 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
         </section>
 
         <section>
-          <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-4">Current Sprint</h2>
+          <h2 className="text-[16px] font-semibold text-[var(--text-primary)] mb-4">Current Iteration</h2>
           <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-card)] p-6">
             <div className="flex justify-between items-end mb-2">
-              <div className="font-medium text-[14px] text-[var(--text-primary)]">Sprint 12</div>
+              <div className="font-medium text-[14px] text-[var(--text-primary)]">Iteration 12</div>
               <div className="text-[13px] font-medium text-[var(--text-secondary)]">72%</div>
             </div>
             <div className="w-full bg-[var(--bg-surface-hover)] h-2 rounded-full overflow-hidden">

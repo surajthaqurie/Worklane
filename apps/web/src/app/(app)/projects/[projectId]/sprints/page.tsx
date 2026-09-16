@@ -1,15 +1,15 @@
 import { Suspense } from 'react';
-import { Sprints } from './Sprints';
+import { Iterations } from './Iterations';
 
-export default async function SprintsPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function IterationsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   return (
     <Suspense
       fallback={
-        <div className="p-6 text-[13px] text-[var(--text-muted)]">Loading sprints...</div>
+        <div className="p-6 text-[13px] text-[var(--text-muted)]">Loading iterations...</div>
       }
     >
-      <Sprints projectId={projectId} />
+      <Iterations projectId={projectId} />
     </Suspense>
   );
 }

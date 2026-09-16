@@ -11,7 +11,7 @@ export type QueryField =
   | 'state'
   | 'priority'
   | 'assignedTo'
-  | 'sprintId'
+  | 'iterationId'
   | 'parentId'
   | 'createdBy'
   | 'createdAt'
@@ -69,7 +69,7 @@ export const QUERY_FIELDS: Array<{ value: QueryField; label: string }> = [
   { value: 'priority', label: 'Priority' },
   { value: 'assignedTo', label: 'Assigned To' },
   { value: 'createdBy', label: 'Created By' },
-  { value: 'sprintId', label: 'Sprint' },
+  { value: 'iterationId', label: 'Iteration' },
   { value: 'parentId', label: 'Parent' },
   { value: 'createdAt', label: 'Created Date' },
   { value: 'updatedAt', label: 'Updated Date' },
@@ -84,7 +84,7 @@ export const FIELD_OPERATORS: Partial<Record<QueryField, QueryOperator[]>> = {
   priority: ['equals', 'in'],
   assignedTo: ['equals', 'notEquals', 'in', 'isEmpty', 'isNotEmpty'],
   createdBy: ['equals', 'in', 'isEmpty'],
-  sprintId: ['equals', 'notEquals', 'in', 'isEmpty', 'isNotEmpty'],
+  iterationId: ['equals', 'notEquals', 'in', 'isEmpty', 'isNotEmpty'],
   parentId: ['equals', 'isEmpty', 'isNotEmpty'],
   createdAt: ['after', 'before', 'between', 'isEmpty', 'isNotEmpty'],
   updatedAt: ['after', 'before', 'between', 'isEmpty', 'isNotEmpty'],

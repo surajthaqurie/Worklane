@@ -76,9 +76,9 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
             className="w-full pl-9 pr-3 py-2 text-[13px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] transition-colors appearance-none"
           >
             <option value="">All Statuses</option>
-            <option value="TODO">To Do</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="DONE">Done</option>
+            <option value="New">New</option>
+            <option value="Active">Active</option>
+            <option value="Closed">Closed</option>
           </select>
         </div>
       </div>

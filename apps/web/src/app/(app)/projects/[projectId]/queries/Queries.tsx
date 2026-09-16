@@ -16,7 +16,7 @@ import {
   FIELD_OPERATORS,
   DEFAULT_DEFINITION,
 } from '@/hooks/useQueries';
-import { useSprints } from '@/hooks/useSprints';
+import { useIterations } from '@/hooks/useIterations';
 import { useWorkItemStates } from '@/hooks/useWorkItemStates';
 import { WorkItem } from '@/hooks/useWorkItems';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
@@ -44,7 +44,7 @@ export function Queries({ projectId }: { projectId: string }) {
   const createQuery = useCreateQuery(projectId);
   const updateQuery = useUpdateQuery(projectId);
   const deleteQueryMut = useDeleteQuery(projectId);
-  const { data: sprints = [] } = useSprints(projectId);
+  const { data: iterations = [] } = useIterations(projectId);
   const { data: states = [] } = useWorkItemStates(projectId);
 
   const [selectedQueryId, setSelectedQueryId] = useState<string | null>(null);
@@ -56,9 +56,9 @@ export function Queries({ projectId }: { projectId: string }) {
 
   const [selectedWorkItem, setSelectedWorkItem] = useState<WorkItem | null>(null);
 
-  const sprintMap = useMemo(
-    () => Object.fromEntries(sprints.map((s) => [s.id, s])),
-    [sprints],
+  const iterationMap = useMemo(
+    () => Object.fromEntries(iterations.map((s) => [s.id, s])),
+    [iterations],
   );
   const stateMap = useMemo(
     () => Object.fromEntries(states.map((s) => [s.key, s])),
@@ -210,7 +210,7 @@ export function Queries({ projectId }: { projectId: string }) {
       );
     }
     if (col === 'assignedTo') return (value as string | null) ?? <span className="text-[var(--text-muted)]">Unassigned</span>;
-    if (col === 'sprintId') return value ? sprintMap[value as string]?.name ?? (value as string) : <span className="text-[var(--text-muted)]">-</span>;
+    if (col === 'iterationId') return value ? iterationMap[value as string]?.name ?? (value as string) : <span className="text-[var(--text-muted)]">-</span>;
     if (col === 'parentId') return value ? (value as string).slice(0, 8) : <span className="text-[var(--text-muted)]">-</span>;
     if (col === 'createdBy') return value as string;
     if (['createdAt', 'updatedAt', 'completedAt'].includes(col))
@@ -222,7 +222,7 @@ export function Queries({ projectId }: { projectId: string }) {
     if (['isEmpty', 'isNotEmpty'].includes(clause.operator)) return null;
     const isDate = DATE_FIELDS.has(clause.field);
     const enumOptions = ENUM_FIELDS[clause.field];
-    const isSprintField = clause.field === 'sprintId';
+    const isIterationField = clause.field === 'iterationId';
     const isUserField = ['assignedTo', 'createdBy'].includes(clause.field);
 
     if (clause.operator === 'between' && isDate) {
@@ -248,12 +248,12 @@ export function Queries({ projectId }: { projectId: string }) {
       );
     }
 
-    if (isSprintField && !['in', 'notIn'].includes(clause.operator)) {
+    if (isIterationField && !['in', 'notIn'].includes(clause.operator)) {
       return (
         <select value={clause.value} onChange={(e) => updateClause(idx, { value: e.target.value })}
           className="flex-1 min-w-0 border border-[var(--border-default)] px-2 py-1 rounded-[var(--radius-input)] text-[12px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]">
           <option value="">(any)</option>
-          {sprints.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {iterations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       );
     }

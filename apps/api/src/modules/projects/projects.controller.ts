@@ -91,4 +91,14 @@ export class ProjectsController {
   ) {
     return this.projectsService.removeMember(this.getUserId(req), id, userId);
   }
+
+  @Get(':id/areas')
+  getAreas(@Req() req: any, @Param('id') id: string) {
+    return this.projectsService.getAreas(this.getUserId(req), id);
+  }
+
+  @Get(':id/tags')
+  getTags(@Req() req: any, @Param('id') id: string) {
+    return this.projectsService.getTags(this.getUserId(req), id);
+  }
 }

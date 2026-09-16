@@ -3,7 +3,7 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { ProjectsModule } from './modules/projects/projects.module.js';
 import { WorkItemsModule } from './modules/work-items/work-items.module.js';
-import { SprintsModule } from './modules/sprints/sprints.module.js';
+import { IterationsModule } from './modules/iterations/iterations.module.js';
 import { WorkItemStatesModule } from './modules/work-item-states/work-item-states.module.js';
 import { QueriesModule } from './modules/queries/queries.module.js';
 
@@ -11,7 +11,7 @@ import { QueriesModule } from './modules/queries/queries.module.js';
   imports: [
     ProjectsModule,
     WorkItemsModule,
-    SprintsModule,
+    IterationsModule,
     WorkItemStatesModule,
     QueriesModule,
   ],

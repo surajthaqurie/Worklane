@@ -8,7 +8,7 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
   if (error) return <div className="py-8 text-red-500">Failed to load overview</div>;
   if (!data) return null;
 
-  const { stats, activeSprint, recentActivity } = data;
+  const { stats, activeIteration, recentActivity } = data;
   
   const total = stats.total || 1; // avoid div by 0
   const todoPct = (stats.todo / total) * 100;
@@ -60,42 +60,42 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
           </div>
         </div>
 
-        {/* Current Sprint */}
+        {/* Current Iteration */}
         <div className="flex flex-col gap-4 border border-gray-200 dark:border-gray-800 rounded-lg p-6 bg-white dark:bg-gray-950 shadow-sm">
-          <h2 className="text-xl font-medium mb-2">Current Sprint</h2>
-          {activeSprint ? (
+          <h2 className="text-xl font-medium mb-2">Current Iteration</h2>
+          {activeIteration ? (
             <div className="flex flex-col gap-4">
               <div>
-                <div className="text-lg font-medium">{activeSprint.name}</div>
+                <div className="text-lg font-medium">{activeIteration.name}</div>
                 <div className="text-sm text-gray-500">
-                  {format(new Date(activeSprint.start_date), 'MMM d, yyyy')} - {format(new Date(activeSprint.end_date), 'MMM d, yyyy')}
+                  {format(new Date(activeIteration.start_date), 'MMM d, yyyy')} - {format(new Date(activeIteration.end_date), 'MMM d, yyyy')}
                 </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4 mt-2">
                 <div className="flex flex-col">
                   <span className="text-sm text-gray-500">Completed Items</span>
-                  <span className="text-2xl font-semibold text-green-600 dark:text-green-500">{activeSprint.completedItems}</span>
+                  <span className="text-2xl font-semibold text-green-600 dark:text-green-500">{activeIteration.completedItems}</span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm text-gray-500">Remaining Items</span>
-                  <span className="text-2xl font-semibold">{activeSprint.remainingItems}</span>
+                  <span className="text-2xl font-semibold">{activeIteration.remainingItems}</span>
                 </div>
               </div>
               
               <div className="mt-2">
                 <div className="flex justify-between text-sm mb-1">
-                  <span>Sprint Progress</span>
-                  <span className="font-medium">{activeSprint.progress}%</span>
+                  <span>Iteration Progress</span>
+                  <span className="font-medium">{activeIteration.progress}%</span>
                 </div>
                 <div className="flex h-2 w-full rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
-                  <div style={{ width: `${activeSprint.progress}%` }} className="bg-green-500"></div>
+                  <div style={{ width: `${activeIteration.progress}%` }} className="bg-green-500"></div>
                 </div>
               </div>
             </div>
           ) : (
             <div className="text-gray-500 flex items-center justify-center h-full pb-8">
-              No active sprint right now.
+              No active iteration right now.
             </div>
           )}
         </div>

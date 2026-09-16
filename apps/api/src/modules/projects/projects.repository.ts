@@ -14,6 +14,7 @@ export class ProjectsRepository {
     key: string;
     description?: string;
     created_by: string;
+    organization_id: string;
   }) {
     return await db.transaction().execute(async (trx) => {
       const project = await trx
@@ -23,6 +24,7 @@ export class ProjectsRepository {
           key: data.key,
           description: data.description || null,
           created_by: data.created_by,
+          organization_id: data.organization_id,
         })
         .returningAll()
         .executeTakeFirstOrThrow();
@@ -136,8 +138,8 @@ export class ProjectsRepository {
     const firstStateKey = states[0]?.key;
     const doneStates = new Set(states.filter((s) => s.is_done).map((s) => s.key));
 
-    const activeSprint = await db
-      .selectFrom('sprints')
+    const activeIteration = await db
+      .selectFrom('iterations')
       .where('project_id', '=', projectId)
       .where('state', '=', 'ACTIVE')
       .selectAll()
@@ -163,19 +165,19 @@ export class ProjectsRepository {
       .limit(10)
       .execute();
 
-    let activeSprintStats = null;
-    if (activeSprint) {
-      const sprintItems = await db
+    let activeIterationStats = null;
+    if (activeIteration) {
+      const iterationItems = await db
         .selectFrom('work_items')
-        .where('sprint_id', '=', activeSprint.id)
+        .where('iteration_id', '=', activeIteration.id)
         .select(['id', 'state'])
         .execute();
 
-      const completed = sprintItems.filter((i) => doneStates.has(i.state)).length;
-      const total = sprintItems.length;
+      const completed = iterationItems.filter((i) => doneStates.has(i.state)).length;
+      const total = iterationItems.length;
 
-      activeSprintStats = {
-        ...activeSprint,
+      activeIterationStats = {
+        ...activeIteration,
         completedItems: completed,
         remainingItems: total - completed,
         totalItems: total,
@@ -198,8 +200,16 @@ export class ProjectsRepository {
 
     return {
       stats,
-      activeSprint: activeSprintStats,
+      activeIteration: activeIterationStats,
       recentActivity,
     };
+  }
+
+  async getAreas(projectId: string) {
+    return await db.selectFrom('areas').where('project_id', '=', projectId).selectAll().execute();
+  }
+
+  async getTags(projectId: string) {
+    return await db.selectFrom('tags').where('project_id', '=', projectId).selectAll().execute();
   }
 }

@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams, useParams } from 'next/navigation';
 import { useState, useEffect, useCallback, Suspense } from 'react';
-import { useSprints } from '@/hooks/useSprints';
+import { useIterations } from '@/hooks/useIterations';
 import { Search } from 'lucide-react';
 
 export function useDebounce<T>(value: T, delay: number): T {
@@ -23,7 +23,7 @@ function WorkItemFiltersInner() {
   const params = useParams();
   const projectId = params.projectId as string;
   
-  const { data: sprints = [] } = useSprints(projectId);
+  const { data: iterations = [] } = useIterations(projectId);
 
   const currentSearch = searchParams.get('search') || '';
   const [searchTerm, setSearchTerm] = useState(currentSearch);
@@ -49,7 +49,7 @@ function WorkItemFiltersInner() {
   const type = searchParams.get('type') || '';
   const priority = searchParams.get('priority') || '';
   const assignedTo = searchParams.get('assignedTo') || '';
-  const sprintId = searchParams.get('sprintId') || '';
+  const iterationId = searchParams.get('iterationId') || '';
   
   return (
     <div className="flex flex-col gap-4 mb-4">
@@ -84,9 +84,9 @@ function WorkItemFiltersInner() {
           className="px-3 py-1.5 text-[13px] font-medium bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] text-[var(--text-primary)]"
         >
           <option value="">State</option>
-          <option value="TODO">To Do</option>
-          <option value="IN_PROGRESS">In Progress</option>
-          <option value="DONE">Done</option>
+          <option value="New">New</option>
+          <option value="Active">Active</option>
+          <option value="Closed">Closed</option>
         </select>
 
         <select
@@ -141,8 +141,8 @@ export function useWorkItemFilters() {
   const assignedTo = searchParams.get('assignedTo');
   if (assignedTo) filters.assignedTo = assignedTo;
 
-  const sprintId = searchParams.get('sprintId');
-  if (sprintId) filters.sprintId = sprintId;
+  const iterationId = searchParams.get('iterationId');
+  if (iterationId) filters.iterationId = iterationId;
 
   const search = searchParams.get('search');
   if (search) filters.search = search;

@@ -21,7 +21,7 @@ export function CreateWorkItemModal({ projectId, onClose }: { projectId: string,
       description,
       type,
       priority,
-      state: 'TODO'
+      state: 'New'
     }, {
       onSuccess: () => onClose()
     });

@@ -79,7 +79,7 @@ export function useDeleteWorkItemState(projectId: string) {
     onSuccess: () => {
       invalidateStates(queryClient, projectId);
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'sprints'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'iterations'] });
     }
   });
 }

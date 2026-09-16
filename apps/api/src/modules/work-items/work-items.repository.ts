@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { CreateWorkItemDto, UpdateWorkItemDto } from "./dto/work-items.dto.js";
+import { WorkItemFilterDto } from "./dto/filter.dto.js";
+import { Injectable, ConflictException } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
 import { sql } from 'kysely';
 
 @Injectable()
 export class WorkItemsRepository {
-  async createWorkItem(projectId: string, userId: string, data: any) {
+  async createWorkItem(projectId: string, userId: string, data: CreateWorkItemDto) {
     return await db.transaction().execute(async (trx) => {
       const project = await trx
         .updateTable('projects')
@@ -42,10 +44,28 @@ export class WorkItemsRepository {
           points: data.points || null,
           assigned_to: data.assignedTo || null,
           created_by: userId,
+          area_id: data.areaId || (await trx.selectFrom("areas").where("project_id", "=", projectId).select("id").limit(1).executeTakeFirst())?.id || "00000000-0000-0000-0000-000000000000",
+          iteration_id: data.iterationId || null,
+          closed_at: data.closedAt || null,
         })
         .returningAll()
         .executeTakeFirstOrThrow();
 
+      if (data.tags && data.tags.length > 0) {
+        const existingTags = await trx.selectFrom('tags').where('project_id', '=', projectId).where('name', 'in', data.tags).selectAll().execute();
+        const existingTagNames = existingTags.map(t => t.name);
+        const newTagNames = data.tags.filter(t => !existingTagNames.includes(t));
+        
+        let allTags = [...existingTags];
+        if (newTagNames.length > 0) {
+          const insertedTags = await trx.insertInto('tags').values(newTagNames.map(name => ({ project_id: projectId, name }))).returningAll().execute();
+          allTags = allTags.concat(insertedTags);
+        }
+
+        if (allTags.length > 0) {
+          await trx.insertInto('work_item_tags').values(allTags.map(t => ({ work_item_id: item.id, tag_id: t.id }))).execute();
+        }
+      }
       await trx
         .insertInto('work_item_history')
         .values({
@@ -73,11 +93,11 @@ export class WorkItemsRepository {
         query = query.where('assigned_to', '=', filters.assignedTo);
       }
     }
-    if (filters.sprintId && filters.sprintId !== 'undefined') {
-      if (filters.sprintId === 'null') {
-        query = query.where('sprint_id', 'is', null);
+    if (filters.iterationId && filters.iterationId !== 'undefined') {
+      if (filters.iterationId === 'null') {
+        query = query.where('iteration_id', 'is', null);
       } else {
-        query = query.where('sprint_id', '=', filters.sprintId);
+        query = query.where('iteration_id', '=', filters.iterationId);
       }
     }
 
@@ -125,14 +145,24 @@ export class WorkItemsRepository {
   }
 
   async getWorkItemById(id: string) {
-    return await db
+    const item = await db
       .selectFrom('work_items')
       .where('id', '=', id)
       .selectAll()
       .executeTakeFirst();
+    if (!item) return undefined;
+    
+    const tags = await db
+      .selectFrom('work_item_tags')
+      .innerJoin('tags', 'tags.id', 'work_item_tags.tag_id')
+      .where('work_item_tags.work_item_id', '=', id)
+      .select('tags.name')
+      .execute();
+      
+    return { ...item, tags: tags.map(t => t.name) };
   }
 
-  async updateWorkItem(id: string, userId: string, data: any) {
+  async updateWorkItem(id: string, userId: string, data: UpdateWorkItemDto) {
     return await db.transaction().execute(async (trx) => {
       const oldItem = await trx
         .selectFrom('work_items')
@@ -140,31 +170,19 @@ export class WorkItemsRepository {
         .selectAll()
         .executeTakeFirstOrThrow();
 
-      const states = await trx
-        .selectFrom('work_item_states')
-        .where('project_id', '=', oldItem.project_id)
-        .select(['key', 'is_done'])
-        .orderBy('sort_order', 'asc')
-        .execute();
-      const doneKeys = new Set(states.filter((s) => s.is_done).map((s) => s.key));
-
       const updateData: any = { updated_at: new Date() };
       if (data.type !== undefined) updateData.type = data.type;
       if (data.title !== undefined) updateData.title = data.title;
       if (data.description !== undefined)
         updateData.description = data.description;
-      if (data.state !== undefined) {
-        updateData.state = data.state;
-        updateData.completed_at = doneKeys.has(data.state)
-          ? new Date()
-          : null;
-      }
       if (data.priority !== undefined) updateData.priority = data.priority;
       if (data.points !== undefined) updateData.points = data.points;
       if (data.assignedTo !== undefined)
         updateData.assigned_to = data.assignedTo;
       if (data.parentId !== undefined) updateData.parent_id = data.parentId;
-      if (data.sprintId !== undefined) updateData.sprint_id = data.sprintId;
+      if (data.iterationId !== undefined) updateData.iteration_id = data.iterationId;
+      if (data.areaId !== undefined) updateData.area_id = data.areaId;
+      if (data.closedAt !== undefined) updateData.closed_at = data.closedAt || null;
 
       const updated = await trx
         .updateTable('work_items')
@@ -172,6 +190,38 @@ export class WorkItemsRepository {
         .where('id', '=', id)
         .returningAll()
         .executeTakeFirstOrThrow();
+
+      if (data.tags !== undefined) {
+        await trx.deleteFrom('work_item_tags').where('work_item_id', '=', id).execute();
+        if (data.tags && data.tags.length > 0) {
+          const existingTags = await trx.selectFrom('tags').where('project_id', '=', oldItem.project_id).where('name', 'in', data.tags).selectAll().execute();
+          const existingTagNames = existingTags.map(t => t.name);
+          const newTagNames = data.tags.filter(t => !existingTagNames.includes(t));
+          
+          let allTags = [...existingTags];
+          if (newTagNames.length > 0) {
+            const insertedTags = await trx.insertInto('tags').values(newTagNames.map(name => ({ project_id: oldItem.project_id, name }))).returningAll().execute();
+            allTags = allTags.concat(insertedTags);
+          }
+  
+          if (allTags.length > 0) {
+            await trx.insertInto('work_item_tags').values(allTags.map(t => ({ work_item_id: id, tag_id: t.id }))).execute();
+          }
+        }
+        
+        await trx
+            .insertInto('work_item_history')
+            .values({
+              work_item_id: id,
+              user_id: userId,
+              action: 'TAGS_CHANGED',
+              field: 'tags',
+              old_value: null,
+              new_value: data.tags.join(','),
+            })
+            .execute();
+      }
+
 
       const trackFields = [
         { key: 'title', dbKey: 'title', action: 'TITLE_CHANGED' },
@@ -185,12 +235,13 @@ export class WorkItemsRepository {
           action: 'DESCRIPTION_CHANGED',
         },
         { key: 'parentId', dbKey: 'parent_id', action: 'PARENT_CHANGED' },
-        { key: 'sprintId', dbKey: 'sprint_id', action: 'SPRINT_CHANGED' },
+        { key: 'iterationId', dbKey: 'iteration_id', action: 'ITERATION_CHANGED' },
+        { key: 'areaId', dbKey: 'area_id', action: 'AREA_CHANGED' },
       ];
 
       for (const field of trackFields) {
         if (
-          data[field.key] !== undefined &&
+          (data as any)[field.key] !== undefined &&
           (oldItem[field.dbKey as keyof typeof oldItem] ?? null) !==
             (updated[field.dbKey as keyof typeof updated] ?? null)
         ) {
@@ -205,55 +256,6 @@ export class WorkItemsRepository {
               new_value: this.stringify(updated[field.dbKey as keyof typeof updated]),
             })
             .execute();
-        }
-      }
-
-      // Rollup (Azure-style): when every child of a parent is in a done state,
-      // move the parent to its done state too.
-      const isNewStateDone =
-        data.state !== undefined &&
-        doneKeys.has(updated.state) &&
-        updated.state !== oldItem.state;
-      if (isNewStateDone && updated.parent_id && doneKeys.size > 0) {
-        const siblings = await trx
-          .selectFrom('work_items')
-          .where('parent_id', '=', updated.parent_id)
-          .where('id', '!=', updated.id)
-          .select('state')
-          .execute();
-
-        const allChildrenDone =
-          siblings.length > 0 && siblings.every((s) => doneKeys.has(s.state));
-        if (allChildrenDone) {
-          const parent = await trx
-            .selectFrom('work_items')
-            .where('id', '=', updated.parent_id)
-            .selectAll()
-            .executeTakeFirst();
-          const parentDoneKey = [...doneKeys][0];
-          if (parent && parentDoneKey && parent.state !== parentDoneKey) {
-            await trx
-              .updateTable('work_items')
-              .set({
-                state: parentDoneKey,
-                completed_at: new Date(),
-                updated_at: new Date(),
-              })
-              .where('id', '=', parent.id)
-              .execute();
-
-            await trx
-              .insertInto('work_item_history')
-              .values({
-                work_item_id: parent.id,
-                user_id: userId,
-                action: 'STATE_CHANGED',
-                field: 'state',
-                old_value: parent.state,
-                new_value: parentDoneKey,
-              })
-              .execute();
-          }
         }
       }
 
@@ -331,6 +333,49 @@ export class WorkItemsRepository {
       .where('id', '=', commentId)
       .where('user_id', '=', userId)
       .execute();
+  }
+
+  async updateState(id: string, userId: string, oldState: string, newState: string) {
+    return await db.transaction().execute(async (trx) => {
+      const isDone = ['Resolved', 'Closed'].includes(newState);
+      const updateData: any = {
+        state: newState,
+        updated_at: new Date(),
+        completed_at: isDone ? new Date() : null,
+      };
+
+      if (newState === 'Closed') {
+          updateData.closed_at = new Date();
+      } else if (oldState === 'Closed' && newState !== 'Closed') {
+          updateData.closed_at = null;
+      }
+
+      const updated = await trx
+        .updateTable('work_items')
+        .set(updateData)
+        .where('id', '=', id)
+        .where('state', '=', oldState)
+        .returningAll()
+        .executeTakeFirst();
+
+      if (!updated) {
+        throw new ConflictException('Concurrent update detected: Work item state has changed since it was loaded');
+      }
+
+      await trx
+        .insertInto('work_item_history')
+        .values({
+          work_item_id: id,
+          user_id: userId,
+          action: 'STATE_CHANGED',
+          field: 'state',
+          old_value: oldState,
+          new_value: newState,
+        })
+        .execute();
+
+      return updated;
+    });
   }
 
   async getActivity(workItemId: string) {

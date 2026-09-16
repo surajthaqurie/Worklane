@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { globalNavigation } from '../../config/navigation';
+import { globalNavigation, projectNavigation, projectSettingsNavigation } from '../../config/navigation';
 import { X } from 'lucide-react';
 
 interface MobileNavigationProps {
@@ -13,6 +13,18 @@ interface MobileNavigationProps {
 
 export function MobileNavigation({ isOpen, onClose }: MobileNavigationProps) {
   const pathname = usePathname();
+  
+  const projectMatch = pathname?.match(/^\/projects\/([^\/]+)/);
+  const projectId = projectMatch ? projectMatch[1] : undefined;
+  
+  const isActiveProject = (itemMatch: string) => {
+    if (!projectId) return false;
+    const basePath = `/projects/${projectId}`;
+    if (itemMatch === '') {
+      return pathname === basePath || pathname === `${basePath}/`;
+    }
+    return pathname.startsWith(`${basePath}${itemMatch}`);
+  };
 
   if (!isOpen) return null;
 
@@ -37,23 +49,102 @@ export function MobileNavigation({ isOpen, onClose }: MobileNavigationProps) {
         
         <div className="flex-1 h-0 mt-5 overflow-y-auto">
           <nav className="px-2 space-y-1">
-            {globalNavigation.map((item) => {
-              const active = pathname.startsWith(item.match) && (item.match !== '/' || pathname === '/');
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  onClick={onClose}
-                  className={`flex items-center px-2 py-2 text-base font-medium rounded-md ${
-                    active ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  }`}
-                >
-                  <Icon className="flex-shrink-0 w-6 h-6 mr-4" aria-hidden="true" />
-                  {item.label}
+            {projectId && pathname !== '/projects' ? (
+              <>
+                <Link href="/projects" onClick={onClose} className="flex items-center px-2 py-2 mb-2 text-sm text-gray-400 hover:text-white transition-colors">
+                  &larr; All Projects
                 </Link>
-              );
-            })}
+                {projectNavigation.map((item) => {
+                  if (item.children) {
+                    const Icon = item.icon;
+                    return (
+                      <div key={item.label} className="mb-2">
+                        <div className="flex items-center px-2 py-2 text-base font-medium text-gray-200">
+                          <Icon className="flex-shrink-0 w-6 h-6 mr-4" />
+                          {item.label}
+                        </div>
+                        <div className="ml-10 mt-1 space-y-1">
+                          {item.children.map(child => {
+                            const href = `/projects/${projectId}${child.href}`;
+                            const active = isActiveProject(child.match);
+                            return (
+                              <Link
+                                key={child.label}
+                                href={href}
+                                onClick={onClose}
+                                className={`flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                                  active ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                                }`}
+                              >
+                                {child.label}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const href = `/projects/${projectId}${item.href}`;
+                  const active = isActiveProject(item.match);
+                  const Icon = item.icon;
+
+                  return (
+                    <Link
+                      key={item.label}
+                      href={href}
+                      onClick={onClose}
+                      className={`flex items-center px-2 py-2 text-base font-medium rounded-md ${
+                        active ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      }`}
+                    >
+                      <Icon className="flex-shrink-0 w-6 h-6 mr-4" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+
+                <div className="pt-4 mt-4 border-t border-gray-700">
+                  {projectSettingsNavigation.map((item) => {
+                    const href = `/projects/${projectId}${item.href}`;
+                    const active = isActiveProject(item.match);
+                    const Icon = item.icon;
+
+                    return (
+                      <Link
+                        key={item.label}
+                        href={href}
+                        onClick={onClose}
+                        className={`flex items-center px-2 py-2 text-base font-medium rounded-md ${
+                          active ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        }`}
+                      >
+                        <Icon className="flex-shrink-0 w-6 h-6 mr-4" />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              globalNavigation.map((item) => {
+                const active = pathname.startsWith(item.match) && (item.match !== '/' || pathname === '/');
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    onClick={onClose}
+                    className={`flex items-center px-2 py-2 text-base font-medium rounded-md ${
+                      active ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="flex-shrink-0 w-6 h-6 mr-4" />
+                    {item.label}
+                  </Link>
+                );
+              })
+            )}
           </nav>
         </div>
       </div>

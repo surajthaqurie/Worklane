@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { globalNavigation, projectNavigation, projectSettingsNavigation } from '../../config/navigation';
+import { globalNavigation } from '../../config/navigation';
 import { ChevronLeft, ChevronRight, SquareKanban, ArrowLeft, ChevronDown, Check, Plus, Folder } from 'lucide-react';
 import { useProjects } from '@/hooks/useProjects';
 
@@ -27,15 +27,6 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
   const isActiveGlobal = (match: string) => {
     if (match === '/' && pathname !== '/') return false;
     return pathname.startsWith(match);
-  };
-
-  const isActiveProject = (itemMatch: string) => {
-    if (!projectId) return false;
-    const basePath = `/projects/${projectId}`;
-    if (itemMatch === '') {
-      return pathname === basePath || pathname === `${basePath}/`;
-    }
-    return pathname.startsWith(`${basePath}${itemMatch}`);
   };
 
   return (
@@ -104,97 +95,33 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
         </>
       )}
 
-      {projectId && pathname !== '/projects' ? (
-        <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-          {!isCollapsed && (
-            <Link href="/projects" className="flex items-center px-2 py-1.5 mb-2 text-[12px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
-              <ArrowLeft className="w-3 h-3 mr-1.5" /> All Projects
+      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+        {!isCollapsed && (
+          <div className="px-2 pb-2 text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Workspace</div>
+        )}
+        {globalNavigation.map((item) => {
+          const active = isActiveGlobal(item.match);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.label}
+              href={item.href}
+              className={`flex items-center px-2 py-1.5 rounded-[var(--radius-button)] text-[13px] font-medium transition-colors ${
+                active 
+                  ? 'bg-[var(--bg-surface-selected)] text-[var(--brand-primary)]' 
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
+              }`}
+              title={isCollapsed ? item.label : undefined}
+            >
+              <Icon className={`flex-shrink-0 w-4 h-4 ${isCollapsed ? 'mx-auto' : 'mr-3'} ${
+                  active ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)]'
+                }`} 
+              />
+              {!isCollapsed && <span>{item.label}</span>}
             </Link>
-          )}
-          
-          {projectNavigation.map((item) => {
-            const href = `/projects/${projectId}${item.href}`;
-            const active = isActiveProject(item.match);
-            const Icon = item.icon;
-
-            return (
-              <Link
-                key={item.label}
-                href={href}
-                className={`flex items-center px-2 py-1.5 text-[13px] font-medium rounded-[var(--radius-button)] group transition-colors ${
-                  active 
-                    ? 'bg-[var(--bg-surface-selected)] text-[var(--brand-primary)]' 
-                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
-                }`}
-                title={isCollapsed ? item.label : undefined}
-              >
-                <Icon
-                  className={`flex-shrink-0 w-4 h-4 transition-colors ${isCollapsed ? 'mx-auto' : 'mr-3'} ${
-                    active ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'
-                  }`}
-                />
-                {!isCollapsed && item.label}
-              </Link>
-            );
-          })}
-          
-          <div className="pt-4 mt-4 border-t border-[var(--border-subtle)]">
-            {projectSettingsNavigation.map((item) => {
-              const href = `/projects/${projectId}${item.href}`;
-              const active = isActiveProject(item.match);
-              const Icon = item.icon;
-
-              return (
-                <Link
-                  key={item.label}
-                  href={href}
-                  className={`flex items-center px-2 py-1.5 text-[13px] font-medium rounded-[var(--radius-button)] group transition-colors ${
-                    active 
-                      ? 'bg-[var(--bg-surface-selected)] text-[var(--brand-primary)]' 
-                      : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
-                  }`}
-                  title={isCollapsed ? item.label : undefined}
-                >
-                  <Icon
-                    className={`flex-shrink-0 w-4 h-4 transition-colors ${isCollapsed ? 'mx-auto' : 'mr-3'} ${
-                      active ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'
-                    }`}
-                  />
-                  {!isCollapsed && item.label}
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
-      ) : (
-        <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-          {!isCollapsed && (
-            <div className="px-2 pb-2 text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Workspace</div>
-          )}
-          {globalNavigation.map((item) => {
-            const active = isActiveGlobal(item.match);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                className={`flex items-center px-2 py-1.5 rounded-[var(--radius-button)] text-[13px] font-medium transition-colors ${
-                  active 
-                    ? 'bg-[var(--bg-surface-selected)] text-[var(--brand-primary)]' 
-                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
-                }`}
-                title={isCollapsed ? item.label : undefined}
-              >
-                <Icon className={`flex-shrink-0 w-4 h-4 ${isCollapsed ? 'mx-auto' : 'mr-3'} ${
-                    active ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)]'
-                  }`} 
-                />
-                {!isCollapsed && <span>{item.label}</span>}
-              </Link>
-            );
-          })}
-        </nav>
-      )}
+          );
+        })}
+      </nav>
 
       <div className="flex items-center justify-end p-2 border-t border-[var(--border-subtle)]">
         <button

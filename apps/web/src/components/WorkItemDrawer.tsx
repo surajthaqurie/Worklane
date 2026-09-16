@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { WorkItem, useWorkItemComments, useWorkItemActivity, useAddComment, useUpdateComment, useDeleteComment, useUpdateWorkItem } from '@/hooks/useWorkItems';
+import { WorkItem, useWorkItemComments, useWorkItemActivity, useAddComment, useUpdateComment, useDeleteComment, useUpdateWorkItem, useDeleteWorkItem, useWorkItems, useTransitionWorkItemState } from '@/hooks/useWorkItems';
+import { useProjectMembers, useAreas, useTags } from '@/hooks/useProjects';
+import { useIterations } from '@/hooks/useIterations';
 import { X } from 'lucide-react';
 
 export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () => void }) {
@@ -21,6 +23,37 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
   const updateComment = useUpdateComment(item.id);
   const deleteComment = useDeleteComment(item.id);
   const updateWorkItem = useUpdateWorkItem(item.projectId);
+  const deleteWorkItem = useDeleteWorkItem(item.projectId);
+  const { data: members = [] } = useProjectMembers(item.projectId);
+  const { data: iterations = [] } = useIterations(item.projectId);
+  const { data: areas = [] } = useAreas(item.projectId);
+  const { data: allWorkItems = [] } = useWorkItems(item.projectId); // for parent selection
+  
+  const [tagInput, setTagInput] = useState('');
+  
+  const handleDeleteWorkItem = () => {
+    if (confirm('Are you sure you want to delete this work item?')) {
+      deleteWorkItem.mutate(item.id, {
+        onSuccess: () => onClose()
+      });
+    }
+  };
+  
+  const handleAddTag = (e: any) => {
+    if (e.key === 'Enter' && tagInput.trim()) {
+      e.preventDefault();
+      const currentTags = item.tags || [];
+      if (!currentTags.includes(tagInput.trim())) {
+        handleUpdate('tags', [...currentTags, tagInput.trim()]);
+      }
+      setTagInput('');
+    }
+  };
+  
+  const handleRemoveTag = (tagToRemove: string) => {
+    const currentTags = item.tags || [];
+    handleUpdate('tags', currentTags.filter(t => t !== tagToRemove));
+  };
 
   const handleAddComment = () => {
     if (!newComment.trim()) return;
@@ -42,8 +75,14 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
     }
   };
 
+  const transitionWorkItem = useTransitionWorkItemState(item.projectId);
+
   const handleUpdate = (field: string, value: any) => {
-    updateWorkItem.mutate({ id: item.id, data: { [field]: value } });
+    if (field === 'state') {
+        transitionWorkItem.mutate({ id: item.id, state: value });
+    } else {
+        updateWorkItem.mutate({ id: item.id, data: { [field]: value } });
+    }
   };
 
   return (
@@ -79,9 +118,12 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
               className="text-[18px] font-semibold text-[var(--text-primary)] leading-snug bg-transparent border-none focus:outline-none focus:ring-0 p-0 w-full"
             />
           </div>
-          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors absolute top-6 right-6 p-1 bg-[var(--bg-surface-hover)] rounded-full">
+          <div className="absolute top-6 right-6 flex items-center gap-2">
+             <button onClick={handleDeleteWorkItem} className="text-[12px] font-medium text-[var(--priority-high)] hover:bg-[var(--bg-surface-hover)] px-2 py-1 rounded-[var(--radius-button)] transition-colors">Delete</button>
+             <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1 bg-[var(--bg-surface-hover)] rounded-full">
             <X className="w-4 h-4" />
-          </button>
+            </button>
+          </div>
         </div>
 
         <div className="flex border-b border-[var(--border-subtle)] px-6">
@@ -119,9 +161,11 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
                     onChange={(e) => handleUpdate('state', e.target.value)}
                     className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
                   >
-                    <option value="TODO">To Do</option>
-                    <option value="IN_PROGRESS">In Progress</option>
-                    <option value="DONE">Done</option>
+                    <option value="New">New</option>
+                    <option value="Active">Active</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Closed">Closed</option>
+                    <option value="Removed">Removed</option>
                   </select>
                 </div>
                 
@@ -153,8 +197,84 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
                     className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
                   />
                 </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[12px] font-medium text-[var(--text-secondary)]">Assigned To</label>
+                  <select 
+                    value={item.assignedTo || ''}
+                    onChange={(e) => handleUpdate('assignedTo', e.target.value || null)}
+                    className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
+                  >
+                    <option value="">Unassigned</option>
+                    {members.map((m: any) => (
+                      <option key={m.userId} value={m.userId}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[12px] font-medium text-[var(--text-secondary)]">Parent</label>
+                  <select 
+                    value={item.parentId || ''}
+                    onChange={(e) => handleUpdate('parentId', e.target.value || null)}
+                    className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
+                  >
+                    <option value="">None</option>
+                    {allWorkItems.filter((w: any) => w.id !== item.id).map((w: any) => (
+                      <option key={w.id} value={w.id}>{w.key} - {w.title}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[12px] font-medium text-[var(--text-secondary)]">Iteration</label>
+                  <select 
+                    value={item.iterationId || ''}
+                    onChange={(e) => handleUpdate('iterationId', e.target.value || null)}
+                    className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
+                  >
+                    <option value="">Backlog</option>
+                    {iterations.map((it: any) => (
+                      <option key={it.id} value={it.id}>{it.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[12px] font-medium text-[var(--text-secondary)]">Area</label>
+                  <select 
+                    value={item.areaId || ''}
+                    onChange={(e) => handleUpdate('areaId', e.target.value || null)}
+                    className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
+                  >
+                    <option value="">None</option>
+                    {areas.map((a: any) => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[12px] font-medium text-[var(--text-secondary)]">Tags</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {(item.tags || []).map((t: string) => (
+                    <span key={t} className="flex items-center gap-1 bg-[var(--bg-surface-hover)] text-[12px] px-2 py-1 rounded-[var(--radius-button)]">
+                      {t}
+                      <button onClick={() => handleRemoveTag(t)} className="hover:text-[var(--priority-high)]"><X className="w-3 h-3" /></button>
+                    </span>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Add a tag and press Enter"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleAddTag}
+                  className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
+                />
+              </div>
+
               <div className="flex flex-col gap-1.5">
                 <label className="text-[12px] font-medium text-[var(--text-secondary)]">Description</label>
                 <textarea 
@@ -261,9 +381,11 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
                           {act.action === 'PRIORITY_CHANGED' && `changed priority to ${act.new_value}`}
                           {act.action === 'ASSIGNEE_CHANGED' && `assigned to ${act.new_value || 'unassigned'}`}
                           {act.action === 'DESCRIPTION_CHANGED' && `updated the description`}
-                          {act.action === 'SPRINT_CHANGED' && (act.new_value ? 'added to a sprint' : 'moved to the backlog')}
+                          {act.action === 'ITERATION_CHANGED' && (act.new_value ? 'added to an iteration' : 'moved to the backlog')}
+                          {act.action === 'AREA_CHANGED' && (act.new_value ? 'moved to a different area' : 'removed from area')}
                           {act.action === 'PARENT_CHANGED' && (act.new_value ? 'linked under a parent item' : 'removed the parent link')}
                           {act.action === 'DELETED' && 'deleted this item'}
+                          {act.action === 'TAGS_CHANGED' && `updated tags to ${act.new_value || 'none'}`}
                         </span>
                       </div>
                       <span className="text-[12px] text-[var(--text-muted)] mt-0.5">{format(new Date(act.created_at), 'MMM d, yyyy HH:mm')}</span>

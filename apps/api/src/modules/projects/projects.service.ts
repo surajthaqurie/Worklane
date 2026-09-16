@@ -26,7 +26,10 @@ export class ProjectsService {
 
   async create(userId: string, data: CreateProjectDto) {
     const project = await this.repo.createProject({
-      ...data,
+      name: data.name,
+      key: data.key,
+      description: data.description,
+      organization_id: data.organizationId,
       created_by: userId,
     });
     await this.repo.addMember(project.id, userId);
@@ -97,5 +100,15 @@ export class ProjectsService {
       createdAt: p.created_at,
       updatedAt: p.updated_at,
     };
+  }
+
+  async getAreas(userId: string, projectId: string) {
+    await this.assertProjectMember(projectId, userId);
+    return await this.repo.getAreas(projectId);
+  }
+
+  async getTags(userId: string, projectId: string) {
+    await this.assertProjectMember(projectId, userId);
+    return await this.repo.getTags(projectId);
   }
 }

@@ -12,7 +12,7 @@ export function useWorkItems(projectId: string, filters: Record<string, string> 
       if (filters.type) searchParams.set('type', filters.type);
       if (filters.priority) searchParams.set('priority', filters.priority);
       if (filters.assignedTo) searchParams.set('assignedTo', filters.assignedTo);
-      if (filters.sprintId) searchParams.set('sprintId', filters.sprintId);
+      if (filters.iterationId) searchParams.set('iterationId', filters.iterationId);
       if (filters.search) searchParams.set('search', filters.search);
       
       const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/work-items?${searchParams.toString()}`);
@@ -55,8 +55,11 @@ export type WorkItem = {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  closedAt: string | null;
   parentId: string | null;
-  sprintId?: string | null;
+  iterationId?: string | null;
+  areaId: string;
+  tags?: string[];
 };
 
 export function useUpdateWorkItem(projectId: string) {
@@ -89,7 +92,45 @@ export function useUpdateWorkItem(projectId: string) {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'sprints'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'iterations'] });
+    }
+  });
+}
+
+export function useTransitionWorkItemState(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, state }: { id: string; state: string }) => {
+      const res = await fetchWithAuth(`${API_URL}/work-items/${id}/state`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state })
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'Failed to update work item state');
+      }
+      return res.json();
+    },
+    onMutate: async ({ id, state }) => {
+      await queryClient.cancelQueries({ queryKey: ['projects', projectId] });
+      const previousQueries = queryClient.getQueriesData({ queryKey: ['projects', projectId] });
+      queryClient.setQueriesData({ queryKey: ['projects', projectId] }, (old: unknown) => {
+        if (!old || !Array.isArray(old)) return old;
+        return old.map((item: WorkItem) => (item.id === id ? { ...item, state } : item));
+      });
+      return { previousQueries };
+    },
+    onError: (_err, _newTodo, context) => {
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'iterations'] });
     }
   });
 }
@@ -172,5 +213,21 @@ export function useWorkItemActivity(workItemId: string | null) {
       return res.json();
     },
     enabled: !!workItemId
+  });
+}
+
+export function useDeleteWorkItem(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetchWithAuth(`${API_URL}/work-items/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete work item');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
+    }
   });
 }

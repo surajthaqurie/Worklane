@@ -1,3 +1,4 @@
+import { WorkItemFilterDto } from "./dto/filter.dto.js";
 import {
   Controller,
   Get,
@@ -12,16 +13,21 @@ import {
 } from '@nestjs/common';
 import { WorkItemsService } from './work-items.service.js';
 import { CreateWorkItemDto, UpdateWorkItemDto } from './dto/work-items.dto.js';
+import { StateTransitionDto } from './dto/state-transition.dto.js';
 import { AuthGuard } from '../projects/auth.guard.js';
+import { WorkItemTransitionsService } from './work-item-transitions.service.js';
 
 @Controller()
 @UseGuards(AuthGuard)
 export class WorkItemsController {
-  constructor(private readonly workItemsService: WorkItemsService) {}
+  constructor(
+    private readonly workItemsService: WorkItemsService,
+    private readonly transitionsService: WorkItemTransitionsService
+  ) {}
 
   @Post('projects/:projectId/work-items')
   create(
-    @Req() req: any,
+    @Req() req: { user: { id: string } },
     @Param('projectId') projectId: string,
     @Body() createDto: CreateWorkItemDto,
   ) {
@@ -30,21 +36,21 @@ export class WorkItemsController {
 
   @Get('projects/:projectId/work-items')
   findAll(
-    @Req() req: any,
+    @Req() req: { user: { id: string } },
     @Param('projectId') projectId: string,
-    @Query() query: any,
+    @Query() query: WorkItemFilterDto,
   ) {
     return this.workItemsService.findAll(req.user.id, projectId, query);
   }
 
   @Get('work-items/:id')
-  findOne(@Req() req: any, @Param('id') id: string) {
+  findOne(@Req() req: { user: { id: string } }, @Param('id') id: string) {
     return this.workItemsService.findOne(req.user.id, id);
   }
 
   @Patch('work-items/:id')
   update(
-    @Req() req: any,
+    @Req() req: { user: { id: string } },
     @Param('id') id: string,
     @Body() updateDto: UpdateWorkItemDto,
   ) {
@@ -52,18 +58,27 @@ export class WorkItemsController {
   }
 
   @Delete('work-items/:id')
-  remove(@Req() req: any, @Param('id') id: string) {
+  remove(@Req() req: { user: { id: string } }, @Param('id') id: string) {
     return this.workItemsService.remove(req.user.id, id);
   }
 
+  @Patch('work-items/:id/state')
+  async transitionState(
+    @Req() req: { user: { id: string } },
+    @Param('id') id: string,
+    @Body() transitionDto: StateTransitionDto,
+  ) {
+    return this.transitionsService.transitionState(req.user.id, id, transitionDto.state);
+  }
+
   @Get('work-items/:id/comments')
-  getComments(@Req() req: any, @Param('id') id: string) {
+  getComments(@Req() req: { user: { id: string } }, @Param('id') id: string) {
     return this.workItemsService.getComments(req.user.id, id);
   }
 
   @Post('work-items/:id/comments')
   addComment(
-    @Req() req: any,
+    @Req() req: { user: { id: string } },
     @Param('id') id: string,
     @Body('content') content: string,
   ) {
@@ -72,7 +87,7 @@ export class WorkItemsController {
 
   @Patch('work-items/:id/comments/:commentId')
   updateComment(
-    @Req() req: any,
+    @Req() req: { user: { id: string } },
     @Param('id') id: string,
     @Param('commentId') commentId: string,
     @Body('content') content: string,
@@ -87,7 +102,7 @@ export class WorkItemsController {
 
   @Delete('work-items/:id/comments/:commentId')
   deleteComment(
-    @Req() req: any,
+    @Req() req: { user: { id: string } },
     @Param('id') id: string,
     @Param('commentId') commentId: string,
   ) {
@@ -95,7 +110,7 @@ export class WorkItemsController {
   }
 
   @Get('work-items/:id/activity')
-  getActivity(@Req() req: any, @Param('id') id: string) {
+  getActivity(@Req() req: { user: { id: string } }, @Param('id') id: string) {
     return this.workItemsService.getActivity(req.user.id, id);
   }
 }

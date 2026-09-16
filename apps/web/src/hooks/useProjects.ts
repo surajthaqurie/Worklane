@@ -62,3 +62,27 @@ export function useProjectOverview(projectId: string) {
     }
   });
 }
+
+export function useAreas(projectId: string) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'areas'],
+    queryFn: async () => {
+      const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/areas`);
+      if (!res.ok) throw new Error('Failed to fetch areas');
+      return res.json();
+    },
+    enabled: !!projectId
+  });
+}
+
+export function useTags(projectId: string) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'tags'],
+    queryFn: async () => {
+      const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/tags`);
+      if (!res.ok) throw new Error('Failed to fetch tags');
+      return res.json();
+    },
+    enabled: !!projectId
+  });
+}

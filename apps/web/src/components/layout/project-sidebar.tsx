@@ -5,13 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { projectNavigation, projectSettingsNavigation } from '../../config/navigation';
 import { ArrowLeft } from 'lucide-react';
+import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 
-interface ProjectSidebarProps {
-  projectId: string;
-}
-
-export function ProjectSidebar({ projectId }: ProjectSidebarProps) {
+export function ProjectSidebar() {
   const pathname = usePathname();
+  const { project, projectId } = useProjectContext();
 
   const isActive = (itemMatch: string) => {
     const basePath = `/projects/${projectId}`;
@@ -30,10 +28,10 @@ export function ProjectSidebar({ projectId }: ProjectSidebarProps) {
         </Link>
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] flex items-center justify-center text-[12px] font-medium text-[var(--text-secondary)]">
-            FP
+            {project.key || 'P'}
           </div>
-          <div className="flex flex-col">
-            <span className="text-[14px] font-semibold text-[var(--text-primary)] truncate">Fitness Platform</span>
+          <div className="flex flex-col overflow-hidden">
+            <span className="text-[14px] font-semibold text-[var(--text-primary)] truncate" title={project.name}>{project.name}</span>
             <span className="text-[12px] text-[var(--text-secondary)]">Workspace</span>
           </div>
         </div>

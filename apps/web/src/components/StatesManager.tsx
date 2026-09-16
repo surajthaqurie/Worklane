@@ -146,7 +146,7 @@ export function StatesManager({ projectId }: { projectId: string }) {
                       type="checkbox"
                       checked={state.isDone}
                       onChange={(e) => updateState.mutate({ id: state.id, data: { isDone: e.target.checked } })}
-                      className="w-3.5 h-3.5 accent-[var(--sprint-completed)] cursor-pointer"
+                      className="w-3.5 h-3.5 accent-[var(--iteration-completed)] cursor-pointer"
                     />
                     Done
                   </label>
@@ -210,7 +210,7 @@ export function StatesManager({ projectId }: { projectId: string }) {
                       type="checkbox"
                       checked={newIsDone}
                       onChange={(e) => setNewIsDone(e.target.checked)}
-                      className="w-3.5 h-3.5 accent-[var(--sprint-completed)] cursor-pointer"
+                      className="w-3.5 h-3.5 accent-[var(--iteration-completed)] cursor-pointer"
                     />
                     Done
                   </label>

@@ -1,3 +1,4 @@
+import { WorkItemFilterDto } from "./dto/filter.dto.js";
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { WorkItemsRepository } from './work-items.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
@@ -15,11 +16,14 @@ export class WorkItemsService {
       projectId,
       userId,
     );
+    if (data.parentId) {
+      await this.validateParent(data.parentId, data.type, projectId);
+    }
     const item = await this.repo.createWorkItem(projectId, userId, data);
     return this.mapWorkItem(item, project.key);
   }
 
-  async findAll(userId: string, projectId: string, filters: any) {
+  async findAll(userId: string, projectId: string, filters: WorkItemFilterDto) {
     const project = await this.projectsService.assertProjectMember(
       projectId,
       userId,
@@ -45,16 +49,55 @@ export class WorkItemsService {
       item.project_id,
       userId,
     );
-    if (data.state !== undefined) {
-      const allowedStates = await this.repo.getProjectStateKeys(
-        item.project_id,
-      );
-      if (!allowedStates.includes(data.state)) {
-        throw new BadRequestException(`State "${data.state}" is not valid for this project`);
+    if ((data as any).state !== undefined) {
+      throw new BadRequestException('State transitions must be done via the dedicated transition endpoint');
+    }
+
+    if (data.parentId !== undefined) {
+      if (data.parentId) {
+        if (data.parentId === id) throw new BadRequestException('Cannot set self as parent');
+        const typeToValidate = data.type || item.type;
+        await this.validateParent(data.parentId, typeToValidate, item.project_id);
+        await this.checkCircularDependency(id, data.parentId);
       }
+    } else if (data.type !== undefined) {
+       if (item.parent_id) {
+           await this.validateParent(item.parent_id, data.type, item.project_id);
+       }
     }
     const updated = await this.repo.updateWorkItem(id, userId, data);
     return this.mapWorkItem(updated, project.key);
+  }
+
+  private async validateParent(parentId: string, childType: string, projectId: string) {
+    const parent = await this.repo.getWorkItemById(parentId);
+    if (!parent) throw new BadRequestException('Parent not found');
+    if (parent.project_id !== projectId) throw new BadRequestException('Cross-project parent is not allowed');
+    
+    const allowedParents: Record<string, string[]> = {
+      'EPIC': [],
+      'FEATURE': ['EPIC'],
+      'STORY': ['FEATURE'],
+      'TASK': ['STORY', 'BUG'],
+      'BUG': ['STORY'],
+    };
+    
+    const allowed = allowedParents[childType] || [];
+    if (!allowed.includes(parent.type)) {
+      throw new BadRequestException(`Work item of type ${parent.type} cannot be parent of ${childType}`);
+    }
+  }
+
+  private async checkCircularDependency(itemId: string, newParentId: string) {
+    let currentParentId: string | null = newParentId;
+    while (currentParentId) {
+      if (currentParentId === itemId) {
+         throw new BadRequestException('Circular dependency detected');
+      }
+      const parent = await this.repo.getWorkItemById(currentParentId);
+      if (!parent) break;
+      currentParentId = parent.parent_id;
+    }
   }
 
   async remove(userId: string, id: string) {
@@ -126,7 +169,9 @@ export class WorkItemsService {
       updatedAt: item.updated_at,
       completedAt: item.completed_at,
       parentId: item.parent_id,
-      sprintId: item.sprint_id,
+      iterationId: item.iteration_id,
+      areaId: item.area_id,
+      tags: item.tags || [],
     };
   }
 }

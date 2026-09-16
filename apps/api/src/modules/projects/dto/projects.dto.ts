@@ -8,12 +8,14 @@ export const CreateProjectSchema = z.object({
     .max(20)
     .regex(/^[A-Z0-9]+$/),
   description: z.string().optional(),
+  organizationId: z.string().uuid(),
 });
 
 export class CreateProjectDto {
   name: string;
   key: string;
   description?: string;
+  organizationId: string;
 }
 
 export const UpdateProjectSchema = z.object({

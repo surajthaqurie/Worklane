@@ -132,7 +132,7 @@ function StateColumn({
           {items.length}
         </span>
         {state.isDone && (
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--sprint-completed)] bg-[var(--sprint-completed)]/10 px-1.5 py-0.5 rounded-full">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--iteration-completed)] bg-[var(--iteration-completed)]/10 px-1.5 py-0.5 rounded-full">
             Done
           </span>
         )}
@@ -206,7 +206,7 @@ function Card({
               onRemove(item);
             }}
             className="p-0.5 text-[var(--text-muted)] hover:text-[var(--priority-high)] opacity-0 group-hover:opacity-100 transition-opacity"
-            title="Remove from sprint"
+            title="Remove from iteration"
           >
             <X className="w-3.5 h-3.5" />
           </button>

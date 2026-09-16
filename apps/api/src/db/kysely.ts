@@ -2,6 +2,11 @@ import { Kysely, PostgresDialect, Generated, ColumnType } from 'kysely';
 import { Pool } from 'pg';
 
 export interface Database {
+  organizations: {
+    id: Generated<string>;
+    name: string;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
   users: {
     id: Generated<string>;
     name: string;
@@ -11,6 +16,7 @@ export interface Database {
   };
   projects: {
     id: Generated<string>;
+    organization_id: string;
     name: string;
     description: string | null;
     key: string;
@@ -26,7 +32,31 @@ export interface Database {
     user_id: string;
     created_at: ColumnType<Date, string | undefined, never>;
   };
-  sprints: {
+  teams: {
+    id: Generated<string>;
+    project_id: string;
+    name: string;
+    description: string | null;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
+  areas: {
+    id: Generated<string>;
+    project_id: string;
+    name: string;
+    parent_id: string | null;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
+  tags: {
+    id: Generated<string>;
+    project_id: string;
+    name: string;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
+  work_item_tags: {
+    work_item_id: string;
+    tag_id: string;
+  };
+  iterations: {
     id: Generated<string>;
     project_id: string;
     name: string;
@@ -34,13 +64,15 @@ export interface Database {
     start_date: ColumnType<Date, string | Date, string | Date>;
     end_date: ColumnType<Date, string | Date, string | Date>;
     state: Generated<'PLANNED' | 'ACTIVE' | 'COMPLETED'>;
+    parent_id: string | null;
     created_at: ColumnType<Date, string | undefined, never>;
     updated_at: ColumnType<Date, string | undefined, string | Date>;
   };
   work_items: {
     id: Generated<string>;
     project_id: string;
-    sprint_id: string | null;
+    iteration_id: string | null;
+    area_id: string;
     seq_no: number;
     parent_id: string | null;
     type: 'EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG';
@@ -53,11 +85,8 @@ export interface Database {
     created_by: string;
     created_at: ColumnType<Date, string | undefined, never>;
     updated_at: ColumnType<Date, string | undefined, string | Date>;
-    completed_at: ColumnType<
-      Date | null,
-      string | undefined | null,
-      string | Date | null
-    >;
+    completed_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
+    closed_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
     search_vector: ColumnType<any, never, never>;
   };
   work_item_states: {
@@ -72,9 +101,9 @@ export interface Database {
     created_at: ColumnType<Date, string | undefined, never>;
     updated_at: ColumnType<Date, string | undefined, string | Date>;
   };
-  sprint_history: {
+  iteration_history: {
     id: Generated<string>;
-    sprint_id: string | null;
+    iteration_id: string | null;
     user_id: string;
     action: string;
     field: string | null;
@@ -111,6 +140,16 @@ export interface Database {
     field: string | null;
     old_value: string | null;
     new_value: string | null;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
+  work_item_attachments: {
+    id: Generated<string>;
+    work_item_id: string;
+    user_id: string;
+    file_name: string;
+    file_size: number;
+    content_type: string;
+    url: string;
     created_at: ColumnType<Date, string | undefined, never>;
   };
 }

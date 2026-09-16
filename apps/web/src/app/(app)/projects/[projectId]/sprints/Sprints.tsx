@@ -13,7 +13,7 @@ const STATE_CONFIG: Record<Sprint['state'], { label: string; className: string }
 };
 
 export function Sprints({ projectId }: { projectId: string }) {
-  const { data: sprints = [], isLoading, error } = useSprints(projectId);
+  const { data: sprints = [], isLoading, error, refetch } = useSprints(projectId);
   const createSprint = useCreateSprint(projectId);
   const updateSprint = useUpdateSprint(projectId);
   const deleteSprint = useDeleteSprint(projectId);
@@ -63,7 +63,20 @@ export function Sprints({ projectId }: { projectId: string }) {
   };
 
   if (isLoading) return <div className="p-8 text-[13px] text-[var(--text-muted)]">Loading sprints...</div>;
-  if (error) return <div className="p-8 text-[13px] text-[var(--priority-high)]">Failed to load sprints</div>;
+  if (error) {
+    return (
+      <div className="p-8 flex flex-col items-start gap-3">
+        <p className="text-[13px] text-[var(--priority-high)]">Failed to load sprints</p>
+        <p className="text-[12px] text-[var(--text-muted)]">{error.message}</p>
+        <button
+          onClick={() => refetch()}
+          className="px-3 py-1.5 text-[12px] font-medium text-[var(--text-primary)] border border-[var(--border-default)] rounded-[var(--radius-button)] hover:bg-[var(--bg-surface-hover)] transition-colors"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col w-full h-full">

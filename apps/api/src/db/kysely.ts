@@ -81,6 +81,19 @@ export interface Database {
     new_value: string | null;
     created_at: ColumnType<Date, string | undefined, never>;
   };
+  saved_queries: {
+    id: Generated<string>;
+    project_id: string;
+    name: string;
+    description: string | null;
+    is_shared: Generated<boolean>;
+    created_by: string;
+    folder: string | null;
+    definition: any;
+    sort_order: Generated<number>;
+    created_at: ColumnType<Date, string | undefined, never>;
+    updated_at: ColumnType<Date, string | undefined, string | Date>;
+  };
   work_item_comments: {
     id: Generated<string>;
     work_item_id: string;

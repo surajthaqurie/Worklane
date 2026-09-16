@@ -1,22 +1,38 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useProjects, useCreateProject } from '@/hooks/useProjects';
 import { Folder } from 'lucide-react';
 
 export default function ProjectsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ProjectsPageContent />
+    </Suspense>
+  );
+}
+
+function ProjectsPageContent() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: projects, isLoading, error } = useProjects();
   const createProject = useCreateProject();
-  const [showModal, setShowModal] = useState(false);
   const [name, setName] = useState('');
   const [key, setKey] = useState('APP');
   const [description, setDescription] = useState('');
 
+  const showModal = searchParams.get('new') === '1';
+
+  const openModal = () => router.push('/projects?new=1');
+  const closeModal = () => router.replace(pathname);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await createProject.mutateAsync({ name, key, description });
-    setShowModal(false);
+    closeModal();
     setName('');
     setKey('APP');
     setDescription('');
@@ -31,7 +47,7 @@ export default function ProjectsPage() {
         </div>
         <div className="mt-4 flex md:ml-4 md:mt-0 gap-3">
           <button 
-            onClick={() => setShowModal(true)}
+            onClick={openModal}
             className="px-4 py-2 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white text-[13px] font-medium rounded-[var(--radius-button)] transition-colors"
           >
             + New Project
@@ -118,7 +134,7 @@ export default function ProjectsPage() {
               <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">
                 <button 
                   type="button" 
-                  onClick={() => setShowModal(false)}
+                  onClick={closeModal}
                   className="px-4 py-2 text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] rounded-[var(--radius-button)] transition-colors"
                 >
                   Cancel

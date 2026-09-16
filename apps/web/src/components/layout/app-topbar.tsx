@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Menu, Search, User, Moon, Sun, Monitor } from 'lucide-react';
+import { Menu, Search, Moon, Sun } from 'lucide-react';
 import { useTheme } from '../providers';
 
 interface AppTopbarProps {
@@ -10,6 +10,10 @@ interface AppTopbarProps {
 
 export function AppTopbar({ onMenuClick }: AppTopbarProps) {
   const { theme, setTheme } = useTheme();
+
+  const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  const toggleTheme = () => setTheme(isDark ? 'light' : 'dark');
 
   return (
     <header className="flex items-center justify-between h-14 px-4 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] sm:px-6 lg:px-8 z-10 shrink-0">
@@ -36,32 +40,12 @@ export function AppTopbar({ onMenuClick }: AppTopbarProps) {
         </div>
       </div>
       <div className="flex items-center ml-4 md:ml-6 gap-3">
-        <div className="flex bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] p-0.5">
-          <button 
-            onClick={() => setTheme('light')} 
-            className={`p-1.5 rounded-[calc(var(--radius-button)-2px)] ${theme === 'light' ? 'bg-[var(--bg-surface)] shadow-sm text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}
-            title="Light Mode"
-          >
-            <Sun className="w-4 h-4" />
-          </button>
-          <button 
-            onClick={() => setTheme('dark')} 
-            className={`p-1.5 rounded-[calc(var(--radius-button)-2px)] ${theme === 'dark' ? 'bg-[var(--bg-surface)] shadow-sm text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}
-            title="Dark Mode"
-          >
-            <Moon className="w-4 h-4" />
-          </button>
-          <button 
-            onClick={() => setTheme('system')} 
-            className={`p-1.5 rounded-[calc(var(--radius-button)-2px)] ${theme === 'system' ? 'bg-[var(--bg-surface)] shadow-sm text-[var(--text-primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}
-            title="System Theme"
-          >
-            <Monitor className="w-4 h-4" />
-          </button>
-        </div>
-
-        <button className="flex items-center text-[13px] bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white px-3 py-1.5 rounded-[var(--radius-button)] font-medium transition-colors">
-          + Create
+        <button
+          onClick={toggleTheme}
+          className="flex items-center justify-center w-8 h-8 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
 
         <button className="flex items-center rounded-full focus:outline-none ring-2 ring-transparent hover:ring-[var(--border-focus)] transition-all">

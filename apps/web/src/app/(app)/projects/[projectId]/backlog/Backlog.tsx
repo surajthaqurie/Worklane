@@ -15,7 +15,7 @@ import { format } from 'date-fns';
 export function Backlog({ projectId }: { projectId: string }) {
   const filters = useWorkItemFilters();
   const { data: workItems = [], isLoading, error } = useWorkItems(projectId, filters);
-  const { data: sprints = [] } = useSprints(projectId);
+  const { data: sprints = [], error: sprintsError, refetch: refetchSprints } = useSprints(projectId);
   const { data: states = [] } = useWorkItemStates(projectId);
   const createWorkItem = useCreateWorkItem(projectId);
   const updateWorkItem = useUpdateWorkItem(projectId);
@@ -259,10 +259,25 @@ export function Backlog({ projectId }: { projectId: string }) {
                 <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">Drag items to assign sprints</p>
               </div>
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-                {sprints.map((sprint: { id: string, name: string, startDate: string, endDate: string }) => (
-                  <SprintDropZone key={sprint.id} sprint={sprint} />
-                ))}
-                <SprintDropZone sprint={{ id: 'unassigned', name: 'Backlog (Unassigned)', startDate: '', endDate: '' }} isUnassigned />
+                {sprintsError ? (
+                  <div className="flex flex-col items-start gap-2 py-4">
+                    <p className="text-[12px] text-[var(--priority-high)]">Failed to load sprints</p>
+                    <span className="text-[11px] text-[var(--text-muted)]">{sprintsError.message}</span>
+                    <button
+                      onClick={() => refetchSprints()}
+                      className="px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] border border-[var(--border-default)] rounded-[var(--radius-button)] hover:bg-[var(--bg-surface-hover)] transition-colors"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {sprints.map((sprint: { id: string, name: string, startDate: string, endDate: string }) => (
+                      <SprintDropZone key={sprint.id} sprint={sprint} />
+                    ))}
+                    <SprintDropZone sprint={{ id: 'unassigned', name: 'Backlog (Unassigned)', startDate: '', endDate: '' }} isUnassigned />
+                  </>
+                )}
               </div>
             </div>
           )}

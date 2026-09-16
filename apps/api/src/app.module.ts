@@ -5,6 +5,7 @@ import { ProjectsModule } from './modules/projects/projects.module.js';
 import { WorkItemsModule } from './modules/work-items/work-items.module.js';
 import { SprintsModule } from './modules/sprints/sprints.module.js';
 import { WorkItemStatesModule } from './modules/work-item-states/work-item-states.module.js';
+import { QueriesModule } from './modules/queries/queries.module.js';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { WorkItemStatesModule } from './modules/work-item-states/work-item-state
     WorkItemsModule,
     SprintsModule,
     WorkItemStatesModule,
+    QueriesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

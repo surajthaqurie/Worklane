@@ -1,16 +1,32 @@
 'use client';
-import { use, useState } from 'react';
+import { Suspense, use, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useWorkItems, WorkItem } from '@/hooks/useWorkItems';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
 import { CreateWorkItemModal } from '@/components/CreateWorkItemModal';
 import { Search, Filter } from 'lucide-react';
 
 export default function WorkItemsPage({ params }: { params: Promise<{ projectId: string }> }) {
+  return (
+    <Suspense fallback={null}>
+      <WorkItemsPageContent params={params} />
+    </Suspense>
+  );
+}
+
+function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string }> }) {
   const resolvedParams = use(params);
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  const isCreateModalOpen = searchParams.get('new') === '1';
+
+  const openModal = () => router.push(`${pathname}?new=1`);
+  const closeModal = () => router.replace(pathname);
 
   const { data: workItems = [], isLoading } = useWorkItems(resolvedParams.projectId, statusFilter ? { state: statusFilter } : {});
 
@@ -32,7 +48,7 @@ export default function WorkItemsPage({ params }: { params: Promise<{ projectId:
         </div>
         <div className="mt-4 flex md:ml-4 md:mt-0 gap-3">
           <button 
-            onClick={() => setIsCreateModalOpen(true)}
+            onClick={openModal}
             className="px-4 py-2 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white text-[13px] font-medium rounded-[var(--radius-button)] transition-colors"
           >
             + New Work Item
@@ -135,7 +151,7 @@ export default function WorkItemsPage({ params }: { params: Promise<{ projectId:
       {isCreateModalOpen && (
         <CreateWorkItemModal
           projectId={resolvedParams.projectId}
-          onClose={() => setIsCreateModalOpen(false)}
+          onClose={closeModal}
         />
       )}
     </div>

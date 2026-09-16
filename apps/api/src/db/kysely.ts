@@ -89,6 +89,7 @@ export interface Database {
     closed_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
     search_vector: ColumnType<any, never, never>;
     backlog_order: number;
+    backlog_rank: Generated<number>;
   };
   work_item_states: {
     id: Generated<string>;

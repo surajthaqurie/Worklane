@@ -1,7 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect, useLayoutEffect, createContext, useContext } from 'react';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -33,7 +33,7 @@ export function ThemeProvider({
     if (stored) setTheme(stored);
   }, [storageKey]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!mounted) return;
     const root = window.document.documentElement;
     

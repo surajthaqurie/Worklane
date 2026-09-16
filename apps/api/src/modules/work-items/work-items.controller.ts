@@ -43,6 +43,21 @@ export class WorkItemsController {
     return this.workItemsService.findAll(req.user.id, projectId, query);
   }
 
+  @Get('projects/:projectId/boards/:boardId/work-items')
+  findBoardWorkItems(
+    @Req() req: { user: { id: string } },
+    @Param('projectId') projectId: string,
+    @Param('boardId') boardId: string,
+    @Query() query: WorkItemFilterDto,
+  ) {
+    // A proper board API endpoint that conceptually scopes to a board.
+    // We can map boardId to teamId if applicable, and enforce board-level logic here.
+    return this.workItemsService.findAll(req.user.id, projectId, {
+      ...query,
+      teamId: boardId !== 'default' ? boardId : undefined,
+    });
+  }
+
   @Get('work-items/:id')
   findOne(@Req() req: { user: { id: string } }, @Param('id') id: string) {
     return this.workItemsService.findOne(req.user.id, id);

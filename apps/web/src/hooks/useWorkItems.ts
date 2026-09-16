@@ -13,10 +13,49 @@ export function useWorkItems(projectId: string, filters: Record<string, string> 
       if (filters.priority) searchParams.set('priority', filters.priority);
       if (filters.assignedTo) searchParams.set('assignedTo', filters.assignedTo);
       if (filters.iterationId) searchParams.set('iterationId', filters.iterationId);
+      if (filters.areaId) searchParams.set('areaId', filters.areaId);
+      if (filters.tags) searchParams.set('tags', filters.tags);
       if (filters.search) searchParams.set('search', filters.search);
+      if (filters.parentId !== undefined) searchParams.set('parentId', filters.parentId);
       
       const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/work-items?${searchParams.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch work items');
+      return res.json();
+    }
+  });
+}
+
+export function useWorkItemChildren(projectId: string, parentId: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'work-items', { parentId }],
+    queryFn: async () => {
+      const searchParams = new URLSearchParams();
+      searchParams.set('parentId', parentId);
+      const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/work-items?${searchParams.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch children work items');
+      return res.json();
+    },
+    enabled: options?.enabled
+  });
+}
+
+export function useBoardWorkItems(projectId: string, boardId: string, filters: Record<string, string> = {}) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'boards', boardId, 'work-items', filters],
+    queryFn: async () => {
+      const searchParams = new URLSearchParams();
+      if (filters.state) searchParams.set('state', filters.state);
+      if (filters.type) searchParams.set('type', filters.type);
+      if (filters.priority) searchParams.set('priority', filters.priority);
+      if (filters.assignedTo) searchParams.set('assignedTo', filters.assignedTo);
+      if (filters.iterationId) searchParams.set('iterationId', filters.iterationId);
+      if (filters.areaId) searchParams.set('areaId', filters.areaId);
+      if (filters.tags) searchParams.set('tags', filters.tags);
+      if (filters.search) searchParams.set('search', filters.search);
+      if (filters.limit) searchParams.set('limit', filters.limit);
+      
+      const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/boards/${boardId}/work-items?${searchParams.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch board work items');
       return res.json();
     }
   });
@@ -57,6 +96,8 @@ export type WorkItem = {
   completedAt: string | null;
   closedAt: string | null;
   parentId: string | null;
+  hasChildren?: boolean;
+  backlogOrder?: number;
   iterationId?: string | null;
   areaId: string;
   tags?: string[];

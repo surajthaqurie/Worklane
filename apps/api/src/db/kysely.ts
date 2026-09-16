@@ -88,6 +88,7 @@ export interface Database {
     completed_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
     closed_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
     search_vector: ColumnType<any, never, never>;
+    backlog_order: number;
   };
   work_item_states: {
     id: Generated<string>;

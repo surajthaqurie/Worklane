@@ -172,6 +172,8 @@ export class WorkItemsService {
       iterationId: item.iteration_id,
       areaId: item.area_id,
       tags: item.tags || [],
+      backlogOrder: item.backlog_order,
+      hasChildren: item.has_children ?? false,
     };
   }
 }

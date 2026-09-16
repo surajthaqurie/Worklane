@@ -7,8 +7,12 @@ export const WorkItemFilterSchema = z.object({
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   assignedTo: z.string().optional(),
   iterationId: z.string().optional(),
+  areaId: z.string().optional(),
+  teamId: z.string().optional(),
+  tags: z.string().optional(),
   limit: z.string().regex(/^\d+$/).optional(),
   offset: z.string().regex(/^\d+$/).optional(),
+  parentId: z.string().optional(),
 });
 
 export class WorkItemFilterDto {
@@ -18,6 +22,10 @@ export class WorkItemFilterDto {
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   assignedTo?: string;
   iterationId?: string;
+  areaId?: string;
+  teamId?: string;
+  tags?: string;
   limit?: string;
   offset?: string;
+  parentId?: string;
 }

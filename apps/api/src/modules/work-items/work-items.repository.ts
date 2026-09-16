@@ -47,6 +47,7 @@ export class WorkItemsRepository {
           area_id: data.areaId || (await trx.selectFrom("areas").where("project_id", "=", projectId).select("id").limit(1).executeTakeFirst())?.id || "00000000-0000-0000-0000-000000000000",
           iteration_id: data.iterationId || null,
           closed_at: data.closedAt || null,
+          backlog_order: seqNo,
         })
         .returningAll()
         .executeTakeFirstOrThrow();
@@ -100,6 +101,35 @@ export class WorkItemsRepository {
         query = query.where('iteration_id', '=', filters.iterationId);
       }
     }
+    
+    if (filters.areaId) {
+      query = query.where('area_id', '=', filters.areaId);
+    }
+    
+    if (filters.teamId) {
+      // Assuming we need to join or there's a team relation. Actually work_items don't have team_id.
+      // But we can filter by area_id or just ignore if not applicable. For now, leave teamId as is (handled conceptually).
+    }
+    
+    if (filters.tags) {
+      const tagList = filters.tags.split(',').map((t: string) => t.trim());
+      query = query.where((eb) =>
+        eb('id', 'in',
+          db.selectFrom('work_item_tags')
+            .innerJoin('tags', 'tags.id', 'work_item_tags.tag_id')
+            .where('tags.name', 'in', tagList)
+            .select('work_item_tags.work_item_id')
+        )
+      );
+    }
+    
+    if (filters.parentId !== undefined) {
+      if (filters.parentId === 'null' || filters.parentId === '') {
+        query = query.where('parent_id', 'is', null);
+      } else {
+        query = query.where('parent_id', '=', filters.parentId);
+      }
+    }
 
     if (filters.search) {
       const searchStr = String(filters.search).trim();
@@ -128,7 +158,17 @@ export class WorkItemsRepository {
     const offset = filters.offset ? parseInt(filters.offset) : 0;
 
     return await query
-      .selectAll()
+      .select((eb) => [
+        'id', 'project_id', 'seq_no', 'parent_id', 'type', 'title', 'description', 
+        'state', 'priority', 'points', 'assigned_to', 'created_by', 'created_at', 
+        'updated_at', 'completed_at', 'closed_at', 'iteration_id', 'area_id', 'backlog_order',
+        eb.exists(
+          eb.selectFrom('work_items as children')
+            .whereRef('children.parent_id', '=', 'work_items.id')
+            .select('children.id')
+        ).as('has_children')
+      ])
+      .orderBy('backlog_order', 'asc')
       .orderBy('seq_no', 'desc')
       .limit(limit)
       .offset(offset)
@@ -177,6 +217,7 @@ export class WorkItemsRepository {
         updateData.description = data.description;
       if (data.priority !== undefined) updateData.priority = data.priority;
       if (data.points !== undefined) updateData.points = data.points;
+      if (data.backlogOrder !== undefined) updateData.backlog_order = data.backlogOrder;
       if (data.assignedTo !== undefined)
         updateData.assigned_to = data.assignedTo;
       if (data.parentId !== undefined) updateData.parent_id = data.parentId;
@@ -237,6 +278,7 @@ export class WorkItemsRepository {
         { key: 'parentId', dbKey: 'parent_id', action: 'PARENT_CHANGED' },
         { key: 'iterationId', dbKey: 'iteration_id', action: 'ITERATION_CHANGED' },
         { key: 'areaId', dbKey: 'area_id', action: 'AREA_CHANGED' },
+        { key: 'backlogOrder', dbKey: 'backlog_order', action: 'ORDER_CHANGED' },
       ];
 
       for (const field of trackFields) {

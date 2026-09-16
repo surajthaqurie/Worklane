@@ -39,6 +39,7 @@ export const UpdateWorkItemSchema = z.object({
   areaId: z.string().uuid().optional().nullable(),
   tags: z.array(z.string()).optional(),
   closedAt: z.string().datetime().optional().nullable(),
+  backlogOrder: z.number().optional(),
 });
 export class UpdateWorkItemDto {
   type?: 'EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG';
@@ -52,4 +53,5 @@ export class UpdateWorkItemDto {
   areaId?: string | null;
   tags?: string[];
   closedAt?: string | null;
+  backlogOrder?: number;
 }

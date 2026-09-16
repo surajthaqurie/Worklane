@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useWorkItems, useCreateWorkItem, useUpdateWorkItem, useTransitionWorkItemState, WorkItem } from '@/hooks/useWorkItems';
+import { useWorkItems, useWorkItemChildren, useCreateWorkItem, useUpdateWorkItem, useTransitionWorkItemState, WorkItem } from '@/hooks/useWorkItems';
 import { useIterations, Iteration } from '@/hooks/useIterations';
 import { useWorkItemStates } from '@/hooks/useWorkItemStates';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
@@ -14,7 +14,7 @@ import { format } from 'date-fns';
 
 export function Backlog({ projectId }: { projectId: string }) {
   const filters = useWorkItemFilters();
-  const { data: workItems = [], isLoading, error } = useWorkItems(projectId, filters);
+  const { data: roots = [], isLoading, error } = useWorkItems(projectId, { ...filters, parentId: 'null' });
   const { data: iterations = [], error: iterationsError, refetch: refetchIterations } = useIterations(projectId);
   const { data: states = [] } = useWorkItemStates(projectId);
   const createWorkItem = useCreateWorkItem(projectId);
@@ -26,13 +26,24 @@ export function Backlog({ projectId }: { projectId: string }) {
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
   const [isPlanningOpen, setIsPlanningOpen] = useState(false);
 
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (over && over.id.toString().startsWith('iteration-')) {
+    if (!over) return;
+    
+    if (over.id.toString().startsWith('iteration-')) {
       const iterationId = over.data.current?.iterationId;
       const itemId = active.id.toString();
       if (iterationId !== undefined) {
         updateWorkItem.mutate({ id: itemId, data: { iterationId: iterationId === 'unassigned' ? null : iterationId } });
+      }
+    } else if (over.id.toString().startsWith('item-')) {
+      // Reordering or changing parent
+      const itemId = active.id.toString();
+      const targetId = over.id.toString().replace('item-', '');
+      if (itemId !== targetId) {
+        // Change parent to target item (making it a child)
+        updateWorkItem.mutate({ id: itemId, data: { parentId: targetId } });
       }
     }
   };
@@ -43,36 +54,17 @@ export function Backlog({ projectId }: { projectId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<WorkItem>>({});
 
-  const { roots, childrenMap } = useMemo(() => {
-    const rootItems: WorkItem[] = [];
-    const childrenMap: Record<string, WorkItem[]> = {};
-
-    const itemsMap = new Map<string, WorkItem>();
-    workItems.forEach((item: WorkItem) => itemsMap.set(item.id, item));
-
-    workItems.forEach((item: WorkItem) => {
-      const parentId = item.parentId;
-      if (!parentId || !itemsMap.has(parentId)) {
-        rootItems.push(item);
-      } else {
-        if (!childrenMap[parentId]) childrenMap[parentId] = [];
-        childrenMap[parentId].push(item);
-      }
-    });
-
-    return { roots: rootItems, childrenMap };
-  }, [workItems]);
 
   const storyByParentId = useMemo(() => {
     const map: Record<string, { key: string; title: string }> = {};
-    const byId = new Map<string, WorkItem>(workItems.map((item: WorkItem) => [item.id, item]));
-    workItems.forEach((item: WorkItem) => {
+    const byId = new Map<string, WorkItem>(roots.map((item: WorkItem) => [item.id, item]));
+    roots.forEach((item: WorkItem) => {
       if (item.parentId && byId.has(item.parentId)) {
         map[item.parentId] = { key: byId.get(item.parentId)!.key, title: byId.get(item.parentId)!.title };
       }
     });
     return map;
-  }, [workItems]);
+  }, [roots]);
 
   const toggleExpand = (id: string) => {
     setExpanded(prev => {
@@ -171,7 +163,7 @@ export function Backlog({ projectId }: { projectId: string }) {
                 </div>
               )}
               <Board
-                items={workItems}
+                items={roots}
                 states={states}
                 onStateChange={(itemId, state) => transitionWorkItem.mutate({ id: itemId, state })}
                 onSelectItem={setSelectedItem}
@@ -223,13 +215,12 @@ export function Backlog({ projectId }: { projectId: string }) {
                 </div>
               )}
 
-              {roots.map(item => (
+              {roots.map((item: WorkItem) => (
                 <WorkItemRow 
                   key={item.id} 
                   item={item} 
                   depth={0} 
-                  childrenMap={childrenMap} 
-                  expanded={expanded}
+                                    expanded={expanded}
                   setExpanded={setExpanded} 
                   toggleExpand={toggleExpand}
                   editingId={editingId}
@@ -303,7 +294,6 @@ export function Backlog({ projectId }: { projectId: string }) {
 function WorkItemRow({ 
   item, 
   depth, 
-  childrenMap, 
   expanded,
   setExpanded, 
   toggleExpand, 
@@ -323,8 +313,7 @@ function WorkItemRow({
 }: {
   item: WorkItem;
   depth: number;
-  childrenMap: Record<string, WorkItem[]>;
-  expanded: Set<string>;
+    expanded: Set<string>;
   setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>;
   toggleExpand: (id: string) => void;
   editingId: string | null;
@@ -341,20 +330,35 @@ function WorkItemRow({
   setCreateForm: React.Dispatch<React.SetStateAction<{ title: string; type: WorkItem['type'] }>>;
   handleSaveCreate: () => Promise<void>;
 }) {
-  const hasChildren = childrenMap[item.id] && childrenMap[item.id].length > 0;
   const isExpanded = expanded.has(item.id);
+  const { data: children = [] } = useWorkItemChildren(item.projectId, item.id, { enabled: isExpanded });
+  const hasChildren = item.hasChildren || children.length > 0;
+
   const isEditing = editingId === item.id;
 
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+
+  const { attributes, listeners, setNodeRef: setDragNodeRef, isDragging } = useDraggable({
     id: item.id,
     data: { item }
   });
+
+  const { setNodeRef: setDropNodeRef, isOver } = useDroppable({
+    id: `item-${item.id}`,
+    data: { item }
+  });
+
+  // Combine refs
+  const setNodeRef = (node: HTMLElement | null) => {
+    setDragNodeRef(node);
+    setDropNodeRef(node);
+  };
+
 
   return (
     <React.Fragment>
       <div 
         ref={setNodeRef}
-        className={`grid grid-cols-[auto_100px_1fr_100px_100px_100px_120px_120px_100px] gap-4 py-2 px-4 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] transition-colors items-center cursor-pointer group ${isDragging ? 'opacity-50' : ''}`}
+        className={`grid grid-cols-[auto_100px_1fr_100px_100px_100px_120px_120px_100px] gap-4 py-2 px-4 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] transition-colors items-center cursor-pointer group ${isDragging ? 'opacity-50' : ''} ${isOver ? 'bg-[var(--brand-primary)]/10' : ''}`}
         onClick={() => {
           if (!isEditing) setSelectedItem(item);
         }}
@@ -564,13 +568,12 @@ function WorkItemRow({
         </div>
       )}
 
-      {isExpanded && childrenMap[item.id]?.map((child: WorkItem) => (
+      {isExpanded && children?.map((child: WorkItem) => (
         <WorkItemRow 
           key={child.id} 
           item={child} 
           depth={depth + 1} 
-          childrenMap={childrenMap} 
-          expanded={expanded}
+                    expanded={expanded}
           setExpanded={setExpanded} 
           toggleExpand={toggleExpand}
           editingId={editingId}

@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { useWorkItems, WorkItem, useUpdateWorkItem } from '@/hooks/useWorkItems';
+import { useWorkItems, WorkItem, useUpdateWorkItem, useTransitionWorkItemState } from '@/hooks/useWorkItems';
 import { useWorkItemStates } from '@/hooks/useWorkItemStates';
 import { Board } from '@/components/Board';
 import { StatesManager } from '@/components/StatesManager';
@@ -17,6 +17,7 @@ export default function ProjectBoardPage() {
   const { data: workItems = [], isLoading: isLoadingWorkItems } = useWorkItems(projectId, { limit: '1000' } as any);
   const { data: states = [] } = useWorkItemStates(projectId);
   const updateWorkItem = useUpdateWorkItem(projectId);
+  const transitionWorkItem = useTransitionWorkItemState(projectId);
 
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
   const [backlogLevel, setBacklogLevel] = useState<'EPIC' | 'FEATURE' | 'STORY'>('STORY');
@@ -41,7 +42,7 @@ export default function ProjectBoardPage() {
   }, [workItems]);
 
   const handleDragState = (itemId: string, state: string) => {
-    updateWorkItem.mutate({ id: itemId, data: { state } });
+    transitionWorkItem.mutate({ id: itemId, state });
   };
 
   return (

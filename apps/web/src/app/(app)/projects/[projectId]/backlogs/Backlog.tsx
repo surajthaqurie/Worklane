@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useWorkItems, useCreateWorkItem, useUpdateWorkItem, WorkItem } from '@/hooks/useWorkItems';
+import { useWorkItems, useCreateWorkItem, useUpdateWorkItem, useTransitionWorkItemState, WorkItem } from '@/hooks/useWorkItems';
 import { useIterations, Iteration } from '@/hooks/useIterations';
 import { useWorkItemStates } from '@/hooks/useWorkItemStates';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
@@ -19,6 +19,7 @@ export function Backlog({ projectId }: { projectId: string }) {
   const { data: states = [] } = useWorkItemStates(projectId);
   const createWorkItem = useCreateWorkItem(projectId);
   const updateWorkItem = useUpdateWorkItem(projectId);
+  const transitionWorkItem = useTransitionWorkItemState(projectId);
 
   const [view, setView] = useState<'list' | 'board'>('list');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -172,7 +173,7 @@ export function Backlog({ projectId }: { projectId: string }) {
               <Board
                 items={workItems}
                 states={states}
-                onStateChange={(itemId, state) => updateWorkItem.mutate({ id: itemId, data: { state } })}
+                onStateChange={(itemId, state) => transitionWorkItem.mutate({ id: itemId, state })}
                 onSelectItem={setSelectedItem}
                 storyByParentId={storyByParentId}
               />
@@ -238,6 +239,7 @@ export function Backlog({ projectId }: { projectId: string }) {
                   setSelectedItem={setSelectedItem}
                   setCreatingParentId={setCreatingParentId}
                   updateWorkItem={updateWorkItem}
+                  transitionWorkItem={transitionWorkItem}
                   iterations={iterations}
                   creatingParentId={creatingParentId}
                   createForm={createForm}
@@ -311,7 +313,8 @@ function WorkItemRow({
   setEditForm, 
   setSelectedItem, 
   setCreatingParentId, 
-  updateWorkItem, 
+  updateWorkItem,
+  transitionWorkItem, 
   iterations,
   creatingParentId,
   createForm,
@@ -331,6 +334,7 @@ function WorkItemRow({
   setSelectedItem: React.Dispatch<React.SetStateAction<WorkItem | null>>;
   setCreatingParentId: React.Dispatch<React.SetStateAction<string | null>>;
   updateWorkItem: ReturnType<typeof useUpdateWorkItem>;
+  transitionWorkItem: ReturnType<typeof useTransitionWorkItemState>;
   iterations: Iteration[];
   creatingParentId: string | null;
   createForm: { title: string; type: WorkItem['type'] };
@@ -482,9 +486,18 @@ function WorkItemRow({
           {isEditing ? (
             <>
               <button 
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
-                  updateWorkItem.mutateAsync({ id: item.id, data: editForm }).then(() => setEditingId(null));
+                  const { state, ...rest } = editForm;
+                  const promises = [];
+                  if (Object.keys(rest).length > 0) {
+                    promises.push(updateWorkItem.mutateAsync({ id: item.id, data: rest }));
+                  }
+                  if (state && state !== item.state) {
+                    promises.push(transitionWorkItem.mutateAsync({ id: item.id, state }));
+                  }
+                  await Promise.all(promises);
+                  setEditingId(null);
                 }}
                 className="text-[11px] px-2 py-1 bg-[var(--brand-primary)] text-white rounded-[var(--radius-button)] font-medium"
               >
@@ -567,6 +580,7 @@ function WorkItemRow({
           setSelectedItem={setSelectedItem}
           setCreatingParentId={setCreatingParentId}
           updateWorkItem={updateWorkItem}
+          transitionWorkItem={transitionWorkItem}
           iterations={iterations}
           creatingParentId={creatingParentId}
           createForm={createForm}

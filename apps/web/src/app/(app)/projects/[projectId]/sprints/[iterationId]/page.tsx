@@ -5,7 +5,7 @@ import { useIteration, useUpdateIteration, useDeleteIteration, useRemoveWorkItem
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { useIterationWorkItems } from '@/hooks/useIterations';
-import { WorkItem, useUpdateWorkItem } from '@/hooks/useWorkItems';
+import { WorkItem, useUpdateWorkItem, useTransitionWorkItemState } from '@/hooks/useWorkItems';
 import { useWorkItemStates } from '@/hooks/useWorkItemStates';
 import { Board } from '@/components/Board';
 import { StatesManager } from '@/components/StatesManager';
@@ -29,6 +29,7 @@ export default function IterationDetailPage() {
   const deleteIteration = useDeleteIteration(projectId);
   const removeWorkItem = useRemoveWorkItemFromIteration(projectId);
   const updateWorkItem = useUpdateWorkItem(projectId);
+  const transitionWorkItem = useTransitionWorkItemState(projectId);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({ name: '', goal: '' });
@@ -97,9 +98,10 @@ export default function IterationDetailPage() {
     const isFromBacklog = active.data.current?.fromBacklog;
     
     if (isFromBacklog) {
-      updateWorkItem.mutate({ id: itemId, data: { iterationId, state: stateKey } });
+      updateWorkItem.mutate({ id: itemId, data: { iterationId } });
+      transitionWorkItem.mutate({ id: itemId, state: stateKey });
     } else {
-      updateWorkItem.mutate({ id: itemId, data: { state: stateKey } });
+      transitionWorkItem.mutate({ id: itemId, state: stateKey });
     }
   };
 

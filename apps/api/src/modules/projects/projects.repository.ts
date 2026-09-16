@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
 
+export const DEFAULT_WORK_ITEM_STATES = [
+  { name: 'To Do', key: 'TODO', color: '#94A3B8', sort_order: 0, is_done: false },
+  { name: 'In Progress', key: 'IN_PROGRESS', color: '#3B82F6', sort_order: 1, is_done: false },
+  { name: 'Done', key: 'DONE', color: '#22C55E', sort_order: 2, is_done: true },
+];
+
 @Injectable()
 export class ProjectsRepository {
   async createProject(data: {
@@ -9,16 +15,35 @@ export class ProjectsRepository {
     description?: string;
     created_by: string;
   }) {
-    return await db
-      .insertInto('projects')
-      .values({
-        name: data.name,
-        key: data.key,
-        description: data.description || null,
-        created_by: data.created_by,
-      })
-      .returningAll()
-      .executeTakeFirstOrThrow();
+    return await db.transaction().execute(async (trx) => {
+      const project = await trx
+        .insertInto('projects')
+        .values({
+          name: data.name,
+          key: data.key,
+          description: data.description || null,
+          created_by: data.created_by,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      await trx
+        .insertInto('work_item_states')
+        .values(
+          DEFAULT_WORK_ITEM_STATES.map((s) => ({
+            project_id: project.id,
+            name: s.name,
+            key: s.key,
+            color: s.color,
+            sort_order: s.sort_order,
+            is_done: s.is_done,
+            is_default: true,
+          })),
+        )
+        .execute();
+
+      return project;
+    });
   }
 
   async getProjects(userId: string) {
@@ -96,6 +121,21 @@ export class ProjectsRepository {
       .select(['id', 'state', 'type'])
       .execute();
 
+    const states = await db
+      .selectFrom('work_item_states')
+      .where('project_id', '=', projectId)
+      .select(['key', 'is_done'])
+      .orderBy('sort_order', 'asc')
+      .execute();
+
+    const stateCounts: Record<string, number> = {};
+    for (const item of workItems) {
+      stateCounts[item.state] = (stateCounts[item.state] || 0) + 1;
+    }
+
+    const firstStateKey = states[0]?.key;
+    const doneStates = new Set(states.filter((s) => s.is_done).map((s) => s.key));
+
     const activeSprint = await db
       .selectFrom('sprints')
       .where('project_id', '=', projectId)
@@ -130,10 +170,10 @@ export class ProjectsRepository {
         .where('sprint_id', '=', activeSprint.id)
         .select(['id', 'state'])
         .execute();
-      
-      const completed = sprintItems.filter(i => i.state === 'DONE').length;
+
+      const completed = sprintItems.filter((i) => doneStates.has(i.state)).length;
       const total = sprintItems.length;
-      
+
       activeSprintStats = {
         ...activeSprint,
         completedItems: completed,
@@ -143,12 +183,17 @@ export class ProjectsRepository {
       };
     }
 
+    const done = states
+      .filter((s) => s.is_done)
+      .reduce((sum, s) => sum + (stateCounts[s.key] || 0), 0);
+    const todo = firstStateKey ? stateCounts[firstStateKey] || 0 : 0;
+
     const stats = {
       total: workItems.length,
-      todo: workItems.filter(i => i.state === 'TODO').length,
-      inProgress: workItems.filter(i => i.state === 'IN_PROGRESS').length,
-      done: workItems.filter(i => i.state === 'DONE').length,
-      bugs: workItems.filter(i => i.type === 'BUG').length,
+      todo,
+      inProgress: Math.max(0, workItems.length - todo - done),
+      done,
+      bugs: workItems.filter((i) => i.type === 'BUG').length,
     };
 
     return {

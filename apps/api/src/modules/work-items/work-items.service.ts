@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { WorkItemsRepository } from './work-items.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { CreateWorkItemDto, UpdateWorkItemDto } from './dto/work-items.dto.js';
@@ -45,6 +45,14 @@ export class WorkItemsService {
       item.project_id,
       userId,
     );
+    if (data.state !== undefined) {
+      const allowedStates = await this.repo.getProjectStateKeys(
+        item.project_id,
+      );
+      if (!allowedStates.includes(data.state)) {
+        throw new BadRequestException(`State "${data.state}" is not valid for this project`);
+      }
+    }
     const updated = await this.repo.updateWorkItem(id, userId, data);
     return this.mapWorkItem(updated, project.key);
   }

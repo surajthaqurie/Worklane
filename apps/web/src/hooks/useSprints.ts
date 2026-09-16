@@ -1,10 +1,24 @@
 import { fetchWithAuth } from "./fetcher";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
+export type Sprint = {
+  id: string;
+  projectId: string;
+  name: string;
+  goal: string | null;
+  startDate: string;
+  endDate: string;
+  state: 'PLANNED' | 'ACTIVE' | 'COMPLETED';
+  createdAt: string;
+  updatedAt: string;
+  workItemsCount?: number;
+  doneWorkItemsCount?: number;
+};
 
 export function useSprints(projectId: string) {
-  return useQuery({
+  return useQuery<Sprint[]>({
     queryKey: ['projects', projectId, 'sprints'],
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/sprints`);
@@ -15,7 +29,7 @@ export function useSprints(projectId: string) {
 }
 
 export function useSprint(projectId: string, sprintId: string) {
-  return useQuery({
+  return useQuery<Sprint | undefined>({
     queryKey: ['projects', projectId, 'sprints', sprintId],
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/sprints/${sprintId}`);
@@ -79,6 +93,43 @@ export function useUpdateSprint(projectId: string) {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'sprints'] });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'sprints', variables.id] });
+    }
+  });
+}
+
+export function useDeleteSprint(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/sprints/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete sprint');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'sprints'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'overview'] });
+    }
+  });
+}
+
+export function useRemoveWorkItemFromSprint(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ sprintId, workItemId }: { sprintId: string; workItemId: string }) => {
+      const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/sprints/${sprintId}/work-items/${workItemId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to remove work item from sprint');
+      return res.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'sprints'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'sprints', variables.sprintId, 'work-items'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'overview'] });
     }
   });
 }

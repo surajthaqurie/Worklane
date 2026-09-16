@@ -1,8 +1,15 @@
+import { Suspense } from 'react';
+import { Backlog } from './Backlog';
+
 export default async function BacklogPage({ params }: { params: Promise<{ projectId: string }> }) {
-  const resolvedParams = await params;
+  const { projectId } = await params;
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Backlog</h1>
-    </div>
+    <Suspense
+      fallback={
+        <div className="p-6 text-[13px] text-[var(--text-muted)]">Loading backlog...</div>
+      }
+    >
+      <Backlog projectId={projectId} />
+    </Suspense>
   );
 }

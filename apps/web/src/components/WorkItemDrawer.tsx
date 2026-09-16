@@ -244,6 +244,9 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
                           {act.action === 'PRIORITY_CHANGED' && `changed priority to ${act.new_value}`}
                           {act.action === 'ASSIGNEE_CHANGED' && `assigned to ${act.new_value || 'unassigned'}`}
                           {act.action === 'DESCRIPTION_CHANGED' && `updated the description`}
+                          {act.action === 'SPRINT_CHANGED' && (act.new_value ? 'added to a sprint' : 'moved to the backlog')}
+                          {act.action === 'PARENT_CHANGED' && (act.new_value ? 'linked under a parent item' : 'removed the parent link')}
+                          {act.action === 'DELETED' && 'deleted this item'}
                         </span>
                       </div>
                       <span className="text-[12px] text-[var(--text-muted)] mt-0.5">{format(new Date(act.created_at), 'MMM d, yyyy HH:mm')}</span>

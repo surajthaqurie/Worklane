@@ -29,6 +29,17 @@ export class SprintsRepository {
       .orderBy('start_date', 'asc')
       .execute();
 
+    const doneKeys = new Set(
+      (
+        await db
+          .selectFrom('work_item_states')
+          .where('project_id', '=', projectId)
+          .where('is_done', '=', true)
+          .select('key')
+          .execute()
+      ).map((r) => r.key),
+    );
+
     // Fetch work items count for each sprint
     const sprintsWithCounts = await Promise.all(
       results.map(async (sprint) => {
@@ -38,7 +49,7 @@ export class SprintsRepository {
           .where('sprint_id', '=', sprint.id)
           .execute();
 
-        const doneCount = items.filter((i) => i.state === 'DONE').length;
+        const doneCount = items.filter((i) => doneKeys.has(i.state)).length;
         return {
           ...this.mapToCamelCase(sprint),
           workItemsCount: items.length,
@@ -79,6 +90,37 @@ export class SprintsRepository {
     return this.mapToCamelCase(result);
   }
 
+  async remove(id: string) {
+    await db.deleteFrom('sprints').where('id', '=', id).execute();
+  }
+
+  async addHistory(
+    sprintId: string,
+    userId: string,
+    action: string,
+    field?: string | null,
+    oldValue?: string | null,
+    newValue?: string | null,
+  ) {
+    const sprint = await db
+      .selectFrom('sprints')
+      .where('id', '=', sprintId)
+      .select('id')
+      .executeTakeFirst();
+
+    await db
+      .insertInto('sprint_history')
+      .values({
+        sprint_id: sprint ? sprintId : null,
+        user_id: userId,
+        action,
+        field: field ?? null,
+        old_value: oldValue ?? null,
+        new_value: newValue ?? null,
+      })
+      .execute();
+  }
+
   async findActiveSprintByProject(projectId: string) {
     const result = await db
       .selectFrom('sprints')
@@ -91,22 +133,66 @@ export class SprintsRepository {
     return this.mapToCamelCase(result);
   }
 
-  async addWorkItems(sprintId: string, workItemIds: string[]) {
+  async addWorkItems(sprintId: string, workItemIds: string[], userId: string) {
     if (workItemIds.length === 0) return;
 
-    await db
-      .updateTable('work_items')
-      .where('id', 'in', workItemIds)
-      .set({ sprint_id: sprintId, updated_at: new Date() })
-      .execute();
+    await db.transaction().execute(async (trx) => {
+      const items = await trx
+        .selectFrom('work_items')
+        .where('id', 'in', workItemIds)
+        .select(['id', 'sprint_id'])
+        .execute();
+
+      await trx
+        .updateTable('work_items')
+        .where('id', 'in', workItemIds)
+        .set({ sprint_id: sprintId, updated_at: new Date() })
+        .execute();
+
+      await trx
+        .insertInto('work_item_history')
+        .values(
+          items.map((item) => ({
+            work_item_id: item.id,
+            user_id: userId,
+            action: 'SPRINT_CHANGED',
+            field: 'sprint_id',
+            old_value: item.sprint_id ?? null,
+            new_value: sprintId,
+          })),
+        )
+        .execute();
+    });
   }
 
-  async removeWorkItem(workItemId: string) {
-    await db
-      .updateTable('work_items')
-      .where('id', '=', workItemId)
-      .set({ sprint_id: null, updated_at: new Date() })
-      .execute();
+  async removeWorkItem(workItemId: string, userId: string) {
+    await db.transaction().execute(async (trx) => {
+      const item = await trx
+        .selectFrom('work_items')
+        .where('id', '=', workItemId)
+        .select(['id', 'sprint_id'])
+        .executeTakeFirst();
+
+      await trx
+        .updateTable('work_items')
+        .where('id', '=', workItemId)
+        .set({ sprint_id: null, updated_at: new Date() })
+        .execute();
+
+      if (item) {
+        await trx
+          .insertInto('work_item_history')
+          .values({
+            work_item_id: item.id,
+            user_id: userId,
+            action: 'SPRINT_CHANGED',
+            field: 'sprint_id',
+            old_value: item.sprint_id ?? null,
+            new_value: null,
+          })
+          .execute();
+      }
+    });
   }
 
   async getSprintWorkItems(sprintId: string) {

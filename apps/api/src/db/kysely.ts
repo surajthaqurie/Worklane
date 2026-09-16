@@ -46,7 +46,7 @@ export interface Database {
     type: 'TASK' | 'BUG' | 'STORY';
     title: string;
     description: string | null;
-    state: Generated<'TODO' | 'IN_PROGRESS' | 'DONE'>;
+    state: string;
     priority: Generated<'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'>;
     assigned_to: string | null;
     created_by: string;
@@ -59,6 +59,28 @@ export interface Database {
     >;
     search_vector: ColumnType<any, never, never>;
   };
+  work_item_states: {
+    id: Generated<string>;
+    project_id: string;
+    name: string;
+    key: string;
+    color: string;
+    sort_order: number;
+    is_done: Generated<boolean>;
+    is_default: Generated<boolean>;
+    created_at: ColumnType<Date, string | undefined, never>;
+    updated_at: ColumnType<Date, string | undefined, string | Date>;
+  };
+  sprint_history: {
+    id: Generated<string>;
+    sprint_id: string | null;
+    user_id: string;
+    action: string;
+    field: string | null;
+    old_value: string | null;
+    new_value: string | null;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
   work_item_comments: {
     id: Generated<string>;
     work_item_id: string;
@@ -69,7 +91,7 @@ export interface Database {
   };
   work_item_history: {
     id: Generated<string>;
-    work_item_id: string;
+    work_item_id: string | null;
     user_id: string;
     action: string;
     field: string | null;

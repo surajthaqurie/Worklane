@@ -17,6 +17,17 @@ export class WorkItemsRepository {
 
       const seqNo = project.next_work_item_seq - 1;
 
+      const initialState = await trx
+        .selectFrom('work_item_states')
+        .where('project_id', '=', projectId)
+        .orderBy('sort_order', 'asc')
+        .select('key')
+        .executeTakeFirst();
+
+      if (!initialState) {
+        throw new Error(`No workflow states configured for project ${projectId}`);
+      }
+
       const item = await trx
         .insertInto('work_items')
         .values({
@@ -26,6 +37,7 @@ export class WorkItemsRepository {
           type: data.type,
           title: data.title,
           description: data.description || null,
+          state: initialState.key,
           priority: data.priority || 'MEDIUM',
           assigned_to: data.assignedTo || null,
           created_by: userId,
@@ -101,6 +113,15 @@ export class WorkItemsRepository {
       .execute();
   }
 
+  async getProjectStateKeys(projectId: string) {
+    const rows = await db
+      .selectFrom('work_item_states')
+      .where('project_id', '=', projectId)
+      .select('key')
+      .execute();
+    return rows.map((r) => r.key);
+  }
+
   async getWorkItemById(id: string) {
     return await db
       .selectFrom('work_items')
@@ -117,6 +138,14 @@ export class WorkItemsRepository {
         .selectAll()
         .executeTakeFirstOrThrow();
 
+      const states = await trx
+        .selectFrom('work_item_states')
+        .where('project_id', '=', oldItem.project_id)
+        .select(['key', 'is_done'])
+        .orderBy('sort_order', 'asc')
+        .execute();
+      const doneKeys = new Set(states.filter((s) => s.is_done).map((s) => s.key));
+
       const updateData: any = { updated_at: new Date() };
       if (data.type !== undefined) updateData.type = data.type;
       if (data.title !== undefined) updateData.title = data.title;
@@ -124,11 +153,9 @@ export class WorkItemsRepository {
         updateData.description = data.description;
       if (data.state !== undefined) {
         updateData.state = data.state;
-        if (data.state === 'DONE') {
-          updateData.completed_at = new Date();
-        } else {
-          updateData.completed_at = null;
-        }
+        updateData.completed_at = doneKeys.has(data.state)
+          ? new Date()
+          : null;
       }
       if (data.priority !== undefined) updateData.priority = data.priority;
       if (data.assignedTo !== undefined)
@@ -153,13 +180,15 @@ export class WorkItemsRepository {
           dbKey: 'description',
           action: 'DESCRIPTION_CHANGED',
         },
+        { key: 'parentId', dbKey: 'parent_id', action: 'PARENT_CHANGED' },
+        { key: 'sprintId', dbKey: 'sprint_id', action: 'SPRINT_CHANGED' },
       ];
 
       for (const field of trackFields) {
         if (
           data[field.key] !== undefined &&
-          oldItem[field.dbKey as keyof typeof oldItem] !==
-            updated[field.dbKey as keyof typeof updated]
+          (oldItem[field.dbKey as keyof typeof oldItem] ?? null) !==
+            (updated[field.dbKey as keyof typeof updated] ?? null)
         ) {
           await trx
             .insertInto('work_item_history')
@@ -168,14 +197,59 @@ export class WorkItemsRepository {
               user_id: userId,
               action: field.action,
               field: field.dbKey,
-              old_value: oldItem[field.dbKey as keyof typeof oldItem]
-                ? String(oldItem[field.dbKey as keyof typeof oldItem])
-                : null,
-              new_value: updated[field.dbKey as keyof typeof updated]
-                ? String(updated[field.dbKey as keyof typeof updated])
-                : null,
+              old_value: this.stringify(oldItem[field.dbKey as keyof typeof oldItem]),
+              new_value: this.stringify(updated[field.dbKey as keyof typeof updated]),
             })
             .execute();
+        }
+      }
+
+      // Rollup (Azure-style): when every child of a parent is in a done state,
+      // move the parent to its done state too.
+      const isNewStateDone =
+        data.state !== undefined &&
+        doneKeys.has(updated.state) &&
+        updated.state !== oldItem.state;
+      if (isNewStateDone && updated.parent_id && doneKeys.size > 0) {
+        const siblings = await trx
+          .selectFrom('work_items')
+          .where('parent_id', '=', updated.parent_id)
+          .where('id', '!=', updated.id)
+          .select('state')
+          .execute();
+
+        const allChildrenDone =
+          siblings.length > 0 && siblings.every((s) => doneKeys.has(s.state));
+        if (allChildrenDone) {
+          const parent = await trx
+            .selectFrom('work_items')
+            .where('id', '=', updated.parent_id)
+            .selectAll()
+            .executeTakeFirst();
+          const parentDoneKey = [...doneKeys][0];
+          if (parent && parentDoneKey && parent.state !== parentDoneKey) {
+            await trx
+              .updateTable('work_items')
+              .set({
+                state: parentDoneKey,
+                completed_at: new Date(),
+                updated_at: new Date(),
+              })
+              .where('id', '=', parent.id)
+              .execute();
+
+            await trx
+              .insertInto('work_item_history')
+              .values({
+                work_item_id: parent.id,
+                user_id: userId,
+                action: 'STATE_CHANGED',
+                field: 'state',
+                old_value: parent.state,
+                new_value: parentDoneKey,
+              })
+              .execute();
+          }
         }
       }
 
@@ -183,16 +257,30 @@ export class WorkItemsRepository {
     });
   }
 
+  private stringify(value: unknown): string | null {
+    if (value === null || value === undefined) return null;
+    return String(value);
+  }
+
   async deleteWorkItem(id: string, userId: string) {
     return await db.transaction().execute(async (trx) => {
-      // Actually, if we CASCADE delete work items, history will be deleted.
-      // If we want to keep history of deleted items, work_item_id should be nullable in history.
-      // The prompt says "Track important changes: ... Deleted".
-      // But the table has `ON DELETE CASCADE`. If we delete the work item, it deletes history.
-      // Let's just do a normal delete for now. The ON DELETE CASCADE is already on the DB constraint.
-      // Wait, if it cascades, the history of deletion will also be deleted. Let's just log it anyway before deletion or let it cascade.
-      // I'll log it just in case, but it'll be cascade deleted. Wait, we can't log it if it gets cascaded.
-      // Since it's a basic app and ON DELETE CASCADE was specified in the schema, it's fine.
+      const item = await trx
+        .selectFrom('work_items')
+        .where('id', '=', id)
+        .select(['id', 'title'])
+        .executeTakeFirst();
+
+      // Immutable audit record survives deletion (history FK is ON DELETE SET NULL)
+      await trx
+        .insertInto('work_item_history')
+        .values({
+          work_item_id: id,
+          user_id: userId,
+          action: 'DELETED',
+          old_value: item?.title ?? null,
+        })
+        .execute();
+
       await trx.deleteFrom('work_items').where('id', '=', id).execute();
     });
   }

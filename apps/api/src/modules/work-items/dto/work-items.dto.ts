@@ -21,7 +21,7 @@ export const UpdateWorkItemSchema = z.object({
   type: z.enum(['TASK', 'BUG', 'STORY']).optional(),
   title: z.string().min(1).max(255).optional(),
   description: z.string().optional().nullable(),
-  state: z.enum(['TODO', 'IN_PROGRESS', 'DONE']).optional(),
+  state: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   assignedTo: z.string().uuid().optional().nullable(),
   parentId: z.string().uuid().optional().nullable(),
@@ -31,7 +31,7 @@ export class UpdateWorkItemDto {
   type?: 'TASK' | 'BUG' | 'STORY';
   title?: string;
   description?: string | null;
-  state?: 'TODO' | 'IN_PROGRESS' | 'DONE';
+  state?: string;
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   assignedTo?: string | null;
   parentId?: string | null;

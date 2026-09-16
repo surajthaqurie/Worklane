@@ -1,7 +1,7 @@
 import { fetchWithAuth } from "./fetcher";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export function useWorkItems(projectId: string, filters: Record<string, string> = {}) {
   return useQuery({
@@ -47,7 +47,7 @@ export type WorkItem = {
   type: 'TASK' | 'BUG' | 'STORY';
   title: string;
   description: string | null;
-  state: 'TODO' | 'IN_PROGRESS' | 'DONE';
+  state: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   assignedTo: string | null;
   createdBy: string;
@@ -71,9 +71,9 @@ export function useUpdateWorkItem(projectId: string) {
       return res.json();
     },
     onMutate: async ({ id, data }) => {
-      await queryClient.cancelQueries({ queryKey: ['projects', projectId, 'work-items'] });
-      const previousQueries = queryClient.getQueriesData({ queryKey: ['projects', projectId, 'work-items'] });
-      queryClient.setQueriesData({ queryKey: ['projects', projectId, 'work-items'] }, (old: unknown) => {
+      await queryClient.cancelQueries({ queryKey: ['projects', projectId] });
+      const previousQueries = queryClient.getQueriesData({ queryKey: ['projects', projectId] });
+      queryClient.setQueriesData({ queryKey: ['projects', projectId] }, (old: unknown) => {
         if (!old || !Array.isArray(old)) return old;
         return old.map((item: WorkItem) => (item.id === id ? { ...item, ...data } : item));
       });
@@ -88,6 +88,7 @@ export function useUpdateWorkItem(projectId: string) {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'sprints'] });
     }
   });
 }

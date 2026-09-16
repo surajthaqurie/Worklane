@@ -68,6 +68,15 @@ export class SprintsController {
     );
   }
 
+  @Delete(':id')
+  remove(
+    @Req() req: any,
+    @Param('projectId') projectId: string,
+    @Param('id') id: string,
+  ) {
+    return this.sprintsService.remove(this.getUserId(req), projectId, id);
+  }
+
   @Post(':id/work-items')
   addWorkItems(
     @Req() req: any,

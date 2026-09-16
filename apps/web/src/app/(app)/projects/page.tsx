@@ -10,7 +10,7 @@ export default function ProjectsPage() {
   const createProject = useCreateProject();
   const [showModal, setShowModal] = useState(false);
   const [name, setName] = useState('');
-  const [key, setKey] = useState('');
+  const [key, setKey] = useState('APP');
   const [description, setDescription] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -18,7 +18,7 @@ export default function ProjectsPage() {
     await createProject.mutateAsync({ name, key, description });
     setShowModal(false);
     setName('');
-    setKey('');
+    setKey('APP');
     setDescription('');
   };
 
@@ -87,16 +87,24 @@ export default function ProjectsPage() {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-[13px] font-medium mb-1 text-[var(--text-secondary)]">Key (e.g. APP)</label>
-                <input 
-                  type="text" 
+                <label className="block text-[13px] font-medium mb-1 text-[var(--text-secondary)]">Key</label>
+                <select 
                   value={key}
-                  onChange={(e) => setKey(e.target.value.toUpperCase())}
-                  pattern="[A-Z0-9]+"
-                  title="Only uppercase letters and numbers"
+                  onChange={(e) => setKey(e.target.value)}
                   className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)]"
                   required 
-                />
+                >
+                  <option value="APP">APP - Application</option>
+                  <option value="WEB">WEB - Web</option>
+                  <option value="API">API - API Service</option>
+                  <option value="MOBILE">MOBILE - Mobile</option>
+                  <option value="DATA">DATA - Data & Analytics</option>
+                  <option value="ADMIN">ADMIN - Admin</option>
+                  <option value="BILL">BILL - Billing</option>
+                  <option value="INFRA">INFRA - Infrastructure</option>
+                  <option value="DESIGN">DESIGN - Design</option>
+                  <option value="TEST">TEST - Testing</option>
+                </select>
               </div>
               <div className="mb-6">
                 <label className="block text-[13px] font-medium mb-1 text-[var(--text-secondary)]">Description</label>

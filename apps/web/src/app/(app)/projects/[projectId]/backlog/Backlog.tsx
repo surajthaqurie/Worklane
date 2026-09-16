@@ -2,10 +2,13 @@
 
 import React, { useState, useMemo } from 'react';
 import { useWorkItems, useCreateWorkItem, useUpdateWorkItem, WorkItem } from '@/hooks/useWorkItems';
-import { useSprints } from '@/hooks/useSprints';
+import { useSprints, Sprint } from '@/hooks/useSprints';
+import { useWorkItemStates } from '@/hooks/useWorkItemStates';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
 import { WorkItemFilters, useWorkItemFilters } from '@/components/WorkItemFilters';
-import { ChevronRight, ChevronDown, Plus, GripVertical, Sidebar } from 'lucide-react';
+import { Board } from '@/components/Board';
+import { StatesManager } from '@/components/StatesManager';
+import { ChevronRight, ChevronDown, Plus, GripVertical, Sidebar, List, LayoutGrid } from 'lucide-react';
 import { DndContext, useDraggable, useDroppable, DragEndEvent } from '@dnd-kit/core';
 import { format } from 'date-fns';
 
@@ -13,9 +16,11 @@ export function Backlog({ projectId }: { projectId: string }) {
   const filters = useWorkItemFilters();
   const { data: workItems = [], isLoading, error } = useWorkItems(projectId, filters);
   const { data: sprints = [] } = useSprints(projectId);
+  const { data: states = [] } = useWorkItemStates(projectId);
   const createWorkItem = useCreateWorkItem(projectId);
   const updateWorkItem = useUpdateWorkItem(projectId);
-  
+
+  const [view, setView] = useState<'list' | 'board'>('list');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
   const [isPlanningOpen, setIsPlanningOpen] = useState(false);
@@ -45,7 +50,7 @@ export function Backlog({ projectId }: { projectId: string }) {
     workItems.forEach((item: WorkItem) => itemsMap.set(item.id, item));
 
     workItems.forEach((item: WorkItem) => {
-      const parentId = (item as any).parentId;
+      const parentId = item.parentId;
       if (!parentId || !itemsMap.has(parentId)) {
         rootItems.push(item);
       } else {
@@ -55,6 +60,17 @@ export function Backlog({ projectId }: { projectId: string }) {
     });
 
     return { roots: rootItems, childrenMap };
+  }, [workItems]);
+
+  const storyByParentId = useMemo(() => {
+    const map: Record<string, { key: string; title: string }> = {};
+    const byId = new Map<string, WorkItem>(workItems.map((item: WorkItem) => [item.id, item]));
+    workItems.forEach((item: WorkItem) => {
+      if (item.parentId && byId.has(item.parentId)) {
+        map[item.parentId] = { key: byId.get(item.parentId)!.key, title: byId.get(item.parentId)!.title };
+      }
+    });
+    return map;
   }, [workItems]);
 
   const toggleExpand = (id: string) => {
@@ -90,12 +106,27 @@ export function Backlog({ projectId }: { projectId: string }) {
             <p className="mt-1 text-[14px] text-[var(--text-secondary)]">Prioritize and plan your upcoming work.</p>
           </div>
           <div className="mt-4 flex md:ml-4 md:mt-0 gap-3">
+            <div className="flex items-center bg-[var(--bg-surface-hover)] rounded-[var(--radius-button)] p-0.5 border border-[var(--border-subtle)]">
+              <button
+                onClick={() => setView('list')}
+                className={`px-3 py-1.5 text-[13px] font-medium rounded-[var(--radius-button)] transition-colors flex items-center gap-1.5 ${view === 'list' ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+              >
+                <List className="w-4 h-4" /> List
+              </button>
+              <button
+                onClick={() => setView('board')}
+                className={`px-3 py-1.5 text-[13px] font-medium rounded-[var(--radius-button)] transition-colors flex items-center gap-1.5 ${view === 'board' ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+              >
+                <LayoutGrid className="w-4 h-4" /> Board
+              </button>
+            </div>
             <button 
               onClick={() => setIsPlanningOpen(!isPlanningOpen)}
               className={`px-3 py-2 text-[13px] font-medium rounded-[var(--radius-button)] transition-colors flex items-center gap-2 ${isPlanningOpen ? 'bg-[var(--bg-surface-selected)] text-[var(--brand-primary)]' : 'bg-[var(--bg-surface-hover)] text-[var(--text-secondary)]'}`}
             >
               <Sidebar className="w-4 h-4" /> Planning
             </button>
+            <StatesManager projectId={projectId} />
             <button 
               onClick={() => setCreatingParentId('root')}
               className="px-4 py-2 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white text-[13px] font-medium rounded-[var(--radius-button)] transition-colors"
@@ -108,7 +139,44 @@ export function Backlog({ projectId }: { projectId: string }) {
         <WorkItemFilters />
 
         <div className="flex flex-1 overflow-hidden gap-4 mb-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-card)] overflow-hidden flex-1 flex flex-col">
+          {view === 'board' ? (
+            <div className="flex-1 min-w-0 overflow-auto bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-card)] p-3">
+              {creatingParentId === 'root' && (
+                <div className="flex items-center gap-3 py-2.5 px-3 mb-3 border border-[var(--border-subtle)] rounded-[var(--radius-card)] bg-[var(--bg-surface-selected)]">
+                  <select
+                    className="border border-[var(--border-default)] px-2 py-1 rounded-[var(--radius-input)] text-[12px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]"
+                    value={createForm.type}
+                    onChange={e => setCreateForm({ ...createForm, type: e.target.value as WorkItem['type'] })}
+                  >
+                    <option value="STORY">Story</option>
+                    <option value="TASK">Task</option>
+                    <option value="BUG">Bug</option>
+                  </select>
+                  <input
+                    autoFocus
+                    placeholder="Title..."
+                    className="border border-[var(--border-default)] px-3 py-1.5 rounded-[var(--radius-input)] w-64 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]"
+                    value={createForm.title}
+                    onChange={e => setCreateForm({ ...createForm, title: e.target.value })}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleSaveCreate();
+                      if (e.key === 'Escape') setCreatingParentId(null);
+                    }}
+                  />
+                  <button onClick={handleSaveCreate} className="bg-[var(--brand-primary)] text-white px-3 py-1.5 rounded-[var(--radius-button)] text-[12px] font-medium hover:bg-[var(--brand-primary-hover)]">Save</button>
+                  <button onClick={() => setCreatingParentId(null)} className="px-3 py-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[12px] font-medium">Cancel</button>
+                </div>
+              )}
+              <Board
+                items={workItems}
+                states={states}
+                onStateChange={(itemId, state) => updateWorkItem.mutate({ id: itemId, data: { state } })}
+                onSelectItem={setSelectedItem}
+                storyByParentId={storyByParentId}
+              />
+            </div>
+          ) : (
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-card)] overflow-hidden flex-1 flex flex-col">
             <div className="grid grid-cols-[auto_100px_1fr_100px_100px_100px_120px_120px_100px] gap-4 py-2.5 px-4 bg-[var(--bg-surface-hover)] border-b border-[var(--border-subtle)] font-medium text-[11px] text-[var(--text-secondary)] uppercase tracking-wider sticky top-0 z-10">
               <div style={{ width: '40px' }} />
               <div>Key</div>
@@ -182,6 +250,7 @@ export function Backlog({ projectId }: { projectId: string }) {
               )}
             </div>
           </div>
+          )}
 
           {isPlanningOpen && (
             <div className="w-72 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-card)] flex flex-col overflow-hidden">
@@ -229,7 +298,26 @@ function WorkItemRow({
   createForm,
   setCreateForm,
   handleSaveCreate
-}: any) {
+}: {
+  item: WorkItem;
+  depth: number;
+  childrenMap: Record<string, WorkItem[]>;
+  expanded: Set<string>;
+  setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>;
+  toggleExpand: (id: string) => void;
+  editingId: string | null;
+  setEditingId: React.Dispatch<React.SetStateAction<string | null>>;
+  editForm: Partial<WorkItem>;
+  setEditForm: React.Dispatch<React.SetStateAction<Partial<WorkItem>>>;
+  setSelectedItem: React.Dispatch<React.SetStateAction<WorkItem | null>>;
+  setCreatingParentId: React.Dispatch<React.SetStateAction<string | null>>;
+  updateWorkItem: ReturnType<typeof useUpdateWorkItem>;
+  sprints: Sprint[];
+  creatingParentId: string | null;
+  createForm: { title: string; type: WorkItem['type'] };
+  setCreateForm: React.Dispatch<React.SetStateAction<{ title: string; type: WorkItem['type'] }>>;
+  handleSaveCreate: () => Promise<void>;
+}) {
   const hasChildren = childrenMap[item.id] && childrenMap[item.id].length > 0;
   const isExpanded = expanded.has(item.id);
   const isEditing = editingId === item.id;
@@ -330,7 +418,7 @@ function WorkItemRow({
           {isEditing ? (
             <select 
               className="border border-[var(--border-default)] px-2 py-1 rounded-[var(--radius-input)] w-full text-[12px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]"
-              value={editForm.assignedTo || item.assignedTo || ''}
+              value={editForm.assignedTo ?? ''}
               onChange={e => setEditForm({ ...editForm, assignedTo: e.target.value || null })}
               onClick={e => e.stopPropagation()}
             >
@@ -355,18 +443,18 @@ function WorkItemRow({
           {isEditing ? (
             <select 
               className="border border-[var(--border-default)] px-2 py-1 rounded-[var(--radius-input)] w-full text-[12px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]"
-              value={editForm.sprintId || item.sprintId || ''}
+              value={editForm.sprintId ?? ''}
               onChange={e => setEditForm({ ...editForm, sprintId: e.target.value || null })}
               onClick={e => e.stopPropagation()}
             >
               <option value="">(No Sprint)</option>
-              {sprints.map((s: any) => (
+              {sprints.map((s: Sprint) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
           ) : (
             <span className="text-[12px] text-[var(--text-secondary)] truncate block">
-              {item.sprintId ? sprints.find((s: any) => s.id === item.sprintId)?.name || 'Unknown Sprint' : '-'}
+              {item.sprintId ? sprints.find((s: Sprint) => s.id === item.sprintId)?.name || 'Unknown Sprint' : '-'}
             </span>
           )}
         </div>
@@ -442,7 +530,7 @@ function WorkItemRow({
         </div>
       )}
 
-      {isExpanded && childrenMap[item.id]?.map((child: any) => (
+      {isExpanded && childrenMap[item.id]?.map((child: WorkItem) => (
         <WorkItemRow 
           key={child.id} 
           item={child} 

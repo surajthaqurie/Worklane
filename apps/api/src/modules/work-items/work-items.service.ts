@@ -137,11 +137,18 @@ export class WorkItemsService {
     return { success: true };
   }
 
-  async getComments(userId: string, id: string) {
+  async getComments(
+    userId: string,
+    id: string,
+    opts: { limit?: number; cursor?: string },
+  ) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
     await this.projectsService.assertProjectMember(item.project_id, userId);
-    return await this.repo.getComments(id);
+    return await this.repo.getComments(id, {
+      limit: opts.limit ?? 20,
+      cursor: opts.cursor,
+    });
   }
 
   async addComment(userId: string, id: string, content: string) {
@@ -156,23 +163,31 @@ export class WorkItemsService {
     id: string,
     commentId: string,
     content: string,
+    expectedVersion: number,
   ) {
-    // Basic verification - checking project access
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
     await this.projectsService.assertProjectMember(item.project_id, userId);
 
-    // Repository method should check if user owns the comment
-    return await this.repo.updateComment(commentId, userId, content);
+    return await this.repo.updateComment(
+      commentId,
+      userId,
+      content,
+      expectedVersion,
+    );
   }
 
-  async deleteComment(userId: string, id: string, commentId: string) {
+  async deleteComment(
+    userId: string,
+    id: string,
+    commentId: string,
+    expectedVersion: number,
+  ) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
     await this.projectsService.assertProjectMember(item.project_id, userId);
 
-    await this.repo.deleteComment(commentId, userId);
-    return { success: true };
+    return await this.repo.deleteComment(commentId, userId, expectedVersion);
   }
 
   async getActivity(userId: string, id: string) {

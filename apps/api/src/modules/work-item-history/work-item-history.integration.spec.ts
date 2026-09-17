@@ -126,7 +126,7 @@ describe.skipIf(!INTEGRATION)('WorkItemHistory (DB integration)', () => {
     const item = await makeItem('HISTORY Plain', 'TASK');
 
     const comment = await repo.createComment(item.id, user.id, 'First thoughts');
-    await repo.updateComment(comment.id, user.id, 'Revised thoughts');
+    await repo.updateComment(comment.id, user.id, 'Revised thoughts', comment.version);
 
     const commentActivity = await activities(item.id);
     expect(commentActivity.map((a) => a.action)).toEqual([

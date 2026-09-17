@@ -16,6 +16,13 @@ import { CreateWorkItemDto, UpdateWorkItemDto } from './dto/work-items.dto.js';
 import { StateTransitionDto } from './dto/state-transition.dto.js';
 import { AuthGuard } from '../projects/auth.guard.js';
 import { WorkItemTransitionsService } from './work-item-transitions.service.js';
+import {
+  createCommentSchema,
+  updateCommentSchema,
+  deleteCommentSchema,
+  commentPageSchema,
+  parseCommentInput,
+} from './dto/comments.dto.js';
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -87,17 +94,23 @@ export class WorkItemsController {
   }
 
   @Get('work-items/:id/comments')
-  getComments(@Req() req: { user: { id: string } }, @Param('id') id: string) {
-    return this.workItemsService.getComments(req.user.id, id);
+  getComments(
+    @Req() req: { user: { id: string } },
+    @Param('id') id: string,
+    @Query() query: Record<string, unknown>,
+  ) {
+    const parsed = parseCommentInput(commentPageSchema, query);
+    return this.workItemsService.getComments(req.user.id, id, parsed);
   }
 
   @Post('work-items/:id/comments')
   addComment(
     @Req() req: { user: { id: string } },
     @Param('id') id: string,
-    @Body('content') content: string,
+    @Body() body: unknown,
   ) {
-    return this.workItemsService.addComment(req.user.id, id, content);
+    const parsed = parseCommentInput(createCommentSchema, body);
+    return this.workItemsService.addComment(req.user.id, id, parsed.content);
   }
 
   @Patch('work-items/:id/comments/:commentId')
@@ -105,13 +118,15 @@ export class WorkItemsController {
     @Req() req: { user: { id: string } },
     @Param('id') id: string,
     @Param('commentId') commentId: string,
-    @Body('content') content: string,
+    @Body() body: unknown,
   ) {
+    const parsed = parseCommentInput(updateCommentSchema, body);
     return this.workItemsService.updateComment(
       req.user.id,
       id,
       commentId,
-      content,
+      parsed.content,
+      parsed.version,
     );
   }
 
@@ -120,8 +135,15 @@ export class WorkItemsController {
     @Req() req: { user: { id: string } },
     @Param('id') id: string,
     @Param('commentId') commentId: string,
+    @Body() body: unknown,
   ) {
-    return this.workItemsService.deleteComment(req.user.id, id, commentId);
+    const parsed = parseCommentInput(deleteCommentSchema, body ?? {});
+    return this.workItemsService.deleteComment(
+      req.user.id,
+      id,
+      commentId,
+      parsed.version,
+    );
   }
 
   @Get('work-items/:id/activity')

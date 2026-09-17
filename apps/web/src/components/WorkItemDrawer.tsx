@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { WorkItem, WorkItemActivity, useWorkItemComments, useWorkItemActivity, useAddComment, useUpdateComment, useDeleteComment, useUpdateWorkItem, useDeleteWorkItem, useWorkItems, useTransitionWorkItemState } from '@/hooks/useWorkItems';
-import { useProjectMembers, useAreas, useTags } from '@/hooks/useProjects';
+import { WorkItem, WorkItemActivity, WorkItemComment, useWorkItemComments, useWorkItemActivity, useAddComment, useUpdateComment, useDeleteComment, useUpdateWorkItem, useDeleteWorkItem, useWorkItems, useTransitionWorkItemState } from '@/hooks/useWorkItems';
+import { useProjectMembers, useAreas } from '@/hooks/useProjects';
 import { useIterations } from '@/hooks/useIterations';
 import { X } from 'lucide-react';
 
@@ -16,7 +16,14 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(item.description || '');
 
-  const { data: comments = [], isLoading: isLoadingComments } = useWorkItemComments(item.id);
+  const {
+    data: commentPages,
+    isLoading: isLoadingComments,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useWorkItemComments(item.id);
+  const comments = commentPages?.pages.flatMap((p) => p.items) ?? [];
   const { data: activity = [], isLoading: isLoadingActivity } = useWorkItemActivity(item.id);
 
   const addComment = useAddComment(item.id);
@@ -64,14 +71,21 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
 
   const handleSaveEdit = (commentId: string) => {
     if (!editingCommentContent.trim()) return;
-    updateComment.mutate({ commentId, content: editingCommentContent }, {
-      onSuccess: () => setEditingCommentId(null)
-    });
+    const comment = comments.find((c) => c.id === commentId);
+    if (!comment) return;
+    updateComment.mutate(
+      { commentId, content: editingCommentContent, version: comment.version },
+      {
+        onSuccess: () => setEditingCommentId(null),
+      },
+    );
   };
 
   const handleDelete = (commentId: string) => {
+    const comment = comments.find((c) => c.id === commentId);
+    if (!comment) return;
     if (confirm('Are you sure you want to delete this comment?')) {
-      deleteComment.mutate(commentId);
+      deleteComment.mutate({ commentId, version: comment.version });
     }
   };
 
@@ -298,47 +312,63 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
                 ) : comments.length === 0 ? (
                   <div className="text-center text-[13px] text-[var(--text-muted)] py-12">No comments yet. Be the first to start the conversation.</div>
                 ) : (
-                  comments.map((comment: any) => (
-                    <div key={comment.id} className="flex gap-4">
-                      <div className="w-8 h-8 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-[11px] font-medium text-[var(--text-primary)] flex-shrink-0">
-                        {comment.user_name?.substring(0,2).toUpperCase() || 'US'}
-                      </div>
-                      <div className="flex flex-col flex-1">
-                        <div className="flex items-baseline gap-2 mb-1">
-                          <span className="font-semibold text-[13px] text-[var(--text-primary)]">{comment.user_name || 'User'}</span>
-                          <span className="text-[12px] text-[var(--text-muted)]">{format(new Date(comment.created_at), 'MMM d, yyyy HH:mm')}</span>
+                  <>
+                    {comments.map((comment: WorkItemComment) => (
+                      <div key={comment.id} className="flex gap-4">
+                        <div className="w-8 h-8 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-[11px] font-medium text-[var(--text-primary)] flex-shrink-0">
+                          {comment.authorName?.substring(0,2).toUpperCase() || 'US'}
                         </div>
-                        
-                        {editingCommentId === comment.id ? (
-                          <div className="flex flex-col gap-2 mt-1">
-                            <textarea 
-                              className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] p-2.5 text-[13px] bg-[var(--bg-surface)] min-h-[80px] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-                              value={editingCommentContent}
-                              onChange={(e) => setEditingCommentContent(e.target.value)}
-                            />
-                            <div className="flex justify-end gap-2">
-                              <button onClick={() => setEditingCommentId(null)} className="text-[12px] px-3 py-1.5 text-[var(--text-secondary)] font-medium hover:bg-[var(--bg-surface-hover)] rounded-[var(--radius-button)] transition-colors">Cancel</button>
-                              <button onClick={() => handleSaveEdit(comment.id)} className="text-[12px] px-3 py-1.5 bg-[var(--brand-primary)] text-white font-medium rounded-[var(--radius-button)] hover:bg-[var(--brand-primary-hover)] transition-colors">Save</button>
-                            </div>
+                        <div className="flex flex-col flex-1">
+                          <div className="flex items-baseline gap-2 mb-1">
+                            <span className="font-semibold text-[13px] text-[var(--text-primary)]">{comment.authorName || 'User'}</span>
+                            <span className="text-[12px] text-[var(--text-muted)]">{format(new Date(comment.createdAt), 'MMM d, yyyy HH:mm')}</span>
+                            {comment.updatedAt && comment.updatedAt !== comment.createdAt && (
+                              <span className="text-[12px] text-[var(--text-muted)]">
+                                (edited)
+                              </span>
+                            )}
                           </div>
-                        ) : (
-                          <div className="group relative">
-                            <p className="text-[13px] text-[var(--text-primary)] whitespace-pre-wrap bg-[var(--bg-surface-hover)] p-3 rounded-tr-[var(--radius-card)] rounded-br-[var(--radius-card)] rounded-bl-[var(--radius-card)]">{comment.content}</p>
-                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 absolute -right-2 top-2 translate-x-full">
-                              <button 
-                                onClick={() => { setEditingCommentId(comment.id); setEditingCommentContent(comment.content); }}
-                                className="text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium"
-                              >Edit</button>
-                              <button 
-                                onClick={() => handleDelete(comment.id)}
-                                className="text-[11px] text-[var(--priority-high)] hover:text-[var(--priority-urgent)] font-medium"
-                              >Delete</button>
+                          
+                          {editingCommentId === comment.id ? (
+                            <div className="flex flex-col gap-2 mt-1">
+                              <textarea 
+                                className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] p-2.5 text-[13px] bg-[var(--bg-surface)] min-h-[80px] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
+                                value={editingCommentContent}
+                                onChange={(e) => setEditingCommentContent(e.target.value)}
+                              />
+                              <div className="flex justify-end gap-2">
+                                <button onClick={() => setEditingCommentId(null)} className="text-[12px] px-3 py-1.5 text-[var(--text-secondary)] font-medium hover:bg-[var(--bg-surface-hover)] rounded-[var(--radius-button)] transition-colors">Cancel</button>
+                                <button onClick={() => handleSaveEdit(comment.id)} className="text-[12px] px-3 py-1.5 bg-[var(--brand-primary)] text-white font-medium rounded-[var(--radius-button)] hover:bg-[var(--brand-primary-hover)] transition-colors">Save</button>
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          ) : (
+                            <div className="group relative">
+                              <p className="text-[13px] text-[var(--text-primary)] whitespace-pre-wrap bg-[var(--bg-surface-hover)] p-3 rounded-tr-[var(--radius-card)] rounded-br-[var(--radius-card)] rounded-bl-[var(--radius-card)]">{comment.content}</p>
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 absolute -right-2 top-2 translate-x-full">
+                                <button 
+                                  onClick={() => { setEditingCommentId(comment.id); setEditingCommentContent(comment.content); }}
+                                  className="text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium"
+                                >Edit</button>
+                                <button 
+                                  onClick={() => handleDelete(comment.id)}
+                                  className="text-[11px] text-[var(--priority-high)] hover:text-[var(--priority-urgent)] font-medium"
+                                >Delete</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    ))}
+                    {hasNextPage && (
+                      <button
+                        onClick={() => fetchNextPage()}
+                        disabled={isFetchingNextPage}
+                        className="self-center text-[12px] px-4 py-1.5 text-[var(--text-secondary)] font-medium hover:bg-[var(--bg-surface-hover)] rounded-[var(--radius-button)] transition-colors disabled:opacity-50"
+                      >
+                        {isFetchingNextPage ? 'Loading...' : 'Load more comments'}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
               <div className="mt-auto border-t border-[var(--border-subtle)] pt-6 flex flex-col gap-3 bg-[var(--bg-surface)] sticky bottom-0">

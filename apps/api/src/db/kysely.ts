@@ -164,6 +164,8 @@ export interface Database {
     content: string;
     created_at: ColumnType<Date, string | undefined, never>;
     updated_at: ColumnType<Date, string | undefined, string | Date>;
+    deleted_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
+    version: Generated<number>;
   };
   work_item_history: {
     id: Generated<string>;

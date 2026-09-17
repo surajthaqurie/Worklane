@@ -1,5 +1,5 @@
 import { fetchWithAuth } from "./fetcher";
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -195,16 +195,41 @@ export type WorkItemActivity = {
   createdAt: string;
 };
 
+export type WorkItemComment = {
+  id: string;
+  workItemId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatarUrl: string | null;
+  content: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkItemCommentPage = {
+  items: WorkItemComment[];
+  nextCursor: string | null;
+};
+
 export function useWorkItemComments(workItemId: string | null) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['work-items', workItemId, 'comments'],
-    queryFn: async () => {
-      if (!workItemId) return [];
-      const res = await fetchWithAuth(`${API_URL}/work-items/${workItemId}/comments`);
+    queryFn: async ({ pageParam }) => {
+      if (!workItemId) return { items: [], nextCursor: null };
+      const searchParams = new URLSearchParams();
+      searchParams.set('limit', '20');
+      if (pageParam) searchParams.set('cursor', pageParam);
+      const res = await fetchWithAuth(
+        `${API_URL}/work-items/${workItemId}/comments?${searchParams.toString()}`,
+      );
       if (!res.ok) throw new Error('Failed to fetch comments');
-      return res.json();
+      return res.json() as Promise<WorkItemCommentPage>;
     },
-    enabled: !!workItemId
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage: WorkItemCommentPage) =>
+      lastPage.nextCursor ?? undefined,
+    enabled: !!workItemId,
   });
 }
 
@@ -231,12 +256,12 @@ export function useAddComment(workItemId: string | null) {
 export function useUpdateComment(workItemId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ commentId, content }: { commentId: string, content: string }) => {
+    mutationFn: async ({ commentId, content, version }: { commentId: string, content: string, version: number }) => {
       if (!workItemId) throw new Error('No work item id');
       const res = await fetchWithAuth(`${API_URL}/work-items/${workItemId}/comments/${commentId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content })
+        body: JSON.stringify({ content, version })
       });
       if (!res.ok) throw new Error('Failed to update comment');
       return res.json();
@@ -251,10 +276,12 @@ export function useUpdateComment(workItemId: string | null) {
 export function useDeleteComment(workItemId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (commentId: string) => {
+    mutationFn: async ({ commentId, version }: { commentId: string, version: number }) => {
       if (!workItemId) throw new Error('No work item id');
       const res = await fetchWithAuth(`${API_URL}/work-items/${workItemId}/comments/${commentId}`, {
         method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version })
       });
       if (!res.ok) throw new Error('Failed to delete comment');
       return res.json();

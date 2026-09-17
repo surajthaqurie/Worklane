@@ -1,5 +1,5 @@
 import { CreateWorkItemDto, UpdateWorkItemDto } from "./dto/work-items.dto.js";
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
 import { sql } from 'kysely';
 import {
@@ -370,22 +370,67 @@ export class WorkItemsRepository {
     });
   }
 
-  async getComments(workItemId: string) {
-    return await db
+  async getComments(workItemId: string, opts: { limit: number; cursor?: string }) {
+    let query = db
       .selectFrom('work_item_comments')
       .innerJoin('users', 'users.id', 'work_item_comments.user_id')
-      .where('work_item_id', '=', workItemId)
+      .where('work_item_comments.work_item_id', '=', workItemId)
+      .where('work_item_comments.deleted_at', 'is', null)
       .select([
         'work_item_comments.id',
         'work_item_comments.content',
+        'work_item_comments.version',
         'work_item_comments.created_at',
         'work_item_comments.updated_at',
         'work_item_comments.user_id',
         'users.name as user_name',
         'users.avatar_url as user_avatar_url',
-      ])
+      ]);
+
+    if (opts.cursor) {
+      const cursorRow = await db
+        .selectFrom('work_item_comments')
+        .where('id', '=', opts.cursor)
+        .select(['created_at', 'id'])
+        .executeTakeFirst();
+
+      if (cursorRow) {
+        query = query.where((eb) =>
+          eb.or([
+            eb('work_item_comments.created_at', '>', cursorRow.created_at),
+            eb.and([
+              eb('work_item_comments.created_at', '=', cursorRow.created_at),
+              eb('work_item_comments.id', '>', cursorRow.id),
+            ]),
+          ]),
+        );
+      }
+    }
+
+    const items = await query
       .orderBy('work_item_comments.created_at', 'asc')
+      .orderBy('work_item_comments.id', 'asc')
+      .limit(opts.limit + 1)
       .execute();
+
+    const hasMore = items.length > opts.limit;
+    const pageItems = hasMore ? items.slice(0, opts.limit) : items;
+    const nextCursor = hasMore ? pageItems[pageItems.length - 1].id : null;
+
+    return {
+      items: pageItems.map((c) => ({
+        id: c.id,
+        workItemId,
+        authorId: c.user_id,
+        authorName: c.user_name,
+        authorAvatarUrl: c.user_avatar_url,
+        content: c.content,
+        version: c.version,
+        createdAt: c.created_at,
+        updatedAt: c.updated_at,
+      })),
+      nextCursor,
+    };
   }
 
   async createComment(workItemId: string, userId: string, content: string) {
@@ -403,25 +448,75 @@ export class WorkItemsRepository {
       newValue: content,
     });
 
-    return comment;
+    return {
+      id: comment.id,
+      workItemId,
+      authorId: comment.user_id,
+      content: comment.content,
+      version: comment.version,
+      createdAt: comment.created_at,
+      updatedAt: comment.updated_at,
+    };
   }
 
-  async updateComment(commentId: string, userId: string, content: string) {
+  async updateComment(
+    commentId: string,
+    userId: string,
+    content: string,
+    expectedVersion: number,
+  ) {
     const existing = await db
       .selectFrom('work_item_comments')
       .where('id', '=', commentId)
-      .select(['id', 'work_item_id', 'content'])
+      .where('deleted_at', 'is', null)
+      .select([
+        'id',
+        'work_item_id',
+        'content',
+        'version',
+        'user_id',
+        'created_at',
+        'updated_at',
+      ])
       .executeTakeFirst();
 
-    const comment = await db
-      .updateTable('work_item_comments')
-      .set({ content, updated_at: new Date() })
-      .where('id', '=', commentId)
-      .where('user_id', '=', userId)
-      .returningAll()
-      .executeTakeFirstOrThrow();
+    if (!existing) {
+      throw new NotFoundException('Comment not found');
+    }
 
-    if (existing && existing.content !== content && existing.work_item_id) {
+    if (existing.user_id !== userId) {
+      throw new ForbiddenException('You can only edit your own comments');
+    }
+
+    if (existing.version !== expectedVersion) {
+      throw new ConflictException(
+        'Concurrent update detected: comment has been modified since it was loaded',
+      );
+    }
+
+    if (existing.content === content) {
+      return existing;
+    }
+
+    const updated = await db
+      .updateTable('work_item_comments')
+      .set({
+        content,
+        updated_at: new Date(),
+        version: existing.version + 1,
+      })
+      .where('id', '=', commentId)
+      .where('version', '=', expectedVersion)
+      .returningAll()
+      .executeTakeFirst();
+
+    if (!updated) {
+      throw new ConflictException(
+        'Concurrent update detected: comment has been modified since it was loaded',
+      );
+    }
+
+    if (existing.content !== content) {
       await this.history.record(db, {
         workItemId: existing.work_item_id,
         actorId: userId,
@@ -432,33 +527,54 @@ export class WorkItemsRepository {
       });
     }
 
-    return comment;
+    return updated;
   }
 
-  async deleteComment(commentId: string, userId: string) {
+  async deleteComment(
+    commentId: string,
+    userId: string,
+    expectedVersion: number,
+  ) {
     const existing = await db
       .selectFrom('work_item_comments')
       .where('id', '=', commentId)
-      .select(['id', 'work_item_id', 'content'])
+      .where('deleted_at', 'is', null)
+      .select(['id', 'work_item_id', 'content', 'version'])
       .executeTakeFirst();
 
-    const result = await db
-      .deleteFrom('work_item_comments')
-      .where('id', '=', commentId)
-      .where('user_id', '=', userId)
-      .execute();
-
-    if (existing && existing.work_item_id) {
-      await this.history.record(db, {
-        workItemId: existing.work_item_id,
-        actorId: userId,
-        action: WorkItemHistoryAction.COMMENT_DELETED,
-        field: WorkItemHistoryField.COMMENT,
-        previousValue: existing.content,
-      });
+    if (!existing) {
+      throw new NotFoundException('Comment not found');
     }
 
-    return result;
+    if (existing.version !== expectedVersion) {
+      throw new ConflictException(
+        'Concurrent update detected: comment has been modified since it was loaded',
+      );
+    }
+
+    const updated = await db
+      .updateTable('work_item_comments')
+      .set({ deleted_at: new Date() })
+      .where('id', '=', commentId)
+      .where('version', '=', expectedVersion)
+      .returningAll()
+      .executeTakeFirst();
+
+    if (!updated) {
+      throw new ConflictException(
+        'Concurrent update detected: comment has been modified since it was loaded',
+      );
+    }
+
+    await this.history.record(db, {
+      workItemId: existing.work_item_id,
+      actorId: userId,
+      action: WorkItemHistoryAction.COMMENT_DELETED,
+      field: WorkItemHistoryField.COMMENT,
+      previousValue: existing.content,
+    });
+
+    return { success: true };
   }
 
   async updateState(id: string, userId: string, oldState: string, newState: string) {

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useCreateWorkItem } from '@/hooks/useWorkItems';
+import { useWorkItemStates } from '@/hooks/useWorkItemStates';
 import { X } from 'lucide-react';
 
 export function CreateWorkItemModal({ projectId, teamId, onClose }: { projectId: string, teamId?: string | null, onClose: () => void }) {
@@ -11,17 +12,20 @@ export function CreateWorkItemModal({ projectId, teamId, onClose }: { projectId:
   const [priority, setPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'>('MEDIUM');
   
   const createWorkItem = useCreateWorkItem(projectId);
+  const { data: states = [] } = useWorkItemStates(projectId);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    
+    const initialState = states[0]?.key || 'TODO';
     
     createWorkItem.mutate({
       title,
       description,
       type,
       priority,
-      state: 'New',
+      state: initialState,
       ...(teamId ? { teamId } : {})
     }, {
       onSuccess: () => onClose()

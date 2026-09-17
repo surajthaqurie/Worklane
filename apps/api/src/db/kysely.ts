@@ -199,6 +199,18 @@ export interface Database {
     read_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
     created_at: ColumnType<Date, string | undefined, never>;
   };
+  boards: {
+    id: Generated<string>;
+    project_id: string;
+    team_id: string | null;
+    name: string;
+    description: string | null;
+    is_default: Generated<boolean>;
+    columns: ColumnType<any, any, any>;
+    card_fields: ColumnType<any, any, any>;
+    filter_config: ColumnType<any, any, any>;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
 }
 
 const dialect = new PostgresDialect({

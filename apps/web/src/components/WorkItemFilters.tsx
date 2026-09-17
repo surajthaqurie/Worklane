@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams, useParams } from 'next/navigation';
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useIterations } from '@/hooks/useIterations';
+import { useWorkItemStates } from '@/hooks/useWorkItemStates';
 import { Search } from 'lucide-react';
 
 export function useDebounce<T>(value: T, delay: number): T {
@@ -24,6 +25,7 @@ function WorkItemFiltersInner() {
   const projectId = params.projectId as string;
   
   const { data: iterations = [] } = useIterations(projectId);
+  const { data: states = [] } = useWorkItemStates(projectId);
 
   const currentSearch = searchParams.get('search') || '';
   const [searchTerm, setSearchTerm] = useState(currentSearch);
@@ -84,9 +86,11 @@ function WorkItemFiltersInner() {
           className="px-3 py-1.5 text-[13px] font-medium bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] text-[var(--text-primary)]"
         >
           <option value="">State</option>
-          <option value="New">New</option>
-          <option value="Active">Active</option>
-          <option value="Closed">Closed</option>
+          {states.map((s) => (
+            <option key={s.id} value={s.key}>
+              {s.name}
+            </option>
+          ))}
         </select>
 
         <select

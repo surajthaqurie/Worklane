@@ -9,6 +9,7 @@ import { QueriesModule } from './modules/queries/queries.module.js';
 import { TeamsModule } from './modules/teams/teams.module.js';
 import { SearchModule } from './modules/search/search.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
+import { BoardsModule } from './modules/boards/boards.module.js';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     TeamsModule,
     SearchModule,
     NotificationsModule,
+    BoardsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

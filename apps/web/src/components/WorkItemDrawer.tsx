@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { WorkItem, WorkItemActivity, WorkItemComment, useWorkItemComments, useWorkItemActivity, useAddComment, useUpdateComment, useDeleteComment, useUpdateWorkItem, useDeleteWorkItem, useWorkItems, useTransitionWorkItemState } from '@/hooks/useWorkItems';
 import { useProjectMembers, useAreas } from '@/hooks/useProjects';
 import { useIterations } from '@/hooks/useIterations';
+import { useWorkItemStates } from '@/hooks/useWorkItemStates';
 import { X, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/Toast';
 
@@ -36,6 +37,7 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
   const { data: iterations = [] } = useIterations(item.projectId);
   const { data: areas = [] } = useAreas(item.projectId);
   const { data: allWorkItems = [] } = useWorkItems(item.projectId); // for parent selection
+  const { data: states = [] } = useWorkItemStates(item.projectId);
   
   const [tagInput, setTagInput] = useState('');
   
@@ -176,11 +178,15 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
                     onChange={(e) => handleUpdate('state', e.target.value)}
                     className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
                   >
-                    <option value="New">New</option>
-                    <option value="Active">Active</option>
-                    <option value="Resolved">Resolved</option>
-                    <option value="Closed">Closed</option>
-                    <option value="Removed">Removed</option>
+                    {states.length > 0 ? (
+                      states.map((s) => (
+                        <option key={s.id} value={s.key}>
+                          {s.name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value={item.state}>{item.state}</option>
+                    )}
                   </select>
                 </div>
                 

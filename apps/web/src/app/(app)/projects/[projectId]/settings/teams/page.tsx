@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
-  Team,
   useTeams,
   useCreateTeam,
   useUpdateTeam,
@@ -14,12 +13,10 @@ import {
   useRemoveTeamMember,
   useTeamSettings,
   useUpdateTeamSettings,
-  TeamRole,
-  TeamMember,
-  TeamSettings,
-} from '@/hooks/useTeams';
-import { useAreas, useProjectMembers } from '@/hooks/useProjects';
-import { useIterations, Iteration } from '@/hooks/useIterations';
+} from '@/features/teams';
+import { useAreas, useProjectMembers } from '@/features/projects';
+import { useIterations } from '@/features/iterations';
+import { Team, TeamRole, TeamMember, TeamSettings, Iteration } from '@/shared/types';
 import { Users, Plus, ShieldCheck, UserCircle2, Trash2, Save, X, Check } from 'lucide-react';
 
 export default function TeamSettingsPage() {
@@ -32,7 +29,7 @@ export default function TeamSettingsPage() {
   const [newTeamName, setNewTeamName] = useState('');
 
   const selectedTeamId = pickedTeamId ?? teams[0]?.id ?? null;
-  const selectedTeam = teams.find((t) => t.id === selectedTeamId) ?? null;
+  const selectedTeam = teams.find((t: Team) => t.id === selectedTeamId) ?? null;
 
   const createTeam = useCreateTeam(projectId);
 
@@ -41,7 +38,7 @@ export default function TeamSettingsPage() {
     createTeam.mutate(
       { name: newTeamName.trim() },
       {
-        onSuccess: (team) => {
+        onSuccess: (team: Team) => {
           setNewTeamName('');
           setShowCreate(false);
           setPickedTeamId(team.id);
@@ -114,7 +111,7 @@ export default function TeamSettingsPage() {
           <div className="flex items-center justify-between mb-4">
             <div className="text-[13px] text-[var(--text-secondary)]">
               {teams.length} {teams.length === 1 ? 'team' : 'teams'}{' '}
-              {teams.some((t) => t.userRole === 'ADMIN') ? '· you administer at least one' : ''}
+              {teams.some((t: Team) => t.userRole === 'ADMIN') ? '· you administer at least one' : ''}
             </div>
             {showCreate ? (
               <div className="flex items-center gap-2">
@@ -331,9 +328,9 @@ function MembersCard({
   const [newUserId, setNewUserId] = useState('');
   const [newRole, setNewRole] = useState<TeamRole>('MEMBER');
 
-  const existingIds = useMemo(() => new Set(members.map((m) => m.userId)), [members]);
+  const existingIds = useMemo(() => new Set(members.map((m: TeamMember) => m.userId)), [members]);
   const candidates = (projectMembers as ProjectMemberLite[]).filter(
-    (m) => !existingIds.has(m.userId),
+    (m: ProjectMemberLite) => !existingIds.has(m.userId),
   );
 
   const handleAdd = () => {
@@ -354,7 +351,7 @@ function MembersCard({
         <div className="text-[13px] text-[var(--text-muted)]">Loading members...</div>
       ) : (
         <div className="flex flex-col">
-          {members.map((m) => (
+          {members.map((m: TeamMember) => (
             <div
               key={m.userId}
               className="flex items-center gap-3 py-2.5 border-b border-[var(--border-subtle)] last:border-b-0"
@@ -408,7 +405,7 @@ function MembersCard({
                 className="flex-1 max-w-xs px-3 py-1.5 text-[13px] border border-[var(--border-default)] rounded-[var(--radius-input)] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]"
               >
                 <option value="">Add a project member...</option>
-                {candidates.map((m) => (
+                {candidates.map((m: ProjectMemberLite) => (
                   <option key={m.userId} value={m.userId}>
                     {m.name || m.email || m.userId}
                   </option>
@@ -443,7 +440,7 @@ function MembersCard({
   );
 }
 
-type ProjectMemberLite = Pick<TeamMember, 'userId' | 'name' | 'email' | 'avatarUrl'>;
+type ProjectMemberLite = { userId: string; name?: string; email?: string; avatarUrl?: string | null };
 type AreaLite = { id: string; name: string };
 
 function ScopeCard({
@@ -492,7 +489,7 @@ function ScopeForm({
 }: {
   projectId: string;
   teamId: string;
-  settings: Pick<TeamSettings, 'defaultIterationId' | 'defaultAreaId' | 'areas' | 'iterations'>;
+  settings: TeamSettings;
   areas: AreaLite[];
   iterations: Iteration[];
   canEdit: boolean;
@@ -500,11 +497,11 @@ function ScopeForm({
   const updateSettings = useUpdateTeamSettings(projectId, teamId);
 
   const [defaultIterationId, setDefaultIterationId] = useState<string | null>(
-    settings.defaultIterationId,
+    settings.defaultIterationId ?? null,
   );
-  const [defaultAreaId, setDefaultAreaId] = useState<string | null>(settings.defaultAreaId);
-  const [areaIds, setAreaIds] = useState<string[]>(settings.areas);
-  const [iterationIds, setIterationIds] = useState<string[]>(settings.iterations);
+  const [defaultAreaId, setDefaultAreaId] = useState<string | null>(settings.defaultAreaId ?? null);
+  const [areaIds, setAreaIds] = useState<string[]>(settings.areas ?? []);
+  const [iterationIds, setIterationIds] = useState<string[]>(settings.iterations ?? []);
   const [dirty, setDirty] = useState(false);
 
   const toggle = (id: string, list: string[], updater: (next: string[]) => void) => {

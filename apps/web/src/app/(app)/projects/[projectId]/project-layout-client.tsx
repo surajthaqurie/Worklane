@@ -1,26 +1,26 @@
 'use client';
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { useProject } from '@/hooks/useProjects';
-import { useTeams, Team } from '@/hooks/useTeams';
-import { useProjectPermissions } from '@/hooks/useProjectPermissions';
+import { useProject } from '@/features/projects/hooks/useProjects';
+import { useTeams } from '@/features/teams/hooks/useTeams';
+import { useProjectPermissions } from '@/shared/hooks/useProjectPermissions';
 import { PermissionValue } from '@/config/permissions';
+import { Project } from '@/shared/types/projects';
+import { Team } from '@/shared/types/teams';
 import { Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import { AppShell } from '@/components/layout/app-shell';
+import { ProjectSidebar } from '@/components/layout/project-sidebar';
 
 interface ProjectContextValue {
-  project: any;
+  project: Project | null;
   projectId: string;
   teams: Team[];
   selectedTeamId: string | null;
   setSelectedTeamId: (id: string | null) => void;
-  /** Returns true if the current user has the given permission in this project. */
   can: (permission: PermissionValue) => boolean;
-  /** Returns true if the current user has ALL of the given permissions. */
   canAll: (...permissions: PermissionValue[]) => boolean;
-  /** Returns true if the current user has ANY of the given permissions. */
   canAny: (...permissions: PermissionValue[]) => boolean;
-  /** The user's role in this project (OWNER | ADMIN | MEMBER | null). */
   projectRole: string | null;
 }
 
@@ -32,17 +32,14 @@ export function useProjectContext() {
   return ctx;
 }
 
-import { AppShell } from '@/components/layout/app-shell';
-import { ProjectSidebar } from '@/components/layout/project-sidebar';
-
 export function ProjectLayoutClient({
   children,
-  projectId
+  projectId,
 }: {
   children: React.ReactNode;
   projectId: string;
 }) {
-  const { data: project, isLoading, error } = useProject(projectId);
+  const { data: project = null, isLoading, error } = useProject(projectId);
   const { data: teamsData } = useTeams(projectId);
   const teams = teamsData ?? [];
 
@@ -74,7 +71,7 @@ export function ProjectLayoutClient({
         // ignore storage errors
       }
     },
-    [storageKey],
+    [storageKey]
   );
 
   if (isLoading) {
@@ -128,9 +125,7 @@ export function ProjectLayoutClient({
         projectRole,
       }}
     >
-      <AppShell sidebar={<ProjectSidebar />}>
-        {children}
-      </AppShell>
+      <AppShell sidebar={<ProjectSidebar />}>{children}</AppShell>
     </ProjectContext.Provider>
   );
 }

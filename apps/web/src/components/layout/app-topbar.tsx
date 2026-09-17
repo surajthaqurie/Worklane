@@ -3,9 +3,8 @@
 import React from 'react';
 import { Menu, Moon, Sun } from 'lucide-react';
 import { useTheme } from '../providers';
-import { GlobalSearch } from '../GlobalSearch';
-
-import { NotificationsPopover } from '../NotificationsPopover';
+import { GlobalSearch } from '@/shared/components/ui/GlobalSearch';
+import { NotificationsPopover } from '@/features/notifications/components/NotificationsPopover';
 
 interface AppTopbarProps {
   onMenuClick: () => void;
@@ -19,7 +18,11 @@ export function AppTopbar({ onMenuClick }: AppTopbarProps) {
     setMounted(true);
   }, []);
 
-  const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const isDark =
+    theme === 'dark' ||
+    (theme === 'system' &&
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   const toggleTheme = () => setTheme(isDark ? 'light' : 'dark');
 

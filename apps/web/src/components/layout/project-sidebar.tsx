@@ -23,16 +23,24 @@ export function ProjectSidebar() {
   return (
     <div className="flex flex-col w-64 h-full bg-[var(--bg-surface)] border-r border-[var(--border-subtle)]">
       <div className="p-4 border-b border-[var(--border-subtle)]">
-        <Link href="/projects" className="flex items-center text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] mb-4 font-medium transition-colors">
+        <Link
+          href="/projects"
+          className="flex items-center text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] mb-4 font-medium transition-colors"
+        >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Projects
         </Link>
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] flex items-center justify-center text-[12px] font-medium text-[var(--text-secondary)]">
-            {project.key || 'P'}
+            {project?.key || 'P'}
           </div>
           <div className="flex flex-col overflow-hidden">
-            <span className="text-[14px] font-semibold text-[var(--text-primary)] truncate" title={project.name}>{project.name}</span>
+            <span
+              className="text-[14px] font-semibold text-[var(--text-primary)] truncate"
+              title={project?.name || ''}
+            >
+              {project?.name || 'Project'}
+            </span>
             <span className="text-[12px] text-[var(--text-secondary)]">Workspace</span>
           </div>
         </div>
@@ -51,14 +59,16 @@ export function ProjectSidebar() {
               key={item.label}
               href={href}
               className={`flex items-center px-3 py-1.5 text-[13px] font-medium rounded-[var(--radius-button)] group transition-colors ${
-                active 
-                  ? 'bg-[var(--bg-surface-selected)] text-[var(--brand-primary)]' 
+                active
+                  ? 'bg-[var(--bg-surface-selected)] text-[var(--brand-primary)]'
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
               }`}
             >
               <Icon
                 className={`flex-shrink-0 w-4 h-4 mr-3 transition-colors ${
-                  active ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'
+                  active
+                    ? 'text-[var(--brand-primary)]'
+                    : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'
                 }`}
                 aria-hidden="true"
               />
@@ -79,14 +89,16 @@ export function ProjectSidebar() {
               key={item.label}
               href={href}
               className={`flex items-center px-3 py-1.5 text-[13px] font-medium rounded-[var(--radius-button)] group transition-colors ${
-                active 
-                  ? 'bg-[var(--bg-surface-selected)] text-[var(--brand-primary)]' 
+                active
+                  ? 'bg-[var(--bg-surface-selected)] text-[var(--brand-primary)]'
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
               }`}
             >
               <Icon
                 className={`flex-shrink-0 w-4 h-4 mr-3 transition-colors ${
-                  active ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'
+                  active
+                    ? 'text-[var(--brand-primary)]'
+                    : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'
                 }`}
                 aria-hidden="true"
               />

@@ -2,6 +2,11 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
 import { sql } from 'kysely';
 import {
+  WorkItemHistoryAction,
+  WorkItemHistoryField,
+} from '../work-item-history/work-item-history.constants.js';
+import { WorkItemHistoryService } from '../work-item-history/work-item-history.service.js';
+import {
   CreateIterationDto,
   UpdateIterationDto,
 } from './dto/iterations.dto.js';
@@ -66,6 +71,8 @@ export interface SprintWorkItem {
 
 @Injectable()
 export class IterationsRepository {
+  constructor(private readonly history: WorkItemHistoryService) {}
+
   /** Azure Boards limits iteration paths to 14 levels deep. */
   private readonly MAX_ITERATION_DEPTH = 14;
 
@@ -396,19 +403,17 @@ export class IterationsRepository {
         .execute();
 
       if (items.length > 0) {
-        await trx
-          .insertInto('work_item_history')
-          .values(
-            items.map((item) => ({
-              work_item_id: item.id,
-              user_id: userId,
-              action: 'ITERATION_CHANGED',
-              field: 'iteration_id',
-              old_value: item.iteration_id ?? null,
-              new_value: iterationId,
-            })),
-          )
-          .execute();
+        await this.history.recordMany(
+          trx,
+          items.map((item) => ({
+            workItemId: item.id,
+            actorId: userId,
+            action: WorkItemHistoryAction.ITERATION_CHANGED,
+            field: WorkItemHistoryField.ITERATION,
+            previousValue: item.iteration_id ?? null,
+            newValue: iterationId,
+          })),
+        );
       }
     });
   }
@@ -433,17 +438,14 @@ export class IterationsRepository {
         .set({ iteration_id: null, updated_at: new Date() })
         .execute();
 
-      await trx
-        .insertInto('work_item_history')
-        .values({
-          work_item_id: item.id,
-          user_id: userId,
-          action: 'ITERATION_CHANGED',
-          field: 'iteration_id',
-          old_value: iterationId,
-          new_value: null,
-        })
-        .execute();
+      await this.history.record(trx, {
+        workItemId: item.id,
+        actorId: userId,
+        action: WorkItemHistoryAction.ITERATION_CHANGED,
+        field: WorkItemHistoryField.ITERATION,
+        previousValue: iterationId,
+        newValue: null,
+      });
     });
   }
 
@@ -472,19 +474,17 @@ export class IterationsRepository {
         .execute();
 
       if (items.length > 0) {
-        await trx
-          .insertInto('work_item_history')
-          .values(
-            items.map((item) => ({
-              work_item_id: item.id,
-              user_id: userId,
-              action: 'ITERATION_CHANGED',
-              field: 'iteration_id',
-              old_value: item.iteration_id ?? null,
-              new_value: targetIterationId ?? null,
-            })),
-          )
-          .execute();
+        await this.history.recordMany(
+          trx,
+          items.map((item) => ({
+            workItemId: item.id,
+            actorId: userId,
+            action: WorkItemHistoryAction.ITERATION_CHANGED,
+            field: WorkItemHistoryField.ITERATION,
+            previousValue: item.iteration_id ?? null,
+            newValue: targetIterationId ?? null,
+          })),
+        );
       }
     });
   }

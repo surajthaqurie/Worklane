@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { WorkItem, useWorkItemComments, useWorkItemActivity, useAddComment, useUpdateComment, useDeleteComment, useUpdateWorkItem, useDeleteWorkItem, useWorkItems, useTransitionWorkItemState } from '@/hooks/useWorkItems';
+import { WorkItem, WorkItemActivity, useWorkItemComments, useWorkItemActivity, useAddComment, useUpdateComment, useDeleteComment, useUpdateWorkItem, useDeleteWorkItem, useWorkItems, useTransitionWorkItemState } from '@/hooks/useWorkItems';
 import { useProjectMembers, useAreas, useTags } from '@/hooks/useProjects';
 import { useIterations } from '@/hooks/useIterations';
 import { X } from 'lucide-react';
@@ -366,29 +366,17 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
               ) : activity.length === 0 ? (
                 <div className="text-center text-[13px] text-[var(--text-muted)] py-12">No activity yet.</div>
               ) : (
-                activity.map((act: any) => (
+                activity.map((act: WorkItemActivity) => (
                   <div key={act.id} className="flex gap-4">
                     <div className="w-8 h-8 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center flex-shrink-0 text-[11px] font-medium text-[var(--text-primary)]">
-                      {act.user_name?.substring(0,2).toUpperCase() || 'US'}
+                      {act.actorName?.substring(0,2).toUpperCase() || 'US'}
                     </div>
                     <div className="flex flex-col justify-center">
                       <div className="text-[13px]">
-                        <span className="font-semibold text-[var(--text-primary)]">{act.user_name || 'User'}</span>
-                        <span className="text-[var(--text-secondary)] mx-1">
-                          {act.action === 'CREATED' && 'created this item'}
-                          {act.action === 'TITLE_CHANGED' && `changed title`}
-                          {act.action === 'STATE_CHANGED' && `moved item to ${act.new_value?.replace('_', ' ')}`}
-                          {act.action === 'PRIORITY_CHANGED' && `changed priority to ${act.new_value}`}
-                          {act.action === 'ASSIGNEE_CHANGED' && `assigned to ${act.new_value || 'unassigned'}`}
-                          {act.action === 'DESCRIPTION_CHANGED' && `updated the description`}
-                          {act.action === 'ITERATION_CHANGED' && (act.new_value ? 'added to an iteration' : 'moved to the backlog')}
-                          {act.action === 'AREA_CHANGED' && (act.new_value ? 'moved to a different area' : 'removed from area')}
-                          {act.action === 'PARENT_CHANGED' && (act.new_value ? 'linked under a parent item' : 'removed the parent link')}
-                          {act.action === 'DELETED' && 'deleted this item'}
-                          {act.action === 'TAGS_CHANGED' && `updated tags to ${act.new_value || 'none'}`}
-                        </span>
+                        <span className="font-semibold text-[var(--text-primary)]">{act.actorName || 'User'}</span>
+                        <span className="text-[var(--text-secondary)] ml-1">{act.description}</span>
                       </div>
-                      <span className="text-[12px] text-[var(--text-muted)] mt-0.5">{format(new Date(act.created_at), 'MMM d, yyyy HH:mm')}</span>
+                      <span className="text-[12px] text-[var(--text-muted)] mt-0.5">{format(new Date(act.createdAt), 'MMM d, yyyy HH:mm')}</span>
                     </div>
                   </div>
                 ))

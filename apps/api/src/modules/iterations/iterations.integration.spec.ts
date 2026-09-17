@@ -1,6 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 import { IterationsService } from './iterations.service.js';
 import { IterationsRepository } from './iterations.repository.js';
+import { WorkItemHistoryRepository } from '../work-item-history/work-item-history.repository.js';
+import { WorkItemHistoryService } from '../work-item-history/work-item-history.service.js';
 import { db } from '../../db/kysely.js';
 
 // Runs only when a real Postgres is available at DATABASE_URL / localhost:5434.
@@ -20,7 +22,9 @@ describe.skipIf(!INTEGRATION)('IterationsService (DB integration)', () => {
 
   beforeAll(async () => {
     service = new IterationsService(
-      new IterationsRepository(),
+      new IterationsRepository(
+        new WorkItemHistoryService(new WorkItemHistoryRepository()),
+      ),
       {
         assertProjectMember: async () => {},
         findOne: async () => ({ id: projectId, key: 'APP' }),

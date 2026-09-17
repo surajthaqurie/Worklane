@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
 import { sql } from 'kysely';
+import {
+  WorkItemHistoryAction,
+  WorkItemHistoryEntryInput,
+  WorkItemHistoryField,
+} from '../work-item-history/work-item-history.constants.js';
+import { WorkItemHistoryService } from '../work-item-history/work-item-history.service.js';
 
 export interface BacklogItem {
   id: string;
@@ -42,6 +48,8 @@ export interface ReorderPayload {
 
 @Injectable()
 export class BacklogRepository {
+  constructor(private readonly history: WorkItemHistoryService) {}
+
   /**
    * Efficient hierarchical query using a SINGLE SQL query with CTE.
    * Loads only the visible portion of the tree (roots + explicitly requested ancestors).
@@ -262,31 +270,29 @@ export class BacklogRepository {
         .execute();
 
       // Record history
-      const historyEntries: any[] = [];
+      const entries: WorkItemHistoryEntryInput[] = [];
 
       if (oldParentId !== newParentId) {
-        historyEntries.push({
-          work_item_id: payload.id,
-          user_id: userId,
-          action: 'PARENT_CHANGED',
-          field: 'parent_id',
-          old_value: oldParentId ?? null,
-          new_value: newParentId ?? null,
+        entries.push({
+          workItemId: payload.id,
+          actorId: userId,
+          action: WorkItemHistoryAction.PARENT_CHANGED,
+          field: WorkItemHistoryField.PARENT,
+          previousValue: oldParentId ?? null,
+          newValue: newParentId ?? null,
         });
       }
 
-      historyEntries.push({
-        work_item_id: payload.id,
-        user_id: userId,
-        action: 'ORDER_CHANGED',
-        field: 'backlog_rank',
-        old_value: String(item.backlog_rank),
-        new_value: String(newRank),
+      entries.push({
+        workItemId: payload.id,
+        actorId: userId,
+        action: WorkItemHistoryAction.ORDER_CHANGED,
+        field: WorkItemHistoryField.RANK,
+        previousValue: String(item.backlog_rank),
+        newValue: String(newRank),
       });
 
-      if (historyEntries.length > 0) {
-        await trx.insertInto('work_item_history').values(historyEntries).execute();
-      }
+      await this.history.recordMany(trx, entries);
 
       // Normalize ranks if any sibling ranks are too close (< 0.001 apart)
       // This prevents float precision issues over time
@@ -358,18 +364,16 @@ export class BacklogRepository {
         .where('id', 'in', itemIds)
         .execute();
 
-      const historyRows = items.map((item) => ({
-        work_item_id: item.id,
-        user_id: userId,
-        action: 'ITERATION_CHANGED',
-        field: 'iteration_id',
-        old_value: item.iteration_id ?? null,
-        new_value: iterationId ?? null,
+      const entries: WorkItemHistoryEntryInput[] = items.map((item) => ({
+        workItemId: item.id,
+        actorId: userId,
+        action: WorkItemHistoryAction.ITERATION_CHANGED,
+        field: WorkItemHistoryField.ITERATION,
+        previousValue: item.iteration_id ?? null,
+        newValue: iterationId ?? null,
       }));
 
-      if (historyRows.length > 0) {
-        await trx.insertInto('work_item_history').values(historyRows).execute();
-      }
+      await this.history.recordMany(trx, entries);
     });
   }
 }

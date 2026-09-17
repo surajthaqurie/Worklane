@@ -2,9 +2,16 @@ import { CreateWorkItemDto, UpdateWorkItemDto } from "./dto/work-items.dto.js";
 import { Injectable, ConflictException } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
 import { sql } from 'kysely';
+import {
+  WorkItemHistoryAction,
+  WorkItemHistoryField,
+  WorkItemHistoryEntryInput,
+} from '../work-item-history/work-item-history.constants.js';
+import { WorkItemHistoryService } from '../work-item-history/work-item-history.service.js';
 
 @Injectable()
 export class WorkItemsRepository {
+  constructor(private readonly history: WorkItemHistoryService) {}
   async getIterationProjectId(iterationId: string): Promise<string | null> {
     const iteration = await db
       .selectFrom('iterations')
@@ -75,14 +82,11 @@ export class WorkItemsRepository {
           await trx.insertInto('work_item_tags').values(allTags.map(t => ({ work_item_id: item.id, tag_id: t.id }))).execute();
         }
       }
-      await trx
-        .insertInto('work_item_history')
-        .values({
-          work_item_id: item.id,
-          user_id: userId,
-          action: 'CREATED',
-        })
-        .execute();
+      await this.history.record(trx, {
+        workItemId: item.id,
+        actorId: userId,
+        action: WorkItemHistoryAction.CREATED,
+      });
 
       return item;
     });
@@ -238,6 +242,13 @@ export class WorkItemsRepository {
         .selectAll()
         .executeTakeFirstOrThrow();
 
+      const oldTags = await trx
+        .selectFrom('work_item_tags')
+        .innerJoin('tags', 'tags.id', 'work_item_tags.tag_id')
+        .where('work_item_tags.work_item_id', '=', id)
+        .select('tags.name')
+        .execute();
+
       const updateData: any = { updated_at: new Date() };
       if (data.type !== undefined) updateData.type = data.type;
       if (data.title !== undefined) updateData.title = data.title;
@@ -260,73 +271,74 @@ export class WorkItemsRepository {
         .returningAll()
         .executeTakeFirstOrThrow();
 
+      const entries: WorkItemHistoryEntryInput[] = [];
+
       if (data.tags !== undefined) {
         await trx.deleteFrom('work_item_tags').where('work_item_id', '=', id).execute();
         if (data.tags && data.tags.length > 0) {
           const existingTags = await trx.selectFrom('tags').where('project_id', '=', oldItem.project_id).where('name', 'in', data.tags).selectAll().execute();
           const existingTagNames = existingTags.map(t => t.name);
           const newTagNames = data.tags.filter(t => !existingTagNames.includes(t));
-          
+
           let allTags = [...existingTags];
           if (newTagNames.length > 0) {
             const insertedTags = await trx.insertInto('tags').values(newTagNames.map(name => ({ project_id: oldItem.project_id, name }))).returningAll().execute();
             allTags = allTags.concat(insertedTags);
           }
-  
+
           if (allTags.length > 0) {
             await trx.insertInto('work_item_tags').values(allTags.map(t => ({ work_item_id: id, tag_id: t.id }))).execute();
           }
         }
-        
-        await trx
-            .insertInto('work_item_history')
-            .values({
-              work_item_id: id,
-              user_id: userId,
-              action: 'TAGS_CHANGED',
-              field: 'tags',
-              old_value: null,
-              new_value: data.tags.join(','),
-            })
-            .execute();
+
+        const previousTags = oldTags.map((t) => t.name).sort();
+        const nextTags = [...(data.tags ?? [])].sort();
+        entries.push({
+          workItemId: id,
+          actorId: userId,
+          action: WorkItemHistoryAction.TAGS_CHANGED,
+          field: WorkItemHistoryField.TAGS,
+          previousValue: previousTags.length > 0 ? previousTags.join(',') : null,
+          newValue: nextTags.length > 0 ? nextTags.join(',') : null,
+        });
       }
 
-
-      const trackFields = [
-        { key: 'title', dbKey: 'title', action: 'TITLE_CHANGED' },
-        { key: 'state', dbKey: 'state', action: 'STATE_CHANGED' },
-        { key: 'priority', dbKey: 'priority', action: 'PRIORITY_CHANGED' },
-        { key: 'points', dbKey: 'points', action: 'POINTS_CHANGED' },
-        { key: 'assignedTo', dbKey: 'assigned_to', action: 'ASSIGNEE_CHANGED' },
+      const trackFields: { key: keyof UpdateWorkItemDto; dbKey: string; action: WorkItemHistoryAction }[] = [
+        { key: 'title', dbKey: 'title', action: WorkItemHistoryAction.TITLE_CHANGED },
+        { key: 'type', dbKey: 'type', action: WorkItemHistoryAction.TYPE_CHANGED },
+        { key: 'priority', dbKey: 'priority', action: WorkItemHistoryAction.PRIORITY_CHANGED },
+        { key: 'points', dbKey: 'points', action: WorkItemHistoryAction.POINTS_CHANGED },
+        { key: 'assignedTo', dbKey: 'assigned_to', action: WorkItemHistoryAction.ASSIGNEE_CHANGED },
         {
           key: 'description',
           dbKey: 'description',
-          action: 'DESCRIPTION_CHANGED',
+          action: WorkItemHistoryAction.DESCRIPTION_CHANGED,
         },
-        { key: 'parentId', dbKey: 'parent_id', action: 'PARENT_CHANGED' },
-        { key: 'iterationId', dbKey: 'iteration_id', action: 'ITERATION_CHANGED' },
-        { key: 'areaId', dbKey: 'area_id', action: 'AREA_CHANGED' },
-        { key: 'backlogOrder', dbKey: 'backlog_order', action: 'ORDER_CHANGED' },
+        { key: 'parentId', dbKey: 'parent_id', action: WorkItemHistoryAction.PARENT_CHANGED },
+        { key: 'iterationId', dbKey: 'iteration_id', action: WorkItemHistoryAction.ITERATION_CHANGED },
+        { key: 'areaId', dbKey: 'area_id', action: WorkItemHistoryAction.AREA_CHANGED },
+        { key: 'backlogOrder', dbKey: 'backlog_order', action: WorkItemHistoryAction.ORDER_CHANGED },
       ];
 
       for (const field of trackFields) {
         if (
-          (data as any)[field.key] !== undefined &&
+          data[field.key] !== undefined &&
           (oldItem[field.dbKey as keyof typeof oldItem] ?? null) !==
             (updated[field.dbKey as keyof typeof updated] ?? null)
         ) {
-          await trx
-            .insertInto('work_item_history')
-            .values({
-              work_item_id: id,
-              user_id: userId,
-              action: field.action,
-              field: field.dbKey,
-              old_value: this.stringify(oldItem[field.dbKey as keyof typeof oldItem]),
-              new_value: this.stringify(updated[field.dbKey as keyof typeof updated]),
-            })
-            .execute();
+          entries.push({
+            workItemId: id,
+            actorId: userId,
+            action: field.action,
+            field: field.dbKey,
+            previousValue: this.stringify(oldItem[field.dbKey as keyof typeof oldItem]),
+            newValue: this.stringify(updated[field.dbKey as keyof typeof updated]),
+          });
         }
+      }
+
+      if (entries.length > 0) {
+        await this.history.recordMany(trx, entries);
       }
 
       return updated;
@@ -346,16 +358,13 @@ export class WorkItemsRepository {
         .select(['id', 'title'])
         .executeTakeFirst();
 
-      // Immutable audit record survives deletion (history FK is ON DELETE SET NULL)
-      await trx
-        .insertInto('work_item_history')
-        .values({
-          work_item_id: id,
-          user_id: userId,
-          action: 'DELETED',
-          old_value: item?.title ?? null,
-        })
-        .execute();
+      // Immutable audit record survives deletion (history is append-only)
+      await this.history.record(trx, {
+        workItemId: id,
+        actorId: userId,
+        action: WorkItemHistoryAction.DELETED,
+        previousValue: item?.title ?? null,
+      });
 
       await trx.deleteFrom('work_items').where('id', '=', id).execute();
     });
@@ -380,29 +389,76 @@ export class WorkItemsRepository {
   }
 
   async createComment(workItemId: string, userId: string, content: string) {
-    return await db
+    const comment = await db
       .insertInto('work_item_comments')
       .values({ work_item_id: workItemId, user_id: userId, content })
       .returningAll()
       .executeTakeFirstOrThrow();
+
+    await this.history.record(db, {
+      workItemId,
+      actorId: userId,
+      action: WorkItemHistoryAction.COMMENT_ADDED,
+      field: WorkItemHistoryField.COMMENT,
+      newValue: content,
+    });
+
+    return comment;
   }
 
   async updateComment(commentId: string, userId: string, content: string) {
-    return await db
+    const existing = await db
+      .selectFrom('work_item_comments')
+      .where('id', '=', commentId)
+      .select(['id', 'work_item_id', 'content'])
+      .executeTakeFirst();
+
+    const comment = await db
       .updateTable('work_item_comments')
       .set({ content, updated_at: new Date() })
       .where('id', '=', commentId)
       .where('user_id', '=', userId)
       .returningAll()
       .executeTakeFirstOrThrow();
+
+    if (existing && existing.content !== content && existing.work_item_id) {
+      await this.history.record(db, {
+        workItemId: existing.work_item_id,
+        actorId: userId,
+        action: WorkItemHistoryAction.COMMENT_UPDATED,
+        field: WorkItemHistoryField.COMMENT,
+        previousValue: existing.content,
+        newValue: content,
+      });
+    }
+
+    return comment;
   }
 
   async deleteComment(commentId: string, userId: string) {
-    return await db
+    const existing = await db
+      .selectFrom('work_item_comments')
+      .where('id', '=', commentId)
+      .select(['id', 'work_item_id', 'content'])
+      .executeTakeFirst();
+
+    const result = await db
       .deleteFrom('work_item_comments')
       .where('id', '=', commentId)
       .where('user_id', '=', userId)
       .execute();
+
+    if (existing && existing.work_item_id) {
+      await this.history.record(db, {
+        workItemId: existing.work_item_id,
+        actorId: userId,
+        action: WorkItemHistoryAction.COMMENT_DELETED,
+        field: WorkItemHistoryField.COMMENT,
+        previousValue: existing.content,
+      });
+    }
+
+    return result;
   }
 
   async updateState(id: string, userId: string, oldState: string, newState: string) {
@@ -432,39 +488,20 @@ export class WorkItemsRepository {
         throw new ConflictException('Concurrent update detected: Work item state has changed since it was loaded');
       }
 
-      await trx
-        .insertInto('work_item_history')
-        .values({
-          work_item_id: id,
-          user_id: userId,
-          action: 'STATE_CHANGED',
-          field: 'state',
-          old_value: oldState,
-          new_value: newState,
-        })
-        .execute();
+      await this.history.record(trx, {
+        workItemId: id,
+        actorId: userId,
+        action: WorkItemHistoryAction.STATE_CHANGED,
+        field: WorkItemHistoryField.STATE,
+        previousValue: oldState,
+        newValue: newState,
+      });
 
       return updated;
     });
   }
 
   async getActivity(workItemId: string) {
-    return await db
-      .selectFrom('work_item_history')
-      .innerJoin('users', 'users.id', 'work_item_history.user_id')
-      .where('work_item_id', '=', workItemId)
-      .select([
-        'work_item_history.id',
-        'work_item_history.action',
-        'work_item_history.field',
-        'work_item_history.old_value',
-        'work_item_history.new_value',
-        'work_item_history.created_at',
-        'work_item_history.user_id',
-        'users.name as user_name',
-        'users.avatar_url as user_avatar_url',
-      ])
-      .orderBy('work_item_history.created_at', 'desc')
-      .execute();
+    return await this.history.getActivity(workItemId);
   }
 }

@@ -135,6 +135,7 @@ export function useUpdateWorkItem(projectId: string) {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'iterations'] });
+      queryClient.invalidateQueries({ queryKey: ['work-items'] });
     }
   });
 }
@@ -173,9 +174,26 @@ export function useTransitionWorkItemState(projectId: string) {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'iterations'] });
+      queryClient.invalidateQueries({ queryKey: ['work-items'] });
     }
   });
 }
+
+export type WorkItemActivity = {
+  id: string;
+  workItemId: string;
+  actorId: string;
+  actorName: string;
+  actorAvatarUrl: string | null;
+  action: string;
+  field: string | null;
+  previousValue: string | null;
+  newValue: string | null;
+  previousLabel: string | null;
+  newLabel: string | null;
+  description: string;
+  createdAt: string;
+};
 
 export function useWorkItemComments(workItemId: string | null) {
   return useQuery({
@@ -205,6 +223,7 @@ export function useAddComment(workItemId: string | null) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'comments'] });
+      queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'activity'] });
     }
   });
 }
@@ -224,6 +243,7 @@ export function useUpdateComment(workItemId: string | null) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'comments'] });
+      queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'activity'] });
     }
   });
 }
@@ -241,12 +261,13 @@ export function useDeleteComment(workItemId: string | null) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'comments'] });
+      queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'activity'] });
     }
   });
 }
 
 export function useWorkItemActivity(workItemId: string | null) {
-  return useQuery({
+  return useQuery<WorkItemActivity[]>({
     queryKey: ['work-items', workItemId, 'activity'],
     queryFn: async () => {
       if (!workItemId) return [];

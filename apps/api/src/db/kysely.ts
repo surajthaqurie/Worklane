@@ -167,13 +167,14 @@ export interface Database {
   };
   work_item_history: {
     id: Generated<string>;
-    work_item_id: string | null;
+    work_item_id: string;
     user_id: string;
     action: string;
     field: string | null;
     old_value: string | null;
     new_value: string | null;
     created_at: ColumnType<Date, string | undefined, never>;
+    inserted_at: ColumnType<Date, string | undefined, never>;
   };
   work_item_attachments: {
     id: Generated<string>;

@@ -6,11 +6,12 @@ import { BacklogRepository } from './backlog.repository.js';
 import { BacklogController } from './backlog.controller.js';
 import { ProjectsModule } from '../projects/projects.module.js';
 import { TeamsModule } from '../teams/teams.module.js';
+import { WorkItemHistoryModule } from '../work-item-history/work-item-history.module.js';
 
 import { WorkItemTransitionsService } from './work-item-transitions.service.js';
 
 @Module({
-  imports: [ProjectsModule, TeamsModule],
+  imports: [ProjectsModule, TeamsModule, WorkItemHistoryModule],
   controllers: [WorkItemsController, BacklogController],
   providers: [WorkItemsService, WorkItemsRepository, BacklogRepository, WorkItemTransitionsService],
 })

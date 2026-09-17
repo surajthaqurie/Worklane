@@ -69,6 +69,7 @@ import { useWorkItemStates } from '@/hooks/useWorkItemStates';
 import { useProjectMembers, useAreas } from '@/hooks/useProjects';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
+import { useToast } from '@/components/Toast';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -642,6 +643,9 @@ function BacklogRow({
   const iterationName = iterations.find((i) => i.id === item.iterationId)?.name;
   const assigneeName = item.assignedToName || (item.assignedTo ? item.assignedTo.slice(0, 8) : null);
 
+  const { isItemPending } = useToast();
+  const isPending = isItemPending(item.id);
+
   const indentPx = depth * INDENT_PX;
 
   return (
@@ -652,7 +656,7 @@ function BacklogRow({
         style={style}
         className={`group grid grid-cols-[1fr_90px_110px_110px_130px_80px_36px] gap-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] transition-colors items-center cursor-pointer ${
           isSortableDragging ? 'opacity-40 bg-[var(--bg-surface-hover)]' : ''
-        }`}
+        } ${isPending ? 'opacity-75 bg-[var(--bg-surface-selected)]/50' : ''}`}
         onClick={() => {
           if (!isEditing) onSelect(item);
         }}
@@ -695,9 +699,13 @@ function BacklogRow({
 
           {/* Key + Title */}
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <span className="text-[11px] text-[var(--text-muted)] font-mono shrink-0">
-              {item.key}
-            </span>
+            {isPending ? (
+              <Loader2 className="w-3 h-3 text-[var(--brand-primary)] animate-spin shrink-0" />
+            ) : (
+              <span className="text-[11px] text-[var(--text-muted)] font-mono shrink-0">
+                {item.key}
+              </span>
+            )}
             {isEditing ? (
               <input
                 autoFocus
@@ -712,10 +720,15 @@ function BacklogRow({
               />
             ) : (
               <span
-                className="text-[13px] text-[var(--text-primary)] font-medium truncate"
+                className="text-[13px] text-[var(--text-primary)] font-medium truncate flex items-center gap-1.5"
                 title={item.title}
               >
                 {item.title}
+                {isPending && (
+                  <span className="text-[9px] font-normal text-[var(--brand-primary)] bg-[var(--bg-surface-selected)] px-1 rounded animate-pulse">
+                    Syncing...
+                  </span>
+                )}
               </span>
             )}
           </div>

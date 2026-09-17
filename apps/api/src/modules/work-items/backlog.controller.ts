@@ -13,6 +13,12 @@ import { AuthGuard } from '../projects/auth.guard.js';
 import { BacklogRepository } from './backlog.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { TeamsService } from '../teams/teams.service.js';
+import { AuthorizationService } from '../authorization/authorization.service.js';
+import { Permission } from '../authorization/permissions.js';
+
+import { WorkItemsRepository } from './work-items.repository.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { db } from '../../db/kysely.js';
 
 class ReorderDto {
   id: string;
@@ -32,20 +38,13 @@ class BulkAssignIterationDto {
 export class BacklogController {
   constructor(
     private readonly backlogRepo: BacklogRepository,
+    private readonly workItemsRepo: WorkItemsRepository,
     private readonly projectsService: ProjectsService,
     private readonly teamsService: TeamsService,
+    private readonly authz: AuthorizationService,
+    private readonly notifications: NotificationsService,
   ) {}
 
-  /**
-   * GET /projects/:projectId/backlog
-   *
-   * Returns a paginated, filtered list of work items for a given hierarchical level.
-   * Pass `parentId=null` (or omit) for top-level items.
-   * Pass `parentId=<uuid>` to load children of that item.
-   *
-   * This is NOT the same as the board endpoint. The backlog is about hierarchy
-   * and planning; the board is about workflow/state.
-   */
   @Get('projects/:projectId/backlog')
   async getBacklog(
     @Req() req: { user: { id: string } },
@@ -62,6 +61,7 @@ export class BacklogController {
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
+    await this.authz.requireProjectPermission(projectId, req.user.id, Permission.WORK_ITEM_VIEW);
     const project = await this.projectsService.assertProjectMember(projectId, req.user.id);
 
     let teamAreaIds: string[] | undefined;
@@ -73,7 +73,6 @@ export class BacklogController {
       teamIterationIds = scope.iterationIds;
     }
 
-    // Resolve parentId: 'null' string → null, undefined → null (top level), else string uuid
     let resolvedParentId: string | null;
     if (parentId === undefined || parentId === 'null' || parentId === '') {
       resolvedParentId = null;
@@ -101,24 +100,24 @@ export class BacklogController {
     );
   }
 
-  /**
-   * POST /projects/:projectId/backlog/reorder
-   *
-   * Persists a drag-and-drop reorder event from the backlog.
-   * Accepts the new fractional rank and optional parent change.
-   * Records history for both parent change and ordering change.
-   */
   @Post('projects/:projectId/backlog/reorder')
   async reorder(
     @Req() req: { user: { id: string } },
     @Param('projectId') projectId: string,
     @Body() dto: ReorderDto,
   ) {
-    await this.projectsService.assertProjectMember(projectId, req.user.id);
+    await this.authz.requireProjectPermission(projectId, req.user.id, Permission.WORK_ITEM_EDIT);
 
     if (!dto.id) throw new BadRequestException('id is required');
     if (dto.newRank === undefined || dto.newRank === null) {
       throw new BadRequestException('newRank is required');
+    }
+
+    // Verify item belongs to project
+    await this.authz.requireWorkItemInProject(dto.id, projectId);
+
+    if (dto.parentId) {
+      await this.authz.requireWorkItemInProject(dto.parentId, projectId);
     }
 
     if (dto.teamId && dto.teamId !== 'default') {
@@ -130,31 +129,58 @@ export class BacklogController {
       );
     }
 
+    const oldItem = await this.workItemsRepo.getWorkItemById(dto.id);
+
     await this.backlogRepo.reorderItem(projectId, req.user.id, {
       id: dto.id,
       parentId: dto.parentId ?? null,
       newRank: dto.newRank,
     });
 
+    if (oldItem && dto.parentId !== undefined && (dto.parentId ?? null) !== oldItem.parent_id) {
+      let newParentAssignedTo: string | null = null;
+      if (dto.parentId) {
+        const parentItem = await this.workItemsRepo.getWorkItemById(dto.parentId);
+        newParentAssignedTo = parentItem?.assigned_to ?? null;
+      }
+      await this.notifications.notifyParentChanged({
+        actorId: req.user.id,
+        workItemId: dto.id,
+        title: oldItem.title,
+        assignedTo: oldItem.assigned_to,
+        createdBy: oldItem.created_by,
+        oldParentId: oldItem.parent_id,
+        newParentId: dto.parentId ?? null,
+        newParentAssignedTo,
+      });
+    }
+
     return { success: true };
   }
 
-  /**
-   * POST /projects/:projectId/backlog/bulk-assign-iteration
-   *
-   * Efficiently assigns (or clears) an iteration for multiple work items.
-   * Used when dragging items into sprint slots in the planning panel.
-   */
   @Post('projects/:projectId/backlog/bulk-assign-iteration')
   async bulkAssignIteration(
     @Req() req: { user: { id: string } },
     @Param('projectId') projectId: string,
     @Body() dto: BulkAssignIterationDto,
   ) {
-    await this.projectsService.assertProjectMember(projectId, req.user.id);
+    await this.authz.requireProjectPermission(projectId, req.user.id, Permission.WORK_ITEM_EDIT);
 
     if (!Array.isArray(dto.itemIds) || dto.itemIds.length === 0) {
       throw new BadRequestException('itemIds must be a non-empty array');
+    }
+
+    // Verify all items belong to this project
+    for (const itemId of dto.itemIds) {
+      await this.authz.requireWorkItemInProject(itemId, projectId);
+    }
+
+    if (dto.iterationId) {
+      // Validate iteration belongs to same project
+      const iterationProjectId = await this.workItemsRepo.getIterationProjectId(dto.iterationId);
+      if (!iterationProjectId || iterationProjectId !== projectId) {
+        throw new BadRequestException('Iteration does not belong to the same project');
+      }
     }
 
     if (dto.teamId && dto.teamId !== 'default') {
@@ -173,6 +199,43 @@ export class BacklogController {
       dto.iterationId ?? null,
     );
 
+    let sprintName: string | undefined;
+    if (dto.iterationId) {
+      const it = await db
+        .selectFrom('iterations')
+        .where('id', '=', dto.iterationId)
+        .select('name')
+        .executeTakeFirst();
+      sprintName = it?.name;
+    }
+
+    for (const itemId of dto.itemIds) {
+      const item = await this.workItemsRepo.getWorkItemById(itemId);
+      if (item) {
+        if (dto.iterationId) {
+          await this.notifications.notifyAddedToSprint({
+            actorId: req.user.id,
+            workItemId: itemId,
+            title: item.title,
+            assignedTo: item.assigned_to,
+            createdBy: item.created_by,
+            iterationId: dto.iterationId,
+            sprintName,
+          });
+        } else {
+          await this.notifications.notifyRemovedFromSprint({
+            actorId: req.user.id,
+            workItemId: itemId,
+            title: item.title,
+            assignedTo: item.assigned_to,
+            createdBy: item.created_by,
+            previousIterationId: item.iteration_id,
+          });
+        }
+      }
+    }
+
     return { success: true };
   }
 }
+

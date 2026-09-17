@@ -74,6 +74,8 @@ export const useTheme = () => {
   return context;
 };
 
+import { ToastProvider } from './Toast';
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
@@ -86,7 +88,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider defaultTheme="system" storageKey="taskforge-theme">
       <QueryClientProvider client={queryClient}>
-        {children}
+        <ToastProvider>
+          {children}
+        </ToastProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

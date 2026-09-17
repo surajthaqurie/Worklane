@@ -1,5 +1,6 @@
 import { fetchWithAuth } from './fetcher';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/components/Toast';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -81,11 +82,11 @@ const iterationKeys = {
 export function useIterations(projectId: string, teamId?: string | null) {
   return useQuery<Iteration[]>({
     queryKey: ['projects', projectId, 'iterations', { teamId: teamId ?? null }],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
       if (teamId) params.set('teamId', teamId);
       const qs = params.toString() ? `?${params.toString()}` : '';
-      const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/iterations${qs}`);
+      const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/iterations${qs}`, { signal });
       if (!res.ok) throw new Error('Failed to fetch iterations');
       return res.json();
     },
@@ -97,9 +98,10 @@ export function useIterations(projectId: string, teamId?: string | null) {
 export function useIteration(projectId: string, iterationId: string) {
   return useQuery<Iteration | undefined>({
     queryKey: iterationKeys.one(projectId, iterationId),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const res = await fetchWithAuth(
         `${API_URL}/projects/${projectId}/iterations/${iterationId}`,
+        { signal }
       );
       if (!res.ok) throw new Error('Failed to fetch iteration');
       return res.json();
@@ -113,12 +115,13 @@ export function useIteration(projectId: string, iterationId: string) {
 export function useSprintBoard(projectId: string, iterationId: string, teamId?: string | null) {
   return useQuery<SprintBoard>({
     queryKey: [...iterationKeys.board(projectId, iterationId), teamId ?? null],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
       if (teamId) params.set('teamId', teamId);
       const qs = params.toString() ? `?${params.toString()}` : '';
       const res = await fetchWithAuth(
         `${API_URL}/projects/${projectId}/iterations/${iterationId}/board${qs}`,
+        { signal }
       );
       if (!res.ok) throw new Error('Failed to fetch sprint board');
       return res.json();
@@ -131,6 +134,8 @@ export function useSprintBoard(projectId: string, iterationId: string, teamId?: 
 
 export function useCreateIteration(projectId: string) {
   const queryClient = useQueryClient();
+  const { showSuccess, showError } = useToast();
+
   return useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
       const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/iterations`, {
@@ -144,9 +149,13 @@ export function useCreateIteration(projectId: string) {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (it) => {
+      showSuccess('Iteration created', it.name);
       queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
     },
+    onError: (err: Error) => {
+      showError('Failed to create iteration', err.message);
+    }
   });
 }
 
@@ -154,6 +163,8 @@ export function useCreateIteration(projectId: string) {
 
 export function useUpdateIteration(projectId: string) {
   const queryClient = useQueryClient();
+  const { showSuccess, showError } = useToast();
+
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
       const res = await fetchWithAuth(
@@ -171,9 +182,13 @@ export function useUpdateIteration(projectId: string) {
       return res.json();
     },
     onSuccess: (_, { id }) => {
+      showSuccess('Iteration updated');
       queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
       queryClient.invalidateQueries({ queryKey: iterationKeys.one(projectId, id) });
     },
+    onError: (err: Error) => {
+      showError('Failed to update iteration', err.message);
+    }
   });
 }
 
@@ -181,6 +196,8 @@ export function useUpdateIteration(projectId: string) {
 
 export function useActivateIteration(projectId: string) {
   const queryClient = useQueryClient();
+  const { showSuccess, showError } = useToast();
+
   return useMutation({
     mutationFn: async (id: string) => {
       const res = await fetchWithAuth(
@@ -194,10 +211,14 @@ export function useActivateIteration(projectId: string) {
       return res.json();
     },
     onSuccess: (_, id) => {
+      showSuccess('Sprint started!');
       queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
       queryClient.invalidateQueries({ queryKey: iterationKeys.one(projectId, id) });
       queryClient.invalidateQueries({ queryKey: iterationKeys.board(projectId, id) });
     },
+    onError: (err: Error) => {
+      showError('Failed to start sprint', err.message || 'Only one active sprint is allowed per project.');
+    }
   });
 }
 
@@ -211,6 +232,8 @@ export type CompleteIterationPayload = {
 
 export function useCompleteIteration(projectId: string) {
   const queryClient = useQueryClient();
+  const { showSuccess, showError } = useToast();
+
   return useMutation({
     mutationFn: async ({ id, incompleteAction, targetIterationId }: CompleteIterationPayload) => {
       const res = await fetchWithAuth(
@@ -231,13 +254,17 @@ export function useCompleteIteration(projectId: string) {
         incompleteItems: { id: string; title: string; state: string }[];
       }>;
     },
-    onSuccess: (_, { id }) => {
+    onSuccess: (data, { id }) => {
+      showSuccess('Sprint completed', `Moved ${data.movedCount ?? 0} incomplete item(s).`);
       queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
       queryClient.invalidateQueries({ queryKey: iterationKeys.one(projectId, id) });
       queryClient.invalidateQueries({ queryKey: iterationKeys.board(projectId, id) });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'backlog'] });
     },
+    onError: (err: Error) => {
+      showError('Failed to complete sprint', err.message);
+    }
   });
 }
 
@@ -245,6 +272,8 @@ export function useCompleteIteration(projectId: string) {
 
 export function useDeleteIteration(projectId: string) {
   const queryClient = useQueryClient();
+  const { showSuccess, showError } = useToast();
+
   return useMutation({
     mutationFn: async (id: string) => {
       const res = await fetchWithAuth(
@@ -258,10 +287,14 @@ export function useDeleteIteration(projectId: string) {
       return res.json();
     },
     onSuccess: () => {
+      showSuccess('Iteration deleted');
       queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'overview'] });
     },
+    onError: (err: Error) => {
+      showError('Failed to delete iteration', err.message);
+    }
   });
 }
 
@@ -269,6 +302,8 @@ export function useDeleteIteration(projectId: string) {
 
 export function useRemoveWorkItemFromIteration(projectId: string) {
   const queryClient = useQueryClient();
+  const { showSuccess, showError, addPendingItem, removePendingItem } = useToast();
+
   return useMutation({
     mutationFn: async ({
       iterationId,
@@ -284,7 +319,23 @@ export function useRemoveWorkItemFromIteration(projectId: string) {
       if (!res.ok) throw new Error('Failed to remove work item from iteration');
       return res.json();
     },
-    onSuccess: (_, { iterationId }) => {
+    onMutate: async ({ workItemId }) => {
+      addPendingItem(workItemId);
+      await queryClient.cancelQueries({ queryKey: ['projects', projectId] });
+      const snapshots = queryClient.getQueriesData({ queryKey: ['projects', projectId] });
+      return { snapshots, workItemId };
+    },
+    onSuccess: () => {
+      showSuccess('Work item removed from iteration');
+    },
+    onError: (err: Error, _vars, context) => {
+      if (context?.snapshots) {
+        context.snapshots.forEach(([key, data]) => queryClient.setQueryData(key, data));
+      }
+      showError('Failed to remove work item', err.message);
+    },
+    onSettled: (_data, _err, { iterationId, workItemId }) => {
+      removePendingItem(workItemId);
       queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
       queryClient.invalidateQueries({ queryKey: iterationKeys.board(projectId, iterationId) });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });

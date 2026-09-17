@@ -30,6 +30,7 @@ export interface Database {
     id: Generated<string>;
     project_id: string;
     user_id: string;
+    role: Generated<'OWNER' | 'ADMIN' | 'MEMBER'>;
     created_at: ColumnType<Date, string | undefined, never>;
   };
   teams: {
@@ -188,13 +189,23 @@ export interface Database {
     url: string;
     created_at: ColumnType<Date, string | undefined, never>;
   };
+  notifications: {
+    id: Generated<string>;
+    user_id: string;
+    type: string;
+    work_item_id: string | null;
+    actor_id: string;
+    metadata: any;
+    read_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
 }
 
 const dialect = new PostgresDialect({
   pool: new Pool({
     connectionString:
       process.env.DATABASE_URL ||
-      'postgresql://postgres:postgres@localhost:5434/todoapp',
+      'postgresql://postgres:root@localhost:5434/todoapp',
     max: 10,
   }),
 });

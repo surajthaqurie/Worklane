@@ -8,6 +8,7 @@ import { WorkItemStatesModule } from './modules/work-item-states/work-item-state
 import { QueriesModule } from './modules/queries/queries.module.js';
 import { TeamsModule } from './modules/teams/teams.module.js';
 import { SearchModule } from './modules/search/search.module.js';
+import { NotificationsModule } from './modules/notifications/notifications.module.js';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { SearchModule } from './modules/search/search.module.js';
     QueriesModule,
     TeamsModule,
     SearchModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

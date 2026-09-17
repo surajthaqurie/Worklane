@@ -8,12 +8,15 @@ import { IterationsService } from './iterations.service.js';
 import { IterationsRepository } from './iterations.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { TeamsService } from '../teams/teams.service.js';
+import { AuthorizationService } from '../authorization/authorization.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 describe('IterationsService', () => {
   let service: IterationsService;
   let repo: any;
   let projectsService: any;
   let teamsService: any;
+  let authz: any;
 
   const iteration = {
     id: 'it-1',
@@ -65,12 +68,28 @@ describe('IterationsService', () => {
       getTeamScope: vi.fn(),
     };
 
+    authz = {
+      requireProjectPermission: vi.fn().mockImplementation(async (projectId, userId) => ({
+        projectId,
+        userId,
+        role: 'ADMIN',
+      })),
+      requireProjectMember: vi.fn(),
+    };
+
+    const notifications = {
+      notifyAddedToSprint: vi.fn(),
+      notifyRemovedFromSprint: vi.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         IterationsService,
         { provide: IterationsRepository, useValue: repo },
         { provide: ProjectsService, useValue: projectsService },
         { provide: TeamsService, useValue: teamsService },
+        { provide: AuthorizationService, useValue: authz },
+        { provide: NotificationsService, useValue: notifications },
       ],
     }).compile();
 
@@ -80,7 +99,7 @@ describe('IterationsService', () => {
   // ─── Authorization ─────────────────────────────────────────────────────────
 
   it('should throw ForbiddenException when user is not a project member', async () => {
-    projectsService.assertProjectMember.mockRejectedValue(new ForbiddenException());
+    authz.requireProjectPermission.mockRejectedValue(new ForbiddenException());
     await expect(service.create('u1', 'p1', { ...dto })).rejects.toThrow(
       ForbiddenException,
     );

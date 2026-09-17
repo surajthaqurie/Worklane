@@ -5,7 +5,8 @@ import { format } from 'date-fns';
 import { WorkItem, WorkItemActivity, WorkItemComment, useWorkItemComments, useWorkItemActivity, useAddComment, useUpdateComment, useDeleteComment, useUpdateWorkItem, useDeleteWorkItem, useWorkItems, useTransitionWorkItemState } from '@/hooks/useWorkItems';
 import { useProjectMembers, useAreas } from '@/hooks/useProjects';
 import { useIterations } from '@/hooks/useIterations';
-import { X } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
+import { useToast } from '@/components/Toast';
 
 export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'activity'>('details');
@@ -314,7 +315,7 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
                 ) : (
                   <>
                     {comments.map((comment: WorkItemComment) => (
-                      <div key={comment.id} className="flex gap-4">
+                      <div key={comment.id} className={`flex gap-4 ${comment.isPending ? 'opacity-60' : ''}`}>
                         <div className="w-8 h-8 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-[11px] font-medium text-[var(--text-primary)] flex-shrink-0">
                           {comment.authorName?.substring(0,2).toUpperCase() || 'US'}
                         </div>
@@ -325,6 +326,11 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
                             {comment.updatedAt && comment.updatedAt !== comment.createdAt && (
                               <span className="text-[12px] text-[var(--text-muted)]">
                                 (edited)
+                              </span>
+                            )}
+                            {comment.isPending && (
+                              <span className="text-[10px] font-medium text-[var(--brand-primary)] bg-[var(--bg-surface-selected)] px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-1">
+                                <Loader2 className="w-2.5 h-2.5 animate-spin" /> Sending…
                               </span>
                             )}
                           </div>
@@ -338,22 +344,26 @@ export function WorkItemDrawer({ item, onClose }: { item: WorkItem, onClose: () 
                               />
                               <div className="flex justify-end gap-2">
                                 <button onClick={() => setEditingCommentId(null)} className="text-[12px] px-3 py-1.5 text-[var(--text-secondary)] font-medium hover:bg-[var(--bg-surface-hover)] rounded-[var(--radius-button)] transition-colors">Cancel</button>
-                                <button onClick={() => handleSaveEdit(comment.id)} className="text-[12px] px-3 py-1.5 bg-[var(--brand-primary)] text-white font-medium rounded-[var(--radius-button)] hover:bg-[var(--brand-primary-hover)] transition-colors">Save</button>
+                                <button onClick={() => handleSaveEdit(comment.id)} disabled={updateComment.isPending} className="text-[12px] px-3 py-1.5 bg-[var(--brand-primary)] text-white font-medium rounded-[var(--radius-button)] hover:bg-[var(--brand-primary-hover)] transition-colors disabled:opacity-50">
+                                  {updateComment.isPending ? 'Saving...' : 'Save'}
+                                </button>
                               </div>
                             </div>
                           ) : (
                             <div className="group relative">
                               <p className="text-[13px] text-[var(--text-primary)] whitespace-pre-wrap bg-[var(--bg-surface-hover)] p-3 rounded-tr-[var(--radius-card)] rounded-br-[var(--radius-card)] rounded-bl-[var(--radius-card)]">{comment.content}</p>
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 absolute -right-2 top-2 translate-x-full">
-                                <button 
-                                  onClick={() => { setEditingCommentId(comment.id); setEditingCommentContent(comment.content); }}
-                                  className="text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium"
-                                >Edit</button>
-                                <button 
-                                  onClick={() => handleDelete(comment.id)}
-                                  className="text-[11px] text-[var(--priority-high)] hover:text-[var(--priority-urgent)] font-medium"
-                                >Delete</button>
-                              </div>
+                              {!comment.isPending && (
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 absolute -right-2 top-2 translate-x-full">
+                                  <button 
+                                    onClick={() => { setEditingCommentId(comment.id); setEditingCommentContent(comment.content); }}
+                                    className="text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium"
+                                  >Edit</button>
+                                  <button 
+                                    onClick={() => handleDelete(comment.id)}
+                                    className="text-[11px] text-[var(--priority-high)] hover:text-[var(--priority-urgent)] font-medium"
+                                  >Delete</button>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

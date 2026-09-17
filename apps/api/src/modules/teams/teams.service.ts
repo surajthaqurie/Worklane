@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { TeamsRepository, TeamRole } from './teams.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
+import { AuthorizationService } from '../authorization/authorization.service.js';
+import { Permission } from '../authorization/permissions.js';
 
 export interface TeamScope {
   areaIds: string[];
@@ -17,6 +19,7 @@ export class TeamsService {
   constructor(
     private readonly repo: TeamsRepository,
     private readonly projectsService: ProjectsService,
+    private readonly authz: AuthorizationService,
   ) {}
 
   /** Project membership grants access to the project; team data also requires it. */
@@ -29,7 +32,7 @@ export class TeamsService {
    * Returns the membership row.
    */
   async assertTeamMember(projectId: string, teamId: string, userId: string) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.TEAM_VIEW);
     const team = await this.repo.getById(projectId, teamId);
     if (!team) throw new NotFoundException('Team not found');
     const member = await this.repo.getMember(teamId, userId);
@@ -51,7 +54,7 @@ export class TeamsService {
   // ─── Teams ─────────────────────────────────────────────────────────────────
 
   async findAll(userId: string, projectId: string) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.TEAM_VIEW);
     return this.repo.listByProject(projectId, userId);
   }
 
@@ -61,7 +64,7 @@ export class TeamsService {
   }
 
   async create(userId: string, projectId: string, data: { name: string; description?: string }) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.TEAM_CREATE);
     const name = data.name?.trim();
     if (!name) throw new BadRequestException('Team name is required');
     const team = await this.repo.create(projectId, name, data.description?.trim() || null);
@@ -75,6 +78,8 @@ export class TeamsService {
     teamId: string,
     data: { name?: string; description?: string | null },
   ) {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.TEAM_EDIT);
+    // Also require team admin for narrower scope
     await this.assertTeamAdmin(projectId, teamId, userId);
     const name = data.name?.trim();
     if (name !== undefined && !name) throw new BadRequestException('Team name cannot be empty');
@@ -82,6 +87,7 @@ export class TeamsService {
   }
 
   async remove(userId: string, projectId: string, teamId: string) {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.TEAM_DELETE);
     await this.assertTeamAdmin(projectId, teamId, userId);
     await this.repo.remove(teamId);
     return { success: true };
@@ -168,6 +174,7 @@ export class TeamsService {
       areaIds?: string[];
     },
   ) {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.TEAM_MANAGE_SETTINGS);
     await this.assertTeamAdmin(projectId, teamId, userId);
     if (settings.iterationIds !== undefined) {
       await this.validateIterations(projectId, settings.iterationIds);

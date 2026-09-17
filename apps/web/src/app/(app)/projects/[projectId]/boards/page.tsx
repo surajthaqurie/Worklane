@@ -16,23 +16,29 @@ export default function ProjectBoardPage() {
 
   const [backlogLevel, setBacklogLevel] = useState<'EPIC' | 'FEATURE' | 'STORY'>('STORY');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
   const [tags, setTags] = useState('');
+
+  React.useEffect(() => {
+    const handler = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(handler);
+  }, [search]);
 
   const typeFilter = useMemo(() => {
     if (backlogLevel === 'EPIC') return 'EPIC';
     if (backlogLevel === 'FEATURE') return 'FEATURE';
-    return undefined; // We'll filter STORY/BUG manually if we don't have a multi-type filter yet
+    return undefined;
   }, [backlogLevel]);
 
   const filters = useMemo(() => {
     const f: Record<string, string> = { limit: '1000' };
-    if (search) f.search = search;
+    if (debouncedSearch) f.search = debouncedSearch;
     if (assignedTo) f.assignedTo = assignedTo;
     if (tags) f.tags = tags;
     if (typeFilter) f.type = typeFilter;
     return f;
-  }, [search, assignedTo, tags, typeFilter]);
+  }, [debouncedSearch, assignedTo, tags, typeFilter]);
 
   const { data: workItems = [], isLoading: isLoadingWorkItems, error } = useBoardWorkItems(projectId, selectedTeamId ?? 'default', filters);
   const { data: states = [] } = useWorkItemStates(projectId);

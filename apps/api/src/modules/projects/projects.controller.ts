@@ -22,7 +22,6 @@ import {
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
-  // Mocking userId for demonstration purposes, normally from JWT Auth Guard
   private getUserId(req: any) {
     return req.user.id;
   }
@@ -60,27 +59,40 @@ export class ProjectsController {
     return this.projectsService.remove(this.getUserId(req), id);
   }
 
-  @Post(':id/members')
-  addMember(
-    @Req() req: any,
-    @Param('id') id: string,
-    @Body() addMemberDto: AddProjectMemberDto,
-  ) {
-    return this.projectsService.addMember(
-      this.getUserId(req),
-      id,
-      addMemberDto.userId,
-    );
-  }
-
-  @Get(':id/overview')
-  getOverview(@Req() req: any, @Param('id') id: string) {
-    return this.projectsService.getOverview(this.getUserId(req), id);
-  }
+  // ─── Members ───────────────────────────────────────────────────────────────
 
   @Get(':id/members')
   getMembers(@Req() req: any, @Param('id') id: string) {
     return this.projectsService.getMembers(this.getUserId(req), id);
+  }
+
+  @Post(':id/members')
+  addMember(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: { userId: string; role?: 'OWNER' | 'ADMIN' | 'MEMBER' },
+  ) {
+    return this.projectsService.addMember(
+      this.getUserId(req),
+      id,
+      body.userId,
+      body.role ?? 'MEMBER',
+    );
+  }
+
+  @Patch(':id/members/:userId/role')
+  updateMemberRole(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Body() body: { role: 'OWNER' | 'ADMIN' | 'MEMBER' },
+  ) {
+    return this.projectsService.updateMemberRole(
+      this.getUserId(req),
+      id,
+      userId,
+      body.role,
+    );
   }
 
   @Delete(':id/members/:userId')
@@ -92,6 +104,13 @@ export class ProjectsController {
     return this.projectsService.removeMember(this.getUserId(req), id, userId);
   }
 
+  // ─── Project resources ─────────────────────────────────────────────────────
+
+  @Get(':id/overview')
+  getOverview(@Req() req: any, @Param('id') id: string) {
+    return this.projectsService.getOverview(this.getUserId(req), id);
+  }
+
   @Get(':id/areas')
   getAreas(@Req() req: any, @Param('id') id: string) {
     return this.projectsService.getAreas(this.getUserId(req), id);
@@ -100,5 +119,19 @@ export class ProjectsController {
   @Get(':id/tags')
   getTags(@Req() req: any, @Param('id') id: string) {
     return this.projectsService.getTags(this.getUserId(req), id);
+  }
+
+  // ─── Permissions ───────────────────────────────────────────────────────────
+
+  /**
+   * GET /projects/:id/my-permissions
+   *
+   * Returns the authenticated user's role and the full set of permissions they
+   * have for this project. The frontend uses this to gate UI actions (buttons,
+   * menus) without a round-trip per action.
+   */
+  @Get(':id/my-permissions')
+  getMyPermissions(@Req() req: any, @Param('id') id: string) {
+    return this.projectsService.getMyPermissions(this.getUserId(req), id);
   }
 }

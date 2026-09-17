@@ -5,7 +5,8 @@ import { useWorkItems, WorkItem } from '@/hooks/useWorkItems';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
 import { CreateWorkItemModal } from '@/components/CreateWorkItemModal';
-import { Search, Filter } from 'lucide-react';
+import { Search, Filter, Loader2 } from 'lucide-react';
+import { useToast } from '@/components/Toast';
 
 export default function WorkItemsPage({ params }: { params: Promise<{ projectId: string }> }) {
   return (
@@ -21,6 +22,7 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
   const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedTeamId } = useProjectContext();
+  const { isItemPending } = useToast();
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -108,34 +110,53 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
                     <td colSpan={5} className="px-4 py-8 text-center text-[13px] text-[var(--text-muted)]">No work items found.</td>
                   </tr>
                 ) : (
-                  filteredItems.map((item: WorkItem) => (
-                    <tr 
-                      key={item.id} 
-                      onClick={() => setSelectedItem(item)}
-                      className="hover:bg-[var(--bg-surface-hover)] cursor-pointer transition-colors group"
-                    >
-                      <td className="px-4 py-3 whitespace-nowrap text-[13px] font-medium text-[var(--text-secondary)]">{item.key}</td>
-                      <td className="px-4 py-3 text-[13px] text-[var(--text-primary)] font-medium">{item.title}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[var(--bg-surface-hover)] text-[var(--text-primary)]">
-                          {item.state.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <div className={`w-2 h-2 rounded-full ${item.priority === 'HIGH' || item.priority === 'URGENT' ? 'bg-[var(--priority-high)]' : 'bg-[var(--priority-medium)]'}`}></div>
-                          <span className="text-[12px] text-[var(--text-secondary)]">{item.priority}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="w-6 h-6 rounded-[var(--radius-avatar)] bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-[10px] text-[var(--text-primary)]" title={item.assignedTo || 'Unassigned'}>
-                            {item.assignedTo ? item.assignedTo.substring(0,2).toUpperCase() : 'UI'}
+                  filteredItems.map((item: WorkItem) => {
+                    const isPending = isItemPending(item.id);
+                    return (
+                      <tr 
+                        key={item.id} 
+                        onClick={() => setSelectedItem(item)}
+                        className={`hover:bg-[var(--bg-surface-hover)] cursor-pointer transition-colors group ${
+                          isPending ? 'opacity-70 bg-[var(--bg-surface-selected)]/50' : ''
+                        }`}
+                      >
+                        <td className="px-4 py-3 whitespace-nowrap text-[13px] font-medium text-[var(--text-secondary)]">
+                          <div className="flex items-center gap-1.5">
+                            {isPending ? (
+                              <Loader2 className="w-3.5 h-3.5 text-[var(--brand-primary)] animate-spin" />
+                            ) : null}
+                            <span>{item.key}</span>
                           </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="px-4 py-3 text-[13px] text-[var(--text-primary)] font-medium">
+                          {item.title}
+                          {isPending && (
+                            <span className="ml-2 text-[9px] font-normal text-[var(--brand-primary)] bg-[var(--bg-surface-selected)] px-1 rounded animate-pulse">
+                              Syncing...
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[var(--bg-surface-hover)] text-[var(--text-primary)]">
+                            {item.state.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <div className={`w-2 h-2 rounded-full ${item.priority === 'HIGH' || item.priority === 'URGENT' ? 'bg-[var(--priority-high)]' : 'bg-[var(--priority-medium)]'}`}></div>
+                            <span className="text-[12px] text-[var(--text-secondary)]">{item.priority}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="w-6 h-6 rounded-[var(--radius-avatar)] bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-[10px] text-[var(--text-primary)]" title={item.assignedTo || 'Unassigned'}>
+                              {item.assignedTo ? item.assignedTo.substring(0,2).toUpperCase() : 'UI'}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

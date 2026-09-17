@@ -1,15 +1,16 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React from 'react';
 import {
   DndContext,
   useDraggable,
   useDroppable,
   DragEndEvent,
 } from '@dnd-kit/core';
-import { GripVertical, X } from 'lucide-react';
+import { GripVertical, X, Loader2 } from 'lucide-react';
 import { WorkItem } from '@/hooks/useWorkItems';
 import { WorkItemState } from '@/hooks/useWorkItemStates';
+import { useToast } from '@/components/Toast';
 
 type BoardProps = {
   items: WorkItem[];
@@ -38,17 +39,6 @@ export function Board({
   storyByParentId = {},
   disableInternalDnd = false,
 }: BoardProps) {
-  const [optimistic, setOptimistic] = useState<Record<string, WorkItem>>({});
-
-  const workingItems = useMemo(() => {
-    const byId = new Map<string, WorkItem>();
-    items.forEach((item) => byId.set(item.id, item));
-    Object.values(optimistic).forEach((item) => {
-      if (byId.has(item.id)) byId.set(item.id, item);
-    });
-    return [...byId.values()];
-  }, [items, optimistic]);
-
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
@@ -59,15 +49,8 @@ export function Board({
     const item = active.data.current?.item as WorkItem | undefined;
     if (!item || item.state === stateKey) return;
 
-    setOptimistic((prev) => ({
-      ...prev,
-      [item.id]: { ...item, state: stateKey },
-    }));
     onStateChange(item.id, stateKey);
   };
-
-
-
 
   const content = (
     <div className="flex gap-4 overflow-x-auto pb-4 items-stretch h-full w-full min-h-[400px]">
@@ -75,7 +58,7 @@ export function Board({
         <StateColumn
           key={state.id}
           state={state}
-          items={workingItems.filter((w) => w.state === state.key)}
+          items={items.filter((w) => w.state === state.key)}
           onSelectItem={onSelectItem}
           onRemoveItem={onRemoveItem}
           storyByParentId={storyByParentId}
@@ -169,9 +152,13 @@ function Card({
   onRemove?: (item: WorkItem) => void;
   story?: { key: string; title: string };
 }) {
+  const { isItemPending } = useToast();
+  const isPending = isItemPending(item.id);
+
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: item.id,
     data: { item },
+    disabled: isPending,
   });
 
   return (
@@ -180,21 +167,28 @@ function Card({
       onClick={() => onSelect(item)}
       className={`group bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] p-2.5 shadow-sm hover:shadow-md hover:border-[var(--border-strong)] cursor-grab active:cursor-grabbing transition-all ${
         isDragging ? 'opacity-40 rotate-2' : ''
-      }`}
+      } ${isPending ? 'opacity-70 border-[var(--brand-primary)]/50 ring-1 ring-[var(--brand-primary)]/30' : ''}`}
       {...listeners}
       {...attributes}
     >
       <div className="flex items-center gap-1.5 mb-1.5">
-        <span
-          className="inline-flex items-center px-1.5 py-0.5 rounded-[var(--radius-button)] text-[10px] font-semibold"
-        >
-          <GripVertical className="w-3 h-3 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] transition-colors" />
-        </span>
+        {isPending ? (
+          <Loader2 className="w-3.5 h-3.5 text-[var(--brand-primary)] animate-spin shrink-0" />
+        ) : (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded-[var(--radius-button)] text-[10px] font-semibold">
+            <GripVertical className="w-3 h-3 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] transition-colors" />
+          </span>
+        )}
         <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[var(--radius-button)] text-[10px] font-semibold ${TYPE_COLORS[item.type] || TYPE_COLORS.TASK}`}>
           {item.type}
         </span>
         <span className="text-[11px] font-medium text-[var(--text-secondary)]">{item.key}</span>
-        {story && (
+        {isPending && (
+          <span className="text-[9px] font-medium text-[var(--brand-primary)] bg-[var(--bg-surface-selected)] px-1 rounded animate-pulse">
+            Syncing...
+          </span>
+        )}
+        {story && !isPending && (
           <span className="ml-auto text-[10px] font-medium text-[var(--text-muted)] truncate max-w-[90px]" title={story.title}>
             {story.key}
           </span>
@@ -205,7 +199,7 @@ function Card({
               e.stopPropagation();
               onRemove(item);
             }}
-            className="p-0.5 text-[var(--text-muted)] hover:text-[var(--priority-high)] opacity-0 group-hover:opacity-100 transition-opacity"
+            className="p-0.5 text-[var(--text-muted)] hover:text-[var(--priority-high)] opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
             title="Remove from iteration"
           >
             <X className="w-3.5 h-3.5" />

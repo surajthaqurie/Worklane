@@ -2,12 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WorkItemTransitionsService } from './work-item-transitions.service.js';
 import { WorkItemsRepository } from './work-items.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
+import { AuthorizationService } from '../authorization/authorization.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 describe('WorkItemTransitionsService', () => {
   let service: WorkItemTransitionsService;
   let repo: any;
   let projectsService: any;
+  let authz: any;
 
   beforeEach(async () => {
     repo = {
@@ -19,11 +22,25 @@ describe('WorkItemTransitionsService', () => {
       assertProjectMember: vi.fn(),
     };
 
+    authz = {
+      requireProjectPermission: vi.fn().mockImplementation(async (projectId, userId) => ({
+        projectId,
+        userId,
+        role: 'ADMIN',
+      })),
+    };
+
+    const notifications = {
+      notifyStateChanged: vi.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkItemTransitionsService,
         { provide: WorkItemsRepository, useValue: repo },
         { provide: ProjectsService, useValue: projectsService },
+        { provide: AuthorizationService, useValue: authz },
+        { provide: NotificationsService, useValue: notifications },
       ],
     }).compile();
 
@@ -32,7 +49,7 @@ describe('WorkItemTransitionsService', () => {
 
   it('should allow valid transition', async () => {
     repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'New', type: 'TASK' });
-    projectsService.assertProjectMember.mockResolvedValue(true);
+    authz.requireProjectPermission.mockResolvedValue({ role: 'ADMIN' });
     repo.updateState.mockResolvedValue({ id: '1', state: 'Active' });
 
     const result = await service.transitionState('u1', '1', 'Active');
@@ -42,7 +59,7 @@ describe('WorkItemTransitionsService', () => {
 
   it('should reject invalid transition', async () => {
     repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'New', type: 'TASK' });
-    projectsService.assertProjectMember.mockResolvedValue(true);
+    authz.requireProjectPermission.mockResolvedValue({ role: 'ADMIN' });
 
     await expect(service.transitionState('u1', '1', 'Resolved')).rejects.toThrow(BadRequestException);
     expect(repo.updateState).not.toHaveBeenCalled();
@@ -50,7 +67,7 @@ describe('WorkItemTransitionsService', () => {
 
   it('should reject unauthorized transition', async () => {
     repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'New', type: 'TASK' });
-    projectsService.assertProjectMember.mockRejectedValue(new ForbiddenException());
+    authz.requireProjectPermission.mockRejectedValue(new ForbiddenException());
 
     await expect(service.transitionState('u1', '1', 'Active')).rejects.toThrow(ForbiddenException);
     expect(repo.updateState).not.toHaveBeenCalled();

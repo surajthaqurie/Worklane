@@ -1,9 +1,12 @@
 import { WorkItemFilterDto } from "./dto/filter.dto.js";
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { WorkItemsRepository } from './work-items.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { TeamsService } from '../teams/teams.service.js';
+import { AuthorizationService } from '../authorization/authorization.service.js';
+import { Permission } from '../authorization/permissions.js';
 import { CreateWorkItemDto, UpdateWorkItemDto } from './dto/work-items.dto.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 @Injectable()
 export class WorkItemsService {
@@ -11,20 +14,23 @@ export class WorkItemsService {
     private readonly repo: WorkItemsRepository,
     private readonly projectsService: ProjectsService,
     private readonly teamsService: TeamsService,
+    private readonly authz: AuthorizationService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async create(userId: string, projectId: string, data: CreateWorkItemDto) {
-    const project = await this.projectsService.assertProjectMember(
-      projectId,
-      userId,
-    );
+    // Never trust projectId from the client alone — confirm membership via authz
+    await this.authz.requireProjectPermission(projectId, userId, Permission.WORK_ITEM_CREATE);
+
+    const project = await this.projectsService.assertProjectMember(projectId, userId);
+
     if (data.parentId) {
+      // validateParent already checks cross-project (parent must be in same project)
       await this.validateParent(data.parentId, data.type, projectId);
     }
+
     const createData = { ...data } as CreateWorkItemDto;
 
-    // When creating from within a team context, the item is placed into the
-    // team's default area (and default iteration) unless overridden.
     if (createData.teamId) {
       await this.teamsService.assertTeamMember(projectId, createData.teamId, userId);
       const settings = await this.teamsService.getSettings(userId, projectId, createData.teamId);
@@ -37,17 +43,29 @@ export class WorkItemsService {
     }
 
     const item = await this.repo.createWorkItem(projectId, userId, createData);
-    return this.mapWorkItem(item, project.key);
+    const mapped = this.mapWorkItem(item, project.key);
+
+    if (createData.assignedTo) {
+      await this.notifications.notifyAssigned({
+        actorId: userId,
+        workItemId: item.id,
+        title: item.title,
+        key: mapped.key,
+        assignedTo: createData.assignedTo,
+      });
+    }
+
+    return mapped;
   }
 
   async findAll(userId: string, projectId: string, filters: WorkItemFilterDto) {
-    const project = await this.projectsService.assertProjectMember(
-      projectId,
-      userId,
-    );
+    await this.authz.requireProjectPermission(projectId, userId, Permission.WORK_ITEM_VIEW);
+
+    const project = await this.projectsService.assertProjectMember(projectId, userId);
     if (filters.teamId && filters.teamId !== 'default' && filters.teamId !== 'undefined') {
       await this.teamsService.assertTeamMember(projectId, filters.teamId, userId);
     }
+    // DB query is always project-scoped — projectId comes from the URL param, not the body
     const items = await this.repo.getWorkItems(projectId, filters);
     return items.map((item) => this.mapWorkItem(item, project.key));
   }
@@ -55,20 +73,29 @@ export class WorkItemsService {
   async findOne(userId: string, id: string) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
-    const project = await this.projectsService.assertProjectMember(
-      item.project_id,
-      userId,
-    );
+
+    // Derive the project from the item, never from client input
+    await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_VIEW);
+
+    const project = await this.projectsService.assertProjectMember(item.project_id, userId);
     return this.mapWorkItem(item, project.key);
   }
 
   async update(userId: string, id: string, data: UpdateWorkItemDto) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
-    const project = await this.projectsService.assertProjectMember(
-      item.project_id,
-      userId,
-    );
+
+    // Determine required permission based on what fields are being changed
+    if (data.assignedTo !== undefined && Object.keys(data).length === 1) {
+      // Only assigning — requires WORK_ITEM_ASSIGN
+      await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_ASSIGN);
+    } else {
+      // General edit — requires WORK_ITEM_EDIT
+      await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_EDIT);
+    }
+
+    const project = await this.projectsService.assertProjectMember(item.project_id, userId);
+
     if ((data as any).state !== undefined) {
       throw new BadRequestException('State transitions must be done via the dedicated transition endpoint');
     }
@@ -77,6 +104,7 @@ export class WorkItemsService {
       if (data.parentId) {
         if (data.parentId === id) throw new BadRequestException('Cannot set self as parent');
         const typeToValidate = data.type || item.type;
+        // validateParent enforces same-project constraint
         await this.validateParent(data.parentId, typeToValidate, item.project_id);
         await this.checkCircularDependency(id, data.parentId);
       }
@@ -85,24 +113,93 @@ export class WorkItemsService {
            await this.validateParent(item.parent_id, data.type, item.project_id);
        }
     }
+
     if (data.iterationId !== undefined && data.iterationId) {
       const iterationProjectId = await this.repo.getIterationProjectId(data.iterationId);
       if (!iterationProjectId) {
         throw new BadRequestException('Iteration not found');
       }
+      // Cross-project iteration assignment check
       if (iterationProjectId !== item.project_id) {
         throw new BadRequestException('Iteration does not belong to the same project');
       }
     }
+
+    if (data.areaId !== undefined && data.areaId) {
+      // Cross-project area assignment check
+      const areaProjectId = await this.repo.getAreaProjectId(data.areaId);
+      if (!areaProjectId || areaProjectId !== item.project_id) {
+        throw new BadRequestException('Area does not belong to the same project');
+      }
+    }
+
     const updated = await this.repo.updateWorkItem(id, userId, data);
-    return this.mapWorkItem(updated, project.key);
+    const mapped = this.mapWorkItem(updated, project.key);
+
+    if (data.assignedTo !== undefined && data.assignedTo !== item.assigned_to && data.assignedTo) {
+      await this.notifications.notifyAssigned({
+        actorId: userId,
+        workItemId: id,
+        title: updated.title,
+        key: mapped.key,
+        assignedTo: data.assignedTo,
+      });
+    }
+
+    if (data.iterationId !== undefined && data.iterationId !== item.iteration_id) {
+      if (data.iterationId) {
+        await this.notifications.notifyAddedToSprint({
+          actorId: userId,
+          workItemId: id,
+          title: updated.title,
+          key: mapped.key,
+          assignedTo: updated.assigned_to,
+          createdBy: updated.created_by,
+          iterationId: data.iterationId,
+        });
+      } else {
+        await this.notifications.notifyRemovedFromSprint({
+          actorId: userId,
+          workItemId: id,
+          title: updated.title,
+          key: mapped.key,
+          assignedTo: updated.assigned_to,
+          createdBy: updated.created_by,
+          previousIterationId: item.iteration_id,
+        });
+      }
+    }
+
+    if (data.parentId !== undefined && data.parentId !== item.parent_id) {
+      let newParentAssignedTo: string | null = null;
+      if (data.parentId) {
+        const parentItem = await this.repo.getWorkItemById(data.parentId);
+        newParentAssignedTo = parentItem?.assigned_to ?? null;
+      }
+      await this.notifications.notifyParentChanged({
+        actorId: userId,
+        workItemId: id,
+        title: updated.title,
+        key: mapped.key,
+        assignedTo: updated.assigned_to,
+        createdBy: updated.created_by,
+        oldParentId: item.parent_id,
+        newParentId: data.parentId ?? null,
+        newParentAssignedTo,
+      });
+    }
+
+    return mapped;
   }
 
   private async validateParent(parentId: string, childType: string, projectId: string) {
     const parent = await this.repo.getWorkItemById(parentId);
     if (!parent) throw new BadRequestException('Parent not found');
-    if (parent.project_id !== projectId) throw new BadRequestException('Cross-project parent is not allowed');
-    
+    // Cross-project parent assignment is explicitly forbidden
+    if (parent.project_id !== projectId) {
+      throw new ForbiddenException('Cross-project parent assignment is not allowed');
+    }
+
     const allowedParents: Record<string, string[]> = {
       'EPIC': [],
       'FEATURE': ['EPIC'],
@@ -110,7 +207,7 @@ export class WorkItemsService {
       'TASK': ['STORY', 'BUG'],
       'BUG': ['STORY'],
     };
-    
+
     const allowed = allowedParents[childType] || [];
     if (!allowed.includes(parent.type)) {
       throw new BadRequestException(`Work item of type ${parent.type} cannot be parent of ${childType}`);
@@ -132,7 +229,10 @@ export class WorkItemsService {
   async remove(userId: string, id: string) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
-    await this.projectsService.assertProjectMember(item.project_id, userId);
+
+    // Delete requires elevated permission (ADMIN or OWNER)
+    await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_DELETE);
+
     await this.repo.deleteWorkItem(id, userId);
     return { success: true };
   }
@@ -144,7 +244,7 @@ export class WorkItemsService {
   ) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
-    await this.projectsService.assertProjectMember(item.project_id, userId);
+    await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_VIEW);
     return await this.repo.getComments(id, {
       limit: opts.limit ?? 20,
       cursor: opts.cursor,
@@ -154,8 +254,64 @@ export class WorkItemsService {
   async addComment(userId: string, id: string, content: string) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
-    await this.projectsService.assertProjectMember(item.project_id, userId);
-    return await this.repo.createComment(id, userId, content);
+    await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_VIEW);
+
+    const comment = await this.repo.createComment(id, userId, content);
+    const project = await this.projectsService.assertProjectMember(item.project_id, userId);
+    const key = `${project.key}-${item.seq_no}`;
+
+    await this.parseAndNotifyMentions(
+      userId,
+      item.project_id,
+      id,
+      item.title,
+      key,
+      comment.id,
+      content,
+    );
+
+    return comment;
+  }
+
+  private async parseAndNotifyMentions(
+    actorId: string,
+    projectId: string,
+    workItemId: string,
+    title: string,
+    key: string,
+    commentId: string,
+    content: string,
+  ) {
+    const uuidRegex = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g;
+    const foundUuids = content.match(uuidRegex) || [];
+
+    const members = await this.projectsService.getMembers(actorId, projectId);
+    const mentionedUserIds = new Set<string>(foundUuids);
+
+    const lowerContent = content.toLowerCase();
+    for (const member of members) {
+      if (member.userId === actorId) continue;
+      const nameMatch = member.name && lowerContent.includes(`@${member.name.toLowerCase()}`);
+      const emailMatch = member.email && lowerContent.includes(`@${member.email.toLowerCase()}`);
+      const idMatch = lowerContent.includes(`@${member.userId.toLowerCase()}`);
+      if (nameMatch || emailMatch || idMatch) {
+        mentionedUserIds.add(member.userId);
+      }
+    }
+
+    const userIds = Array.from(mentionedUserIds);
+    if (userIds.length > 0) {
+      const snippet = content.length > 100 ? content.slice(0, 100) + '...' : content;
+      await this.notifications.notifyMentioned({
+        actorId,
+        workItemId,
+        title,
+        key,
+        commentId,
+        snippet,
+        mentionedUserIds: userIds,
+      });
+    }
   }
 
   async updateComment(
@@ -167,14 +323,29 @@ export class WorkItemsService {
   ) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
-    await this.projectsService.assertProjectMember(item.project_id, userId);
+    await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_VIEW);
 
-    return await this.repo.updateComment(
+    const updated = await this.repo.updateComment(
       commentId,
       userId,
       content,
       expectedVersion,
     );
+
+    const project = await this.projectsService.assertProjectMember(item.project_id, userId);
+    const key = `${project.key}-${item.seq_no}`;
+
+    await this.parseAndNotifyMentions(
+      userId,
+      item.project_id,
+      id,
+      item.title,
+      key,
+      commentId,
+      content,
+    );
+
+    return updated;
   }
 
   async deleteComment(
@@ -185,7 +356,7 @@ export class WorkItemsService {
   ) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
-    await this.projectsService.assertProjectMember(item.project_id, userId);
+    await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_VIEW);
 
     return await this.repo.deleteComment(commentId, userId, expectedVersion);
   }
@@ -193,7 +364,7 @@ export class WorkItemsService {
   async getActivity(userId: string, id: string) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
-    await this.projectsService.assertProjectMember(item.project_id, userId);
+    await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_VIEW);
     return await this.repo.getActivity(id);
   }
 
@@ -221,3 +392,4 @@ export class WorkItemsService {
     };
   }
 }
+

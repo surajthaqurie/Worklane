@@ -1,5 +1,6 @@
 import { fetchWithAuth } from './fetcher';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/components/Toast';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -125,10 +126,9 @@ export function useBacklogLevel(
 ) {
   return useQuery<BacklogResponse>({
     queryKey: backlogKeys.level(projectId, filters),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
 
-      // parentId: explicit null → 'null', string → string, undefined → omit (defaults to top-level)
       if (filters.parentId === null) {
         params.set('parentId', 'null');
       } else if (filters.parentId !== undefined) {
@@ -148,18 +148,20 @@ export function useBacklogLevel(
 
       const res = await fetchWithAuth(
         `${API_URL}/projects/${projectId}/backlog?${params.toString()}`,
+        { signal },
       );
       if (!res.ok) throw new Error('Failed to fetch backlog');
       return res.json();
     },
     enabled: options?.enabled !== false,
-    staleTime: 10_000, // 10 s — backlog changes are intentional, not background-refreshed aggressively
+    staleTime: 10_000,
   });
 }
 
 /** Reorder a single item in the backlog (drag-and-drop). */
 export function useReorderBacklogItem(projectId: string, teamId?: string | null) {
   const queryClient = useQueryClient();
+  const { showSuccess, showError, addPendingItem, removePendingItem } = useToast();
 
   return useMutation({
     mutationFn: async (payload: {
@@ -172,23 +174,57 @@ export function useReorderBacklogItem(projectId: string, teamId?: string | null)
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, teamId: teamId ?? undefined }),
       });
-      if (!res.ok) throw new Error('Failed to reorder backlog item');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to reorder backlog item');
+      }
       return res.json();
     },
-    // Optimistic update: immediately reorder in the cache
     onMutate: async (payload) => {
+      addPendingItem(payload.id);
       await queryClient.cancelQueries({ queryKey: backlogKeys.all(projectId) });
+
       const snapshots = queryClient.getQueriesData<BacklogResponse>({
         queryKey: backlogKeys.all(projectId),
       });
-      return { snapshots };
+
+      // Optimistically update backlog cache
+      queryClient.setQueriesData<BacklogResponse>(
+        { queryKey: backlogKeys.all(projectId) },
+        (old) => {
+          if (!old || !Array.isArray(old.items)) return old;
+
+          const hasItem = old.items.some((i) => i.id === payload.id);
+          if (!hasItem) return old;
+
+          const updatedItems = old.items.map((i) =>
+            i.id === payload.id
+              ? { ...i, backlogRank: payload.newRank, parentId: payload.parentId }
+              : i,
+          );
+
+          updatedItems.sort((a, b) => (a.backlogRank ?? 0) - (b.backlogRank ?? 0));
+
+          return {
+            ...old,
+            items: updatedItems,
+          };
+        },
+      );
+
+      return { snapshots, id: payload.id };
     },
-    onError: (_err, _payload, ctx) => {
+    onSuccess: () => {
+      showSuccess('Backlog order updated');
+    },
+    onError: (err: Error, payload, ctx) => {
       if (ctx?.snapshots) {
         ctx.snapshots.forEach(([key, data]) => queryClient.setQueryData(key, data));
       }
+      showError('Failed to reorder backlog item', `${err.message}. Position reverted.`);
     },
-    onSettled: () => {
+    onSettled: (_data, _err, payload) => {
+      removePendingItem(payload.id);
       queryClient.invalidateQueries({ queryKey: backlogKeys.all(projectId) });
     },
   });
@@ -197,6 +233,7 @@ export function useReorderBacklogItem(projectId: string, teamId?: string | null)
 /** Bulk assign iteration to multiple items. */
 export function useBulkAssignIteration(projectId: string, teamId?: string | null) {
   const queryClient = useQueryClient();
+  const { showSuccess, showError, addPendingItem, removePendingItem } = useToast();
 
   return useMutation({
     mutationFn: async (payload: { itemIds: string[]; iterationId: string | null }) => {
@@ -208,12 +245,58 @@ export function useBulkAssignIteration(projectId: string, teamId?: string | null
           body: JSON.stringify({ ...payload, teamId: teamId ?? undefined }),
         },
       );
-      if (!res.ok) throw new Error('Failed to assign iteration');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to assign iteration');
+      }
       return res.json();
     },
-    onSettled: () => {
+    onMutate: async (payload) => {
+      payload.itemIds.forEach((id) => addPendingItem(id));
+      await queryClient.cancelQueries({ queryKey: backlogKeys.all(projectId) });
+      await queryClient.cancelQueries({ queryKey: ['projects', projectId, 'work-items'] });
+
+      const snapshots = queryClient.getQueriesData({ queryKey: ['projects', projectId] });
+
+      // Optimistically set iterationId
+      queryClient.setQueriesData({ queryKey: ['projects', projectId] }, (old: any) => {
+        if (!old) return old;
+        if (Array.isArray(old.items)) {
+          return {
+            ...old,
+            items: old.items.map((i: any) =>
+              payload.itemIds.includes(i.id)
+                ? { ...i, iterationId: payload.iterationId }
+                : i,
+            ),
+          };
+        }
+        if (Array.isArray(old)) {
+          return old.map((i: any) =>
+            payload.itemIds.includes(i.id)
+              ? { ...i, iterationId: payload.iterationId }
+              : i,
+          );
+        }
+        return old;
+      });
+
+      return { snapshots, itemIds: payload.itemIds };
+    },
+    onSuccess: (_data, payload) => {
+      showSuccess('Iteration assigned', `Updated ${payload.itemIds.length} item(s)`);
+    },
+    onError: (err: Error, _payload, ctx) => {
+      if (ctx?.snapshots) {
+        ctx.snapshots.forEach(([key, data]) => queryClient.setQueryData(key, data));
+      }
+      showError('Failed to assign iteration', `${err.message}. Changes reverted.`);
+    },
+    onSettled: (_data, _err, payload) => {
+      payload.itemIds.forEach((id) => removePendingItem(id));
       queryClient.invalidateQueries({ queryKey: backlogKeys.all(projectId) });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'iterations'] });
     },
   });
 }

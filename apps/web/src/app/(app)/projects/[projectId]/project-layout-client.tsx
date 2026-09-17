@@ -3,6 +3,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useProject } from '@/hooks/useProjects';
 import { useTeams, Team } from '@/hooks/useTeams';
+import { useProjectPermissions } from '@/hooks/useProjectPermissions';
+import { PermissionValue } from '@/config/permissions';
 import { Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
@@ -12,6 +14,14 @@ interface ProjectContextValue {
   teams: Team[];
   selectedTeamId: string | null;
   setSelectedTeamId: (id: string | null) => void;
+  /** Returns true if the current user has the given permission in this project. */
+  can: (permission: PermissionValue) => boolean;
+  /** Returns true if the current user has ALL of the given permissions. */
+  canAll: (...permissions: PermissionValue[]) => boolean;
+  /** Returns true if the current user has ANY of the given permissions. */
+  canAny: (...permissions: PermissionValue[]) => boolean;
+  /** The user's role in this project (OWNER | ADMIN | MEMBER | null). */
+  projectRole: string | null;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -35,6 +45,8 @@ export function ProjectLayoutClient({
   const { data: project, isLoading, error } = useProject(projectId);
   const { data: teamsData } = useTeams(projectId);
   const teams = teamsData ?? [];
+
+  const { can, canAll, canAny, role: projectRole } = useProjectPermissions(projectId);
 
   const storageKey = `worklane:selectedTeam:${projectId}`;
   const [selectedTeamId, setSelectedTeamIdState] = useState<string | null>(null);
@@ -103,7 +115,19 @@ export function ProjectLayoutClient({
   }
 
   return (
-    <ProjectContext.Provider value={{ project, projectId, teams, selectedTeamId: effectiveTeamId, setSelectedTeamId }}>
+    <ProjectContext.Provider
+      value={{
+        project,
+        projectId,
+        teams,
+        selectedTeamId: effectiveTeamId,
+        setSelectedTeamId,
+        can,
+        canAll,
+        canAny,
+        projectRole,
+      }}
+    >
       <AppShell sidebar={<ProjectSidebar />}>
         {children}
       </AppShell>

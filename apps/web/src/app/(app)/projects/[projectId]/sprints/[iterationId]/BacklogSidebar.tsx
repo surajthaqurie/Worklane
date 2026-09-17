@@ -3,25 +3,42 @@ import React from 'react';
 import { useWorkItems, WorkItem } from '@/hooks/useWorkItems';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { useDraggable } from '@dnd-kit/core';
-import { GripVertical, X } from 'lucide-react';
+import { Loader2, GripVertical, X } from 'lucide-react';
+import { useToast } from '@/components/Toast';
 
 function DraggableBacklogItem({ item }: { item: WorkItem }) {
+  const { isItemPending } = useToast();
+  const isPending = isItemPending(item.id);
+
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: item.id,
     data: { item, fromBacklog: true },
+    disabled: isPending,
   });
 
   return (
     <div
       ref={setNodeRef}
-      className={`p-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-card)] flex flex-col gap-2 ${isDragging ? 'opacity-50' : ''}`}
+      className={`p-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-card)] flex flex-col gap-2 ${
+        isDragging ? 'opacity-50' : ''
+      } ${isPending ? 'opacity-70 border-[var(--brand-primary)]/40' : ''}`}
     >
       <div className="flex items-center gap-2">
-        <button className="text-[var(--text-muted)] cursor-grab active:cursor-grabbing" {...listeners} {...attributes}>
-          <GripVertical className="w-4 h-4" />
-        </button>
+        {isPending ? (
+          <Loader2 className="w-4 h-4 text-[var(--brand-primary)] animate-spin shrink-0" />
+        ) : (
+          <button className="text-[var(--text-muted)] cursor-grab active:cursor-grabbing" {...listeners} {...attributes}>
+            <GripVertical className="w-4 h-4" />
+          </button>
+        )}
         <span className="text-[12px] font-medium text-[var(--text-secondary)]">{item.key}</span>
-        <span className="text-[11px] bg-[var(--bg-surface-hover)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)] ml-auto">{item.type}</span>
+        {isPending ? (
+          <span className="text-[9px] font-medium text-[var(--brand-primary)] bg-[var(--bg-surface-selected)] px-1 rounded animate-pulse ml-auto">
+            Assigning...
+          </span>
+        ) : (
+          <span className="text-[11px] bg-[var(--bg-surface-hover)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)] ml-auto">{item.type}</span>
+        )}
       </div>
       <p className="text-[13px] font-medium text-[var(--text-primary)] leading-snug pl-6">{item.title}</p>
     </div>

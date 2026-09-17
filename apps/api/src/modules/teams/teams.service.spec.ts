@@ -7,11 +7,13 @@ import {
 import { TeamsService } from './teams.service.js';
 import { TeamsRepository } from './teams.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
+import { AuthorizationService } from '../authorization/authorization.service.js';
 
 describe('TeamsService', () => {
   let service: TeamsService;
   let repo: any;
   let projectsService: any;
+  let authz: any;
 
   const team = {
     id: 'team-1',
@@ -49,11 +51,21 @@ describe('TeamsService', () => {
       findOne: vi.fn(),
     };
 
+    authz = {
+      requireProjectPermission: vi.fn().mockImplementation(async (projectId, userId) => ({
+        projectId,
+        userId,
+        role: 'ADMIN',
+      })),
+      requireProjectMember: vi.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TeamsService,
         { provide: TeamsRepository, useValue: repo },
         { provide: ProjectsService, useValue: projectsService },
+        { provide: AuthorizationService, useValue: authz },
       ],
     }).compile();
 
@@ -63,7 +75,7 @@ describe('TeamsService', () => {
   // ─── Authorization ─────────────────────────────────────────────────────────
 
   it('should throw ForbiddenException when user is not a project member', async () => {
-    projectsService.assertProjectMember.mockRejectedValue(new ForbiddenException());
+    authz.requireProjectPermission.mockRejectedValue(new ForbiddenException());
     await expect(service.findAll('u1', 'p1')).rejects.toThrow(ForbiddenException);
     await expect(service.create('u1', 'p1', { name: 'X' })).rejects.toThrow(
       ForbiddenException,

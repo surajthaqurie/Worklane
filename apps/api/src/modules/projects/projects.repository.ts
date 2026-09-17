@@ -83,6 +83,15 @@ export class ProjectsRepository {
         .values({ team_id: team.id, user_id: data.created_by, role: 'ADMIN' })
         .execute();
 
+      // Creator automatically becomes OWNER in project_members
+      await trx
+        .insertInto('project_members')
+        .values({ project_id: project.id, user_id: data.created_by, role: 'OWNER' })
+        .onConflict((oc) =>
+          oc.columns(['project_id', 'user_id']).doUpdateSet({ role: 'OWNER' }),
+        )
+        .execute();
+
       return project;
     });
   }
@@ -123,10 +132,13 @@ export class ProjectsRepository {
     return await db.deleteFrom('projects').where('id', '=', id).execute();
   }
 
-  async addMember(projectId: string, userId: string) {
+  async addMember(projectId: string, userId: string, role: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER') {
     return await db
       .insertInto('project_members')
-      .values({ project_id: projectId, user_id: userId })
+      .values({ project_id: projectId, user_id: userId, role })
+      .onConflict((oc) =>
+        oc.columns(['project_id', 'user_id']).doUpdateSet({ role }),
+      )
       .returningAll()
       .executeTakeFirstOrThrow();
   }
@@ -142,9 +154,20 @@ export class ProjectsRepository {
         'users.name',
         'users.email',
         'users.avatar_url as avatarUrl',
+        'project_members.role',
         'project_members.created_at as joinedAt',
       ])
       .execute();
+  }
+
+  async updateMemberRole(projectId: string, userId: string, role: 'OWNER' | 'ADMIN' | 'MEMBER') {
+    return await db
+      .updateTable('project_members')
+      .set({ role })
+      .where('project_id', '=', projectId)
+      .where('user_id', '=', userId)
+      .returningAll()
+      .executeTakeFirst();
   }
 
   async removeMember(projectId: string, userId: string) {

@@ -5,6 +5,8 @@ import { Menu, Moon, Sun } from 'lucide-react';
 import { useTheme } from '../providers';
 import { GlobalSearch } from '../GlobalSearch';
 
+import { NotificationsPopover } from '../NotificationsPopover';
+
 interface AppTopbarProps {
   onMenuClick: () => void;
 }
@@ -36,6 +38,8 @@ export function AppTopbar({ onMenuClick }: AppTopbarProps) {
         </div>
       </div>
       <div className="flex items-center ml-4 md:ml-6 gap-3">
+        <NotificationsPopover />
+
         <button
           onClick={toggleTheme}
           className="flex items-center justify-center w-8 h-8 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"

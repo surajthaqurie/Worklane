@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { WorkItemsRepository } from './work-items.repository.js';
-import { ProjectsService } from '../projects/projects.service.js';
+import { AuthorizationService } from '../authorization/authorization.service.js';
+import { Permission } from '../authorization/permissions.js';
+
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 export type WorkItemState = 'New' | 'Active' | 'Resolved' | 'Closed' | 'Removed';
 
@@ -46,7 +49,8 @@ export const STATE_TRANSITIONS: Record<string, Record<WorkItemState, WorkItemSta
 export class WorkItemTransitionsService {
   constructor(
     private readonly repo: WorkItemsRepository,
-    private readonly projectsService: ProjectsService,
+    private readonly authz: AuthorizationService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async transitionState(userId: string, id: string, targetState: string) {
@@ -55,7 +59,12 @@ export class WorkItemTransitionsService {
       throw new NotFoundException('Work item not found');
     }
 
-    await this.projectsService.assertProjectMember(item.project_id, userId);
+    // Derive project from the item row — never from client input
+    await this.authz.requireProjectPermission(
+      item.project_id,
+      userId,
+      Permission.WORK_ITEM_CHANGE_STATE,
+    );
 
     const currentState = item.state as WorkItemState;
     const type = item.type;
@@ -65,15 +74,29 @@ export class WorkItemTransitionsService {
     }
 
     const validTransitions = STATE_TRANSITIONS[type][currentState] || [];
-    
+
     if (currentState === targetState) {
-        throw new BadRequestException(`Work item is already in state ${targetState}`);
+      throw new BadRequestException(`Work item is already in state ${targetState}`);
     }
 
     if (!validTransitions.includes(targetState as WorkItemState)) {
-      throw new BadRequestException(`Invalid state transition from ${currentState} to ${targetState} for type ${type}`);
+      throw new BadRequestException(
+        `Invalid state transition from ${currentState} to ${targetState} for type ${type}`,
+      );
     }
 
-    return await this.repo.updateState(id, userId, currentState, targetState);
+    const updated = await this.repo.updateState(id, userId, currentState, targetState);
+
+    await this.notifications.notifyStateChanged({
+      actorId: userId,
+      workItemId: id,
+      title: item.title,
+      assignedTo: item.assigned_to,
+      createdBy: item.created_by,
+      oldState: currentState,
+      newState: targetState,
+    });
+
+    return updated;
   }
 }

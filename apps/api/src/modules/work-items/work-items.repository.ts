@@ -21,6 +21,15 @@ export class WorkItemsRepository {
     return iteration?.project_id ?? null;
   }
 
+  async getAreaProjectId(areaId: string): Promise<string | null> {
+    const area = await db
+      .selectFrom('areas')
+      .select('project_id')
+      .where('id', '=', areaId)
+      .executeTakeFirst();
+    return area?.project_id ?? null;
+  }
+
   async createWorkItem(projectId: string, userId: string, data: CreateWorkItemDto) {
     return await db.transaction().execute(async (trx) => {
       const project = await trx

@@ -6,6 +6,8 @@ import {
 import { IterationsRepository } from './iterations.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { TeamsService } from '../teams/teams.service.js';
+import { AuthorizationService } from '../authorization/authorization.service.js';
+import { Permission } from '../authorization/permissions.js';
 import {
   CreateIterationDto,
   UpdateIterationDto,
@@ -14,18 +16,23 @@ import {
   BulkMoveWorkItemsDto,
 } from './dto/iterations.dto.js';
 
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { db } from '../../db/kysely.js';
+
 @Injectable()
 export class IterationsService {
   constructor(
     private readonly repo: IterationsRepository,
     private readonly projectsService: ProjectsService,
     private readonly teamsService: TeamsService,
+    private readonly authz: AuthorizationService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ─── Create ───────────────────────────────────────────────────────────────
 
   async create(userId: string, projectId: string, data: CreateIterationDto) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_CREATE);
 
     // Validate dates
     this.repo.validateDates(data.startDate, data.endDate);
@@ -51,7 +58,7 @@ export class IterationsService {
   // ─── List ─────────────────────────────────────────────────────────────────
 
   async findAllByProject(userId: string, projectId: string, teamId?: string) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_VIEW);
     const all = await this.repo.findAllByProject(projectId);
     if (!teamId || teamId === 'default' || teamId === 'undefined') return all;
     await this.teamsService.assertTeamMember(projectId, teamId, userId);
@@ -63,7 +70,7 @@ export class IterationsService {
   // ─── Single ───────────────────────────────────────────────────────────────
 
   async findOne(userId: string, projectId: string, id: string) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_VIEW);
     const iteration = await this.repo.findOne(id);
     if (!iteration || iteration.projectId !== projectId) {
       throw new NotFoundException('Iteration not found');
@@ -74,7 +81,7 @@ export class IterationsService {
   // ─── Update ───────────────────────────────────────────────────────────────
 
   async update(userId: string, projectId: string, id: string, data: UpdateIterationDto) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_EDIT);
 
     const iteration = await this.repo.findOne(id);
     if (!iteration || iteration.projectId !== projectId) {
@@ -161,7 +168,7 @@ export class IterationsService {
   // ─── Activate ─────────────────────────────────────────────────────────────
 
   async activate(userId: string, projectId: string, id: string) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_EDIT);
 
     const iteration = await this.repo.findOne(id);
     if (!iteration || iteration.projectId !== projectId) {
@@ -195,7 +202,7 @@ export class IterationsService {
     id: string,
     opts: CompleteIterationDto,
   ) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_COMPLETE);
 
     const iteration = await this.repo.findOne(id);
     if (!iteration || iteration.projectId !== projectId) {
@@ -257,7 +264,7 @@ export class IterationsService {
   // ─── Delete ───────────────────────────────────────────────────────────────
 
   async remove(userId: string, projectId: string, id: string) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_DELETE);
 
     const iteration = await this.repo.findOne(id);
     if (!iteration || iteration.projectId !== projectId) {
@@ -285,7 +292,7 @@ export class IterationsService {
   // ─── Work item management ─────────────────────────────────────────────────
 
   async addWorkItems(userId: string, projectId: string, id: string, data: AddWorkItemsDto) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_EDIT);
 
     const iteration = await this.repo.findOne(id);
     if (!iteration || iteration.projectId !== projectId) {
@@ -293,6 +300,27 @@ export class IterationsService {
     }
 
     await this.repo.addWorkItems(id, data.workItemIds, userId);
+
+    for (const itemId of data.workItemIds) {
+      const item = await db
+        .selectFrom('work_items')
+        .where('id', '=', itemId)
+        .select(['id', 'title', 'assigned_to', 'created_by'])
+        .executeTakeFirst()
+        .catch(() => undefined);
+      if (item) {
+        await this.notifications.notifyAddedToSprint({
+          actorId: userId,
+          workItemId: item.id,
+          title: item.title,
+          assignedTo: item.assigned_to,
+          createdBy: item.created_by,
+          iterationId: id,
+          sprintName: iteration.name,
+        });
+      }
+    }
+
     return { success: true };
   }
 
@@ -302,14 +330,34 @@ export class IterationsService {
     iterationId: string,
     workItemId: string,
   ) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_EDIT);
 
     const iteration = await this.repo.findOne(iterationId);
     if (!iteration || iteration.projectId !== projectId) {
       throw new NotFoundException('Iteration not found');
     }
 
+    const item = await db
+      .selectFrom('work_items')
+      .where('id', '=', workItemId)
+      .select(['id', 'title', 'assigned_to', 'created_by'])
+      .executeTakeFirst()
+      .catch(() => undefined);
+
     await this.repo.removeWorkItem(iterationId, workItemId, userId);
+
+    if (item) {
+      await this.notifications.notifyRemovedFromSprint({
+        actorId: userId,
+        workItemId: item.id,
+        title: item.title,
+        assignedTo: item.assigned_to,
+        createdBy: item.created_by,
+        previousIterationId: iterationId,
+        sprintName: iteration.name,
+      });
+    }
+
     return { success: true };
   }
 
@@ -319,7 +367,7 @@ export class IterationsService {
     iterationId: string,
     data: BulkMoveWorkItemsDto,
   ) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_EDIT);
 
     const iteration = await this.repo.findOne(iterationId);
     if (!iteration || iteration.projectId !== projectId) {
@@ -345,7 +393,7 @@ export class IterationsService {
   // ─── Sprint backlog (enriched) ────────────────────────────────────────────
 
   async getSprintBacklog(userId: string, projectId: string, id: string, teamId?: string) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_VIEW);
 
     const iteration = await this.repo.findOne(id);
     if (!iteration || iteration.projectId !== projectId) {
@@ -365,7 +413,7 @@ export class IterationsService {
    * are included so the frontend renders the full workflow.
    */
   async getSprintBoard(userId: string, projectId: string, id: string, teamId?: string) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_VIEW);
 
     const iteration = await this.repo.findOne(id);
     if (!iteration || iteration.projectId !== projectId) {

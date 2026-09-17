@@ -117,8 +117,14 @@ export default function IterationDetailPage() {
     const isFromBacklog = active.data.current?.fromBacklog;
     
     if (isFromBacklog) {
-      updateWorkItem.mutate({ id: itemId, data: { iterationId } });
-      transitionWorkItem.mutate({ id: itemId, state: stateKey });
+      updateWorkItem.mutate(
+        { id: itemId, data: { iterationId } },
+        {
+          onSuccess: () => {
+            transitionWorkItem.mutate({ id: itemId, state: stateKey });
+          },
+        },
+      );
     } else {
       transitionWorkItem.mutate({ id: itemId, state: stateKey });
     }

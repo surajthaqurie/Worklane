@@ -3,9 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
-export function useWorkItems(projectId: string, filters: Record<string, string> = {}) {
+export function useWorkItems(projectId: string, filters: Record<string, string> = {}, teamId?: string | null) {
   return useQuery({
-    queryKey: ['projects', projectId, 'work-items', filters],
+    queryKey: ['projects', projectId, 'work-items', filters, teamId ?? null],
     queryFn: async () => {
       const searchParams = new URLSearchParams();
       if (filters.state) searchParams.set('state', filters.state);
@@ -17,6 +17,7 @@ export function useWorkItems(projectId: string, filters: Record<string, string> 
       if (filters.tags) searchParams.set('tags', filters.tags);
       if (filters.search) searchParams.set('search', filters.search);
       if (filters.parentId !== undefined) searchParams.set('parentId', filters.parentId);
+      if (teamId) searchParams.set('teamId', teamId);
       
       const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/work-items?${searchParams.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch work items');

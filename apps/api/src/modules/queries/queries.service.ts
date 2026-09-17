@@ -11,6 +11,7 @@ import {
   updateQuerySchema,
   queryDefinitionSchema,
 } from './dto/queries.dto.js';
+import { validateQueryDefinition } from './dto/query-validation.js';
 
 @Injectable()
 export class QueriesService {
@@ -22,6 +23,11 @@ export class QueriesService {
   async findAll(userId: string, projectId: string) {
     await this.projectsService.assertProjectMember(projectId, userId);
     return this.repo.findAllByProject(projectId);
+  }
+
+  async recent(userId: string, projectId: string) {
+    await this.projectsService.assertProjectMember(projectId, userId);
+    return this.repo.findRecent(projectId, userId);
   }
 
   async findOne(userId: string, projectId: string, id: string) {
@@ -39,6 +45,8 @@ export class QueriesService {
         parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
       );
 
+    this.assertValidDefinition(parsed.data.definition);
+
     await this.projectsService.assertProjectMember(projectId, userId);
     return this.repo.create(projectId, userId, parsed.data);
   }
@@ -49,6 +57,10 @@ export class QueriesService {
       throw new BadRequestException(
         parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
       );
+
+    if (parsed.data.definition !== undefined) {
+      this.assertValidDefinition(parsed.data.definition);
+    }
 
     await this.projectsService.assertProjectMember(projectId, userId);
     const existing = await this.findOne(userId, projectId, id);
@@ -75,7 +87,7 @@ export class QueriesService {
 
   async runSaved(userId: string, projectId: string, id: string) {
     const query = await this.findOne(userId, projectId, id);
-    return this.runDefinition(userId, projectId, query.definition);
+    return this.runDefinition(userId, projectId, query.definition, query.id);
   }
 
   async runAdhoc(userId: string, projectId: string, definition: any) {
@@ -88,18 +100,45 @@ export class QueriesService {
         parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
       );
 
-    return this.runDefinition(userId, projectId, parsed.data);
+    this.assertValidDefinition(parsed.data);
+    return this.runDefinition(userId, projectId, parsed.data, null);
+  }
+
+  private assertValidDefinition(definition: any) {
+    try {
+      validateQueryDefinition(definition);
+    } catch (errors) {
+      const messages = Array.isArray(errors) ? errors : [String(errors)];
+      throw new BadRequestException(messages);
+    }
   }
 
   private async runDefinition(
     userId: string,
     projectId: string,
     definition: any,
+    queryId: string | null,
   ) {
     const project = await this.projectsService.assertProjectMember(
       projectId,
       userId,
     );
-    return this.repo.execute(projectId, definition, userId, project.key);
+
+    const parsed = queryDefinitionSchema.safeParse(definition);
+    if (!parsed.success)
+      throw new BadRequestException(
+        parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
+      );
+
+    this.assertValidDefinition(parsed.data);
+
+    const rows = await this.repo.execute(
+      projectId,
+      parsed.data,
+      userId,
+      project.key,
+    );
+    await this.repo.recordRun(projectId, queryId, userId, parsed.data);
+    return rows;
   }
 }

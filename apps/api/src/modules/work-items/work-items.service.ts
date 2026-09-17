@@ -2,6 +2,7 @@ import { WorkItemFilterDto } from "./dto/filter.dto.js";
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { WorkItemsRepository } from './work-items.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
+import { TeamsService } from '../teams/teams.service.js';
 import { CreateWorkItemDto, UpdateWorkItemDto } from './dto/work-items.dto.js';
 
 @Injectable()
@@ -9,6 +10,7 @@ export class WorkItemsService {
   constructor(
     private readonly repo: WorkItemsRepository,
     private readonly projectsService: ProjectsService,
+    private readonly teamsService: TeamsService,
   ) {}
 
   async create(userId: string, projectId: string, data: CreateWorkItemDto) {
@@ -19,7 +21,22 @@ export class WorkItemsService {
     if (data.parentId) {
       await this.validateParent(data.parentId, data.type, projectId);
     }
-    const item = await this.repo.createWorkItem(projectId, userId, data);
+    const createData = { ...data } as CreateWorkItemDto;
+
+    // When creating from within a team context, the item is placed into the
+    // team's default area (and default iteration) unless overridden.
+    if (createData.teamId) {
+      await this.teamsService.assertTeamMember(projectId, createData.teamId, userId);
+      const settings = await this.teamsService.getSettings(userId, projectId, createData.teamId);
+      if (!createData.areaId && settings.defaultAreaId) {
+        createData.areaId = settings.defaultAreaId;
+      }
+      if (!createData.iterationId && settings.defaultIterationId) {
+        createData.iterationId = settings.defaultIterationId;
+      }
+    }
+
+    const item = await this.repo.createWorkItem(projectId, userId, createData);
     return this.mapWorkItem(item, project.key);
   }
 
@@ -28,6 +45,9 @@ export class WorkItemsService {
       projectId,
       userId,
     );
+    if (filters.teamId && filters.teamId !== 'default' && filters.teamId !== 'undefined') {
+      await this.teamsService.assertTeamMember(projectId, filters.teamId, userId);
+    }
     const items = await this.repo.getWorkItems(projectId, filters);
     return items.map((item) => this.mapWorkItem(item, project.key));
   }
@@ -64,6 +84,15 @@ export class WorkItemsService {
        if (item.parent_id) {
            await this.validateParent(item.parent_id, data.type, item.project_id);
        }
+    }
+    if (data.iterationId !== undefined && data.iterationId) {
+      const iterationProjectId = await this.repo.getIterationProjectId(data.iterationId);
+      if (!iterationProjectId) {
+        throw new BadRequestException('Iteration not found');
+      }
+      if (iterationProjectId !== item.project_id) {
+        throw new BadRequestException('Iteration does not belong to the same project');
+      }
     }
     const updated = await this.repo.updateWorkItem(id, userId, data);
     return this.mapWorkItem(updated, project.key);

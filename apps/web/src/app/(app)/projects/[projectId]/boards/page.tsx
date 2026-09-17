@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useBoardWorkItems, WorkItem, useTransitionWorkItemState } from '@/hooks/useWorkItems';
 import { useWorkItemStates } from '@/hooks/useWorkItemStates';
+import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { Board } from '@/components/Board';
 import { StatesManager } from '@/components/StatesManager';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
@@ -11,6 +12,7 @@ import { SquareKanban, Search, Filter } from 'lucide-react';
 export default function ProjectBoardPage() {
   const params = useParams();
   const projectId = params.projectId as string;
+  const { selectedTeamId } = useProjectContext();
 
   const [backlogLevel, setBacklogLevel] = useState<'EPIC' | 'FEATURE' | 'STORY'>('STORY');
   const [search, setSearch] = useState('');
@@ -32,7 +34,7 @@ export default function ProjectBoardPage() {
     return f;
   }, [search, assignedTo, tags, typeFilter]);
 
-  const { data: workItems = [], isLoading: isLoadingWorkItems, error } = useBoardWorkItems(projectId, 'default', filters);
+  const { data: workItems = [], isLoading: isLoadingWorkItems, error } = useBoardWorkItems(projectId, selectedTeamId ?? 'default', filters);
   const { data: states = [] } = useWorkItemStates(projectId);
   const transitionWorkItem = useTransitionWorkItemState(projectId);
 

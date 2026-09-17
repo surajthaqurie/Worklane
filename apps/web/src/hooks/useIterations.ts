@@ -14,11 +14,31 @@ export type Iteration = {
   endDate: string;
   state: 'PLANNED' | 'ACTIVE' | 'COMPLETED';
   parentId: string | null;
+  path?: string;
+  order?: number;
+  hasChildren?: boolean;
   createdAt: string;
   updatedAt: string;
   workItemsCount?: number;
   doneWorkItemsCount?: number;
   incompleteCount?: number;
+};
+
+export type WorkItemStateSummary = {
+  id: string;
+  projectId: string;
+  key: string;
+  name: string;
+  color: string;
+  sortOrder: number;
+  isDone: boolean;
+};
+
+export type SprintBoard = {
+  iteration: Iteration;
+  states: WorkItemStateSummary[];
+  groups: { state: WorkItemStateSummary; items: SprintWorkItem[] }[];
+  total: number;
 };
 
 export type SprintWorkItem = {
@@ -44,6 +64,7 @@ export type SprintWorkItem = {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  closedAt: string | null;
 };
 
 // ─── Query key helpers ───────────────────────────────────────────────────────
@@ -51,17 +72,20 @@ export type SprintWorkItem = {
 const iterationKeys = {
   all: (projectId: string) => ['projects', projectId, 'iterations'] as const,
   one: (projectId: string, id: string) => ['projects', projectId, 'iterations', id] as const,
-  backlog: (projectId: string, id: string) =>
-    ['projects', projectId, 'iterations', id, 'backlog'] as const,
+  board: (projectId: string, id: string) =>
+    ['projects', projectId, 'iterations', id, 'board'] as const,
 };
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-export function useIterations(projectId: string) {
+export function useIterations(projectId: string, teamId?: string | null) {
   return useQuery<Iteration[]>({
-    queryKey: iterationKeys.all(projectId),
+    queryKey: ['projects', projectId, 'iterations', { teamId: teamId ?? null }],
     queryFn: async () => {
-      const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/iterations`);
+      const params = new URLSearchParams();
+      if (teamId) params.set('teamId', teamId);
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/iterations${qs}`);
       if (!res.ok) throw new Error('Failed to fetch iterations');
       return res.json();
     },
@@ -84,34 +108,23 @@ export function useIteration(projectId: string, iterationId: string) {
   });
 }
 
-// ─── Sprint backlog (enriched work items) ────────────────────────────────────
+// ─── Sprint board (grouped by workflow state) ────────────────────────────────
 
-export function useSprintBacklog(
-  projectId: string,
-  iterationId: string,
-  options?: { enabled?: boolean },
-) {
-  return useQuery<SprintWorkItem[]>({
-    queryKey: iterationKeys.backlog(projectId, iterationId),
+export function useSprintBoard(projectId: string, iterationId: string, teamId?: string | null) {
+  return useQuery<SprintBoard>({
+    queryKey: [...iterationKeys.board(projectId, iterationId), teamId ?? null],
     queryFn: async () => {
+      const params = new URLSearchParams();
+      if (teamId) params.set('teamId', teamId);
+      const qs = params.toString() ? `?${params.toString()}` : '';
       const res = await fetchWithAuth(
-        `${API_URL}/projects/${projectId}/iterations/${iterationId}/backlog`,
+        `${API_URL}/projects/${projectId}/iterations/${iterationId}/board${qs}`,
       );
-      if (!res.ok) throw new Error('Failed to fetch sprint backlog');
+      if (!res.ok) throw new Error('Failed to fetch sprint board');
       return res.json();
     },
-    enabled: options?.enabled !== false && !!iterationId,
+    enabled: !!iterationId,
   });
-}
-
-// ─── Legacy (used by board page) ─────────────────────────────────────────────
-
-export function useIterationWorkItems(
-  projectId: string,
-  iterationId: string,
-  filters: Record<string, string> = {},
-) {
-  return useSprintBacklog(projectId, iterationId, { enabled: !!iterationId });
 }
 
 // ─── Create ───────────────────────────────────────────────────────────────────
@@ -183,6 +196,7 @@ export function useActivateIteration(projectId: string) {
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
       queryClient.invalidateQueries({ queryKey: iterationKeys.one(projectId, id) });
+      queryClient.invalidateQueries({ queryKey: iterationKeys.board(projectId, id) });
     },
   });
 }
@@ -220,6 +234,7 @@ export function useCompleteIteration(projectId: string) {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
       queryClient.invalidateQueries({ queryKey: iterationKeys.one(projectId, id) });
+      queryClient.invalidateQueries({ queryKey: iterationKeys.board(projectId, id) });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'backlog'] });
     },
@@ -250,37 +265,7 @@ export function useDeleteIteration(projectId: string) {
   });
 }
 
-// ─── Add / Remove work items ─────────────────────────────────────────────────
-
-export function useAddWorkItemsToIteration(projectId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      iterationId,
-      workItemIds,
-    }: {
-      iterationId: string;
-      workItemIds: string[];
-    }) => {
-      const res = await fetchWithAuth(
-        `${API_URL}/projects/${projectId}/iterations/${iterationId}/work-items`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ workItemIds }),
-        },
-      );
-      if (!res.ok) throw new Error('Failed to add work items to iteration');
-      return res.json();
-    },
-    onSuccess: (_, { iterationId }) => {
-      queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
-      queryClient.invalidateQueries({ queryKey: iterationKeys.backlog(projectId, iterationId) });
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'backlog'] });
-    },
-  });
-}
+// ─── Remove work item ──────────────────────────────────────────────────────
 
 export function useRemoveWorkItemFromIteration(projectId: string) {
   const queryClient = useQueryClient();
@@ -301,44 +286,7 @@ export function useRemoveWorkItemFromIteration(projectId: string) {
     },
     onSuccess: (_, { iterationId }) => {
       queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
-      queryClient.invalidateQueries({ queryKey: iterationKeys.backlog(projectId, iterationId) });
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'backlog'] });
-    },
-  });
-}
-
-// ─── Bulk move ────────────────────────────────────────────────────────────────
-
-export function useBulkMoveWorkItems(projectId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      iterationId,
-      workItemIds,
-      targetIterationId,
-    }: {
-      iterationId: string;
-      workItemIds: string[];
-      targetIterationId: string | null;
-    }) => {
-      const res = await fetchWithAuth(
-        `${API_URL}/projects/${projectId}/iterations/${iterationId}/work-items/bulk-move`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ workItemIds, targetIterationId }),
-        },
-      );
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || 'Failed to move work items');
-      }
-      return res.json();
-    },
-    onSuccess: (_, { iterationId }) => {
-      queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
-      queryClient.invalidateQueries({ queryKey: iterationKeys.backlog(projectId, iterationId) });
+      queryClient.invalidateQueries({ queryKey: iterationKeys.board(projectId, iterationId) });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
       queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'backlog'] });
     },

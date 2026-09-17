@@ -10,6 +10,7 @@ export const CreateWorkItemSchema = z.object({
   parentId: z.string().uuid().optional().nullable(),
   areaId: z.string().uuid().optional().nullable(),
   iterationId: z.string().uuid().optional().nullable(),
+  teamId: z.string().uuid().optional().nullable(),
   tags: z.array(z.string()).optional(),
   closedAt: z.string().datetime().optional().nullable(),
 });
@@ -23,6 +24,7 @@ export class CreateWorkItemDto {
   parentId?: string | null;
   areaId?: string | null;
   iterationId?: string | null;
+  teamId?: string | null;
   tags?: string[];
   closedAt?: string | null;
 }

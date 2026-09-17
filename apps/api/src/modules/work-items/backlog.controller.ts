@@ -10,18 +10,21 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '../projects/auth.guard.js';
-import { BacklogRepository, ReorderPayload } from './backlog.repository.js';
+import { BacklogRepository } from './backlog.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
+import { TeamsService } from '../teams/teams.service.js';
 
 class ReorderDto {
   id: string;
   parentId: string | null;
   newRank: number;
+  teamId?: string;
 }
 
 class BulkAssignIterationDto {
   itemIds: string[];
   iterationId: string | null;
+  teamId?: string;
 }
 
 @Controller()
@@ -30,6 +33,7 @@ export class BacklogController {
   constructor(
     private readonly backlogRepo: BacklogRepository,
     private readonly projectsService: ProjectsService,
+    private readonly teamsService: TeamsService,
   ) {}
 
   /**
@@ -54,10 +58,20 @@ export class BacklogController {
     @Query('assignedTo') assignedTo?: string,
     @Query('iterationId') iterationId?: string,
     @Query('areaId') areaId?: string,
+    @Query('teamId') teamId?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
     const project = await this.projectsService.assertProjectMember(projectId, req.user.id);
+
+    let teamAreaIds: string[] | undefined;
+    let teamIterationIds: string[] | undefined;
+    if (teamId && teamId !== 'default' && teamId !== 'undefined') {
+      await this.teamsService.assertTeamMember(projectId, teamId, req.user.id);
+      const scope = await this.teamsService.getTeamScope(projectId, teamId);
+      teamAreaIds = scope.areaIds;
+      teamIterationIds = scope.iterationIds;
+    }
 
     // Resolve parentId: 'null' string → null, undefined → null (top level), else string uuid
     let resolvedParentId: string | null;
@@ -78,6 +92,8 @@ export class BacklogController {
         assignedTo,
         iterationId,
         areaId,
+        teamAreaIds,
+        teamIterationIds,
         limit: limit ? parseInt(limit, 10) : 100,
         offset: offset ? parseInt(offset, 10) : 0,
       },
@@ -105,6 +121,15 @@ export class BacklogController {
       throw new BadRequestException('newRank is required');
     }
 
+    if (dto.teamId && dto.teamId !== 'default') {
+      await this.teamsService.assertItemsInTeamScope(
+        req.user.id,
+        projectId,
+        dto.teamId,
+        [dto.id],
+      );
+    }
+
     await this.backlogRepo.reorderItem(projectId, req.user.id, {
       id: dto.id,
       parentId: dto.parentId ?? null,
@@ -130,6 +155,15 @@ export class BacklogController {
 
     if (!Array.isArray(dto.itemIds) || dto.itemIds.length === 0) {
       throw new BadRequestException('itemIds must be a non-empty array');
+    }
+
+    if (dto.teamId && dto.teamId !== 'default') {
+      await this.teamsService.assertItemsInTeamScope(
+        req.user.id,
+        projectId,
+        dto.teamId,
+        dto.itemIds,
+      );
     }
 
     await this.backlogRepo.bulkAssignIteration(

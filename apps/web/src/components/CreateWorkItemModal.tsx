@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useCreateWorkItem } from '@/hooks/useWorkItems';
 import { X } from 'lucide-react';
 
-export function CreateWorkItemModal({ projectId, onClose }: { projectId: string, onClose: () => void }) {
+export function CreateWorkItemModal({ projectId, teamId, onClose }: { projectId: string, teamId?: string | null, onClose: () => void }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<'TASK' | 'BUG' | 'STORY'>('TASK');
@@ -21,7 +21,8 @@ export function CreateWorkItemModal({ projectId, onClose }: { projectId: string,
       description,
       type,
       priority,
-      state: 'New'
+      state: 'New',
+      ...(teamId ? { teamId } : {})
     }, {
       onSuccess: () => onClose()
     });

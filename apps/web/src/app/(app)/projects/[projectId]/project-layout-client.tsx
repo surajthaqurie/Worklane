@@ -1,13 +1,17 @@
 'use client';
 
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useProject } from '@/hooks/useProjects';
+import { useTeams, Team } from '@/hooks/useTeams';
 import { Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 interface ProjectContextValue {
   project: any;
   projectId: string;
+  teams: Team[];
+  selectedTeamId: string | null;
+  setSelectedTeamId: (id: string | null) => void;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -29,6 +33,37 @@ export function ProjectLayoutClient({
   projectId: string;
 }) {
   const { data: project, isLoading, error } = useProject(projectId);
+  const { data: teamsData } = useTeams(projectId);
+  const teams = teamsData ?? [];
+
+  const storageKey = `worklane:selectedTeam:${projectId}`;
+  const [selectedTeamId, setSelectedTeamIdState] = useState<string | null>(null);
+
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(storageKey);
+    } catch {
+      stored = null;
+    }
+    setSelectedTeamIdState(stored);
+  }, [storageKey]);
+
+  const effectiveTeamId =
+    selectedTeamId && teams.some((t) => t.id === selectedTeamId) ? selectedTeamId : null;
+
+  const setSelectedTeamId = useCallback(
+    (id: string | null) => {
+      setSelectedTeamIdState(id);
+      try {
+        if (id) window.localStorage.setItem(storageKey, id);
+        else window.localStorage.removeItem(storageKey);
+      } catch {
+        // ignore storage errors
+      }
+    },
+    [storageKey],
+  );
 
   if (isLoading) {
     return (
@@ -53,7 +88,7 @@ export function ProjectLayoutClient({
             </div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Project Not Found</h2>
             <p className="text-[14px] text-[var(--text-secondary)] mb-6">
-              The project you're looking for doesn't exist, or you don't have permission to access it.
+              The project you&apos;re looking for doesn&apos;t exist, or you don&apos;t have permission to access it.
             </p>
             <Link
               href="/projects"
@@ -68,7 +103,7 @@ export function ProjectLayoutClient({
   }
 
   return (
-    <ProjectContext.Provider value={{ project, projectId }}>
+    <ProjectContext.Provider value={{ project, projectId, teams, selectedTeamId: effectiveTeamId, setSelectedTeamId }}>
       <AppShell sidebar={<ProjectSidebar />}>
         {children}
       </AppShell>

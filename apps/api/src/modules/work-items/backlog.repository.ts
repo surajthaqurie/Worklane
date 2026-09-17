@@ -58,6 +58,8 @@ export class BacklogRepository {
       assignedTo?: string;
       iterationId?: string;
       areaId?: string;
+      teamAreaIds?: string[];
+      teamIterationIds?: string[];
       limit?: number;
       offset?: number;
     },
@@ -112,6 +114,20 @@ export class BacklogRepository {
       }
     }
     if (opts.areaId) query = query.where('wi.area_id', '=', opts.areaId);
+
+    // Team scope: items in the team's areas and in the team's iterations
+    // (or not yet assigned to any iteration).
+    if (opts.teamAreaIds && opts.teamAreaIds.length > 0) {
+      query = query.where('wi.area_id', 'in', opts.teamAreaIds);
+    }
+    if (opts.teamIterationIds) {
+      query = query.where((eb) =>
+        eb.or([
+          eb('wi.iteration_id', 'is', null),
+          eb('wi.iteration_id', 'in', opts.teamIterationIds!),
+        ]),
+      );
+    }
 
     // Count total matching items (before pagination)
     const countQuery = query.select(sql<number>`count(*)`.as('count'));

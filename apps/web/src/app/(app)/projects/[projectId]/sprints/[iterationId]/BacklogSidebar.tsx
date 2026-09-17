@@ -1,6 +1,7 @@
 'use client';
 import React from 'react';
 import { useWorkItems, WorkItem } from '@/hooks/useWorkItems';
+import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { useDraggable } from '@dnd-kit/core';
 import { GripVertical, X } from 'lucide-react';
 
@@ -28,7 +29,8 @@ function DraggableBacklogItem({ item }: { item: WorkItem }) {
 }
 
 export function BacklogSidebar({ projectId, onClose }: { projectId: string; onClose: () => void }) {
-  const { data: workItems = [], isLoading } = useWorkItems(projectId, {});
+  const { selectedTeamId } = useProjectContext();
+  const { data: workItems = [], isLoading } = useWorkItems(projectId, {}, selectedTeamId);
   const backlogItems = workItems.filter((item: WorkItem) => !item.iterationId);
 
   return (

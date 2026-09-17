@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { format, differenceInCalendarDays } from 'date-fns';
 import {
@@ -12,7 +12,6 @@ import {
   PlayCircle,
   CheckCircle2,
   Pencil,
-  ChevronDown,
   AlertCircle,
   Loader2,
 } from 'lucide-react';
@@ -25,8 +24,20 @@ import {
   useCompleteIteration,
   useDeleteIteration,
 } from '@/hooks/useIterations';
+import { CompleteSprintDialog } from '@/components/CompleteSprintDialog';
+import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 
-// ─── State config ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function iterationPath(it: Iteration): string {
+  return it.path && it.path !== it.name ? it.path : it.name;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : '';
+}
+
+// â”€â”€â”€ State config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const STATE_CONFIG: Record<
   Iteration['state'],
@@ -52,10 +63,11 @@ const STATE_CONFIG: Record<
   },
 };
 
-// ─── Sprints page ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Sprints page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function Iterations({ projectId }: { projectId: string }) {
-  const { data: iterations = [], isLoading, error, refetch } = useIterations(projectId);
+  const { selectedTeamId } = useProjectContext();
+  const { data: iterations = [], isLoading, error, refetch } = useIterations(projectId, selectedTeamId);
   const createIteration = useCreateIteration(projectId);
   const updateIteration = useUpdateIteration(projectId);
   const activateIteration = useActivateIteration(projectId);
@@ -68,6 +80,7 @@ export function Iterations({ projectId }: { projectId: string }) {
     goal: '',
     startDate: '',
     endDate: '',
+    parentId: '',
   });
   const [createError, setCreateError] = useState('');
 
@@ -78,6 +91,7 @@ export function Iterations({ projectId }: { projectId: string }) {
     goal: '',
     startDate: '',
     endDate: '',
+    parentId: '',
   });
   const [editError, setEditError] = useState('');
 
@@ -91,10 +105,10 @@ export function Iterations({ projectId }: { projectId: string }) {
   const todayStr = format(today, 'yyyy-MM-dd');
   const defaultEnd = format(new Date(today.getTime() + 14 * 86400000), 'yyyy-MM-dd');
 
-  // ── Create ────────────────────────────────────────────────────────────────
+  // â”€â”€ Create â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const openCreate = () => {
-    setCreateForm({ name: '', goal: '', startDate: todayStr, endDate: defaultEnd });
+    setCreateForm({ name: '', goal: '', startDate: todayStr, endDate: defaultEnd, parentId: '' });
     setCreateError('');
     setShowCreate(true);
   };
@@ -113,14 +127,15 @@ export function Iterations({ projectId }: { projectId: string }) {
         goal: createForm.goal.trim() || undefined,
         startDate: new Date(createForm.startDate + 'T00:00:00.000Z').toISOString(),
         endDate: new Date(createForm.endDate + 'T00:00:00.000Z').toISOString(),
+        parentId: createForm.parentId || undefined,
       });
       setShowCreate(false);
-    } catch (err: any) {
-      setCreateError(err.message || 'Failed to create sprint.');
+    } catch (err) {
+      setCreateError(errorMessage(err) || 'Failed to create sprint.');
     }
   };
 
-  // ── Inline Edit ───────────────────────────────────────────────────────────
+  // â”€â”€ Inline Edit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const startEdit = (iteration: Iteration) => {
     setEditingId(iteration.id);
@@ -129,6 +144,7 @@ export function Iterations({ projectId }: { projectId: string }) {
       goal: iteration.goal ?? '',
       startDate: format(new Date(iteration.startDate), 'yyyy-MM-dd'),
       endDate: format(new Date(iteration.endDate), 'yyyy-MM-dd'),
+      parentId: iteration.parentId ?? '',
     });
     setEditError('');
   };
@@ -147,15 +163,16 @@ export function Iterations({ projectId }: { projectId: string }) {
           goal: editForm.goal.trim() || null,
           startDate: new Date(editForm.startDate + 'T00:00:00.000Z').toISOString(),
           endDate: new Date(editForm.endDate + 'T00:00:00.000Z').toISOString(),
+          parentId: editForm.parentId || null,
         },
       });
       setEditingId(null);
-    } catch (err: any) {
-      setEditError(err.message || 'Failed to save.');
+    } catch (err) {
+      setEditError(errorMessage(err) || 'Failed to save.');
     }
   };
 
-  // ── Activate ──────────────────────────────────────────────────────────────
+  // â”€â”€ Activate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const [activateError, setActivateError] = useState<Record<string, string>>({});
 
@@ -163,32 +180,32 @@ export function Iterations({ projectId }: { projectId: string }) {
     setActivateError((prev) => ({ ...prev, [id]: '' }));
     try {
       await activateIteration.mutateAsync(id);
-    } catch (err: any) {
+    } catch (err) {
       setActivateError((prev) => ({
         ...prev,
-        [id]: err.message || 'Could not start sprint.',
+        [id]: errorMessage(err) || 'Could not start sprint.',
       }));
     }
   };
 
-  // ── Delete ────────────────────────────────────────────────────────────────
+  // â”€â”€ Delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleDelete = async (id: string) => {
     try {
       await deleteIteration.mutateAsync(id);
       setConfirmDeleteId(null);
-    } catch (err: any) {
-      // silently fail, iteration is gone
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete sprint.');
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20 gap-2 text-[var(--text-muted)]">
         <Loader2 className="w-4 h-4 animate-spin" />
-        <span className="text-[13px]">Loading sprints…</span>
+        <span className="text-[13px]">Loading sprintsâ€¦</span>
       </div>
     );
   }
@@ -327,6 +344,27 @@ export function Iterations({ projectId }: { projectId: string }) {
                             />
                           </div>
                         </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[12px] font-medium text-[var(--text-secondary)]">
+                            Parent / Group
+                          </label>
+                          <select
+                            value={editForm.parentId}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, parentId: e.target.value })
+                            }
+                            className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-1.5 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]"
+                          >
+                            <option value="">No parent (top level)</option>
+                            {iterations
+                              .filter((it) => it.id !== iteration.id)
+                              .map((it) => (
+                                <option key={it.id} value={it.id}>
+                                  {iterationPath(it)}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
                         {editError && (
                           <div className="flex items-center gap-1.5 text-[12px] text-[var(--priority-high)]">
                             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
@@ -376,6 +414,16 @@ export function Iterations({ projectId }: { projectId: string }) {
                           </span>
                         </div>
 
+                        {/* Iteration path */}
+                        {iteration.path && iteration.path !== iteration.name && (
+                          <p
+                            className="text-[11px] font-mono text-[var(--text-muted)] mb-1 truncate"
+                            title={iteration.path}
+                          >
+                            {iteration.path}
+                          </p>
+                        )}
+
                         {/* Goal */}
                         {iteration.goal && (
                           <p className="text-[13px] text-[var(--text-secondary)] flex items-start gap-1.5 mb-2">
@@ -388,7 +436,7 @@ export function Iterations({ projectId }: { projectId: string }) {
                         <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-[12px] text-[var(--text-muted)] mt-1">
                           <span className="flex items-center gap-1.5">
                             <CalendarDays className="w-3.5 h-3.5" />
-                            {format(new Date(iteration.startDate), 'MMM d, yyyy')} —{' '}
+                            {format(new Date(iteration.startDate), 'MMM d, yyyy')} â€”{' '}
                             {format(new Date(iteration.endDate), 'MMM d, yyyy')}
                           </span>
                           {isActive && daysLeft >= 0 && (
@@ -402,11 +450,11 @@ export function Iterations({ projectId }: { projectId: string }) {
                             </span>
                           )}
                           <span>
-                            {total} {total === 1 ? 'item' : 'items'} · {done} done
+                            {total} {total === 1 ? 'item' : 'items'} Â· {done} done
                             {incomplete > 0 && (
                               <span className="text-[var(--priority-medium)]">
                                 {' '}
-                                · {incomplete} incomplete
+                                Â· {incomplete} incomplete
                               </span>
                             )}
                           </span>
@@ -569,6 +617,23 @@ export function Iterations({ projectId }: { projectId: string }) {
                   placeholder="What will this sprint achieve?"
                 />
               </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[13px] font-medium text-[var(--text-secondary)]">
+                  Parent / Group
+                </label>
+                <select
+                  value={createForm.parentId}
+                  onChange={(e) => setCreateForm({ ...createForm, parentId: e.target.value })}
+                  className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-[13px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]"
+                >
+                  <option value="">No parent (top level)</option>
+                  {iterations.map((it) => (
+                    <option key={it.id} value={it.id}>
+                      {iterationPath(it)}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[13px] font-medium text-[var(--text-secondary)]">
@@ -638,190 +703,5 @@ export function Iterations({ projectId }: { projectId: string }) {
         />
       )}
     </div>
-  );
-}
-
-// ─── Complete Sprint Dialog ───────────────────────────────────────────────────
-
-function CompleteSprintDialog({
-  iteration,
-  iterations,
-  onComplete,
-  onClose,
-}: {
-  iteration: Iteration;
-  iterations: Iteration[];
-  onComplete: ReturnType<typeof useCompleteIteration>;
-  onClose: () => void;
-}) {
-  const incompleteCount = iteration.incompleteCount ?? 0;
-  const [action, setAction] = useState<'MOVE_TO_NEXT' | 'MOVE_TO_BACKLOG'>(
-    incompleteCount > 0 ? 'MOVE_TO_BACKLOG' : 'MOVE_TO_BACKLOG',
-  );
-  const [targetId, setTargetId] = useState(iterations.find((i) => i.state === 'PLANNED')?.id ?? '');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  const handleComplete = async () => {
-    setError('');
-    if (action === 'MOVE_TO_NEXT' && !targetId) {
-      setError('Please select a target sprint.');
-      return;
-    }
-    try {
-      const result = await onComplete.mutateAsync({
-        id: iteration.id,
-        incompleteAction: action,
-        targetIterationId: action === 'MOVE_TO_NEXT' ? targetId : null,
-      });
-      setSuccess(
-        result.movedCount > 0
-          ? `Sprint completed. ${result.movedCount} incomplete item${result.movedCount > 1 ? 's' : ''} moved.`
-          : 'Sprint completed successfully.',
-      );
-      setTimeout(onClose, 1500);
-    } catch (err: any) {
-      setError(err.message || 'Failed to complete sprint.');
-    }
-  };
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-[1px]" onClick={onClose} />
-      <div className="fixed inset-0 m-auto w-full max-w-md h-fit max-h-[90vh] bg-[var(--bg-surface)] shadow-2xl z-50 rounded-[var(--radius-card)] flex flex-col border border-[var(--border-subtle)] overflow-hidden">
-        <div className="flex justify-between items-center p-5 border-b border-[var(--border-subtle)]">
-          <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">
-            Complete Sprint
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-full hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)]"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="p-5 flex flex-col gap-4 overflow-y-auto">
-          <div className="bg-[var(--bg-surface-hover)] rounded-[var(--radius-card)] p-4">
-            <p className="text-[14px] font-semibold text-[var(--text-primary)]">
-              {iteration.name}
-            </p>
-            <div className="mt-1 flex items-center gap-3 text-[12px] text-[var(--text-secondary)]">
-              <span>{iteration.workItemsCount ?? 0} total items</span>
-              <span>·</span>
-              <span className="text-[var(--iteration-completed)]">
-                {iteration.doneWorkItemsCount ?? 0} done
-              </span>
-              {incompleteCount > 0 && (
-                <>
-                  <span>·</span>
-                  <span className="text-[var(--priority-medium)]">
-                    {incompleteCount} incomplete
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-
-          {incompleteCount === 0 ? (
-            <div className="flex items-center gap-2 text-[13px] text-[var(--iteration-completed)]">
-              <CheckCircle2 className="w-4 h-4" />
-              All items are done! Ready to complete this sprint.
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <p className="text-[13px] text-[var(--text-secondary)]">
-                <strong>{incompleteCount}</strong> incomplete{' '}
-                {incompleteCount === 1 ? 'item' : 'items'} will be:
-              </p>
-
-              <label className="flex items-start gap-3 p-3 border rounded-[var(--radius-card)] cursor-pointer hover:bg-[var(--bg-surface-hover)] transition-colors border-[var(--border-default)]">
-                <input
-                  type="radio"
-                  name="incompleteAction"
-                  value="MOVE_TO_BACKLOG"
-                  checked={action === 'MOVE_TO_BACKLOG'}
-                  onChange={() => setAction('MOVE_TO_BACKLOG')}
-                  className="mt-0.5 shrink-0"
-                />
-                <div>
-                  <p className="text-[13px] font-medium text-[var(--text-primary)]">
-                    Move to backlog
-                  </p>
-                  <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
-                    Items will have no sprint assigned
-                  </p>
-                </div>
-              </label>
-
-              {iterations.some((i) => i.state === 'PLANNED') && (
-                <label className="flex items-start gap-3 p-3 border rounded-[var(--radius-card)] cursor-pointer hover:bg-[var(--bg-surface-hover)] transition-colors border-[var(--border-default)]">
-                  <input
-                    type="radio"
-                    name="incompleteAction"
-                    value="MOVE_TO_NEXT"
-                    checked={action === 'MOVE_TO_NEXT'}
-                    onChange={() => setAction('MOVE_TO_NEXT')}
-                    className="mt-0.5 shrink-0"
-                  />
-                  <div className="flex-1">
-                    <p className="text-[13px] font-medium text-[var(--text-primary)]">
-                      Move to next sprint
-                    </p>
-                    {action === 'MOVE_TO_NEXT' && (
-                      <select
-                        value={targetId}
-                        onChange={(e) => setTargetId(e.target.value)}
-                        className="mt-2 w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-1.5 text-[12px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <option value="">Select a sprint…</option>
-                        {iterations
-                          .filter((i) => i.state === 'PLANNED')
-                          .map((i) => (
-                            <option key={i.id} value={i.id}>
-                              {i.name}
-                            </option>
-                          ))}
-                      </select>
-                    )}
-                  </div>
-                </label>
-              )}
-            </div>
-          )}
-
-          {error && (
-            <div className="flex items-center gap-1.5 text-[12px] text-[var(--priority-high)]">
-              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-              {error}
-            </div>
-          )}
-          {success && (
-            <div className="flex items-center gap-1.5 text-[12px] text-[var(--iteration-completed)]">
-              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-              {success}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3 pt-3 border-t border-[var(--border-subtle)]">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-[13px] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] rounded-[var(--radius-button)]"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleComplete}
-              disabled={onComplete.isPending}
-              className="px-4 py-2 bg-[var(--iteration-completed)] text-white text-[13px] font-medium rounded-[var(--radius-button)] hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
-            >
-              {onComplete.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Complete Sprint
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
   );
 }

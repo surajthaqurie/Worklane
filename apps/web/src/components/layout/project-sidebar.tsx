@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { projectNavigation, projectSettingsNavigation } from '../../config/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
+import { TeamSelector } from './team-selector';
 
 export function ProjectSidebar() {
   const pathname = usePathname();
@@ -36,6 +37,8 @@ export function ProjectSidebar() {
           </div>
         </div>
       </div>
+
+      <TeamSelector />
 
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {projectNavigation.map((item) => {

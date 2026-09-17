@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { SearchCheck, Play, Save, X, Plus, Trash2, GripVertical, RotateCcw } from 'lucide-react';
+import { SearchCheck, Play, Save, X, Plus, Trash2, GripVertical, RotateCcw, Clock } from 'lucide-react';
 import {
   useQueries,
+  useRecentQueries,
   useRunQuery,
   useCreateQuery,
   useUpdateQuery,
@@ -18,6 +19,7 @@ import {
 } from '@/hooks/useQueries';
 import { useIterations } from '@/hooks/useIterations';
 import { useWorkItemStates } from '@/hooks/useWorkItemStates';
+import { useAreas } from '@/hooks/useProjects';
 import { WorkItem } from '@/hooks/useWorkItems';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
 import { format } from 'date-fns';
@@ -26,6 +28,8 @@ const DATE_FIELDS = new Set(['createdAt', 'updatedAt', 'completedAt']);
 
 const ENUM_FIELDS: Partial<Record<QueryField, Array<{ value: string; label: string }>>> = {
   type: [
+    { value: 'EPIC', label: 'Epic' },
+    { value: 'FEATURE', label: 'Feature' },
     { value: 'STORY', label: 'Story' },
     { value: 'TASK', label: 'Task' },
     { value: 'BUG', label: 'Bug' },
@@ -40,12 +44,14 @@ const ENUM_FIELDS: Partial<Record<QueryField, Array<{ value: string; label: stri
 
 export function Queries({ projectId }: { projectId: string }) {
   const { data: queries = [], isLoading: isLoadingQueries } = useQueries(projectId);
+  const { data: recent = [] } = useRecentQueries(projectId);
   const runQuery = useRunQuery(projectId);
   const createQuery = useCreateQuery(projectId);
   const updateQuery = useUpdateQuery(projectId);
   const deleteQueryMut = useDeleteQuery(projectId);
   const { data: iterations = [] } = useIterations(projectId);
   const { data: states = [] } = useWorkItemStates(projectId);
+  const { data: areas = [] } = useAreas(projectId);
 
   const [selectedQueryId, setSelectedQueryId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -63,6 +69,10 @@ export function Queries({ projectId }: { projectId: string }) {
   const stateMap = useMemo(
     () => Object.fromEntries(states.map((s) => [s.key, s])),
     [states],
+  );
+  const areaMap = useMemo(
+    () => Object.fromEntries(areas.map((a) => [a.id, a])),
+    [areas],
   );
 
   const shared = queries.filter((q) => q.isShared);
@@ -211,8 +221,23 @@ export function Queries({ projectId }: { projectId: string }) {
     }
     if (col === 'assignedTo') return (value as string | null) ?? <span className="text-[var(--text-muted)]">Unassigned</span>;
     if (col === 'iterationId') return value ? iterationMap[value as string]?.name ?? (value as string) : <span className="text-[var(--text-muted)]">-</span>;
+    if (col === 'areaId') return value ? areaMap[value as string]?.name ?? (value as string) : <span className="text-[var(--text-muted)]">-</span>;
     if (col === 'parentId') return value ? (value as string).slice(0, 8) : <span className="text-[var(--text-muted)]">-</span>;
     if (col === 'createdBy') return value as string;
+    if (col === 'tags') {
+      const list = Array.isArray(value) ? (value as string[]) : [];
+      return list.length > 0 ? (
+        <span className="inline-flex flex-wrap gap-1">
+          {list.map((t) => (
+            <span key={t} className="inline-flex items-center px-1.5 py-0.5 rounded-[100px] text-[11px] bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+              {t}
+            </span>
+          ))}
+        </span>
+      ) : (
+        <span className="text-[var(--text-muted)]">-</span>
+      );
+    }
     if (['createdAt', 'updatedAt', 'completedAt'].includes(col))
       return value ? format(new Date(value as string), 'MMM d, yyyy') : <span className="text-[var(--text-muted)]">-</span>;
     return String(value ?? '');
@@ -223,37 +248,53 @@ export function Queries({ projectId }: { projectId: string }) {
     const isDate = DATE_FIELDS.has(clause.field);
     const enumOptions = ENUM_FIELDS[clause.field];
     const isIterationField = clause.field === 'iterationId';
+    const isAreaField = clause.field === 'areaId';
+    const isTagsField = clause.field === 'tags';
     const isUserField = ['assignedTo', 'createdBy'].includes(clause.field);
+    const isListOperator = ['in', 'notIn'].includes(clause.operator);
+
+    const inputClass =
+      "flex-1 min-w-0 border border-[var(--border-default)] px-2 py-1 rounded-[var(--radius-input)] text-[12px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] text-[var(--text-primary)]";
 
     if (clause.operator === 'between' && isDate) {
       const [start = '', end = ''] = (clause.value ?? '').split(',');
       return (
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <input type="date" value={start} onChange={(e) => updateClause(idx, { value: `${e.target.value},${end}` })}
-            className="flex-1 min-w-0 border border-[var(--border-default)] px-2 py-1 rounded-[var(--radius-input)] text-[12px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]" />
+            className={inputClass} />
           <span className="text-[11px] text-[var(--text-muted)]">to</span>
           <input type="date" value={end} onChange={(e) => updateClause(idx, { value: `${start},${e.target.value}` })}
-            className="flex-1 min-w-0 border border-[var(--border-default)] px-2 py-1 rounded-[var(--radius-input)] text-[12px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]" />
+            className={inputClass} />
         </div>
       );
     }
 
-    if (enumOptions && !['in', 'notIn'].includes(clause.operator)) {
+    if (enumOptions && !isListOperator) {
       return (
         <select value={clause.value} onChange={(e) => updateClause(idx, { value: e.target.value })}
-          className="flex-1 min-w-0 border border-[var(--border-default)] px-2 py-1 rounded-[var(--radius-input)] text-[12px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]">
+          className={inputClass}>
           <option value="">(any)</option>
           {enumOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       );
     }
 
-    if (isIterationField && !['in', 'notIn'].includes(clause.operator)) {
+    if (isIterationField && !isListOperator) {
       return (
         <select value={clause.value} onChange={(e) => updateClause(idx, { value: e.target.value })}
-          className="flex-1 min-w-0 border border-[var(--border-default)] px-2 py-1 rounded-[var(--radius-input)] text-[12px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]">
+          className={inputClass}>
           <option value="">(any)</option>
           {iterations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      );
+    }
+
+    if (isAreaField && !isListOperator) {
+      return (
+        <select value={clause.value} onChange={(e) => updateClause(idx, { value: e.target.value })}
+          className={inputClass}>
+          <option value="">(any)</option>
+          {areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
       );
     }
@@ -261,13 +302,21 @@ export function Queries({ projectId }: { projectId: string }) {
     if (isDate) {
       return (
         <input type="date" value={clause.value} onChange={(e) => updateClause(idx, { value: e.target.value })}
-          className="flex-1 min-w-0 border border-[var(--border-default)] px-2 py-1 rounded-[var(--radius-input)] text-[12px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)]" />
+          className={inputClass} />
       );
     }
 
+    const placeholder = isTagsField
+      ? isListOperator
+        ? 'tag1,tag2'
+        : 'tag name'
+      : isUserField
+        ? '@me'
+        : 'value';
+
     return (
-      <input type="text" value={clause.value} placeholder={isUserField ? '@me' : 'value'} onChange={(e) => updateClause(idx, { value: e.target.value })}
-        className="flex-1 min-w-0 border border-[var(--border-default)] px-2 py-1 rounded-[var(--radius-input)] text-[12px] bg-[var(--bg-surface)] focus:outline-none focus:border-[var(--border-focus)] placeholder:text-[var(--text-muted)]" />
+      <input type="text" value={clause.value} placeholder={placeholder} onChange={(e) => updateClause(idx, { value: e.target.value })}
+        className={`${inputClass} placeholder:text-[var(--text-muted)]`} />
     );
   };
 
@@ -326,6 +375,23 @@ export function Queries({ projectId }: { projectId: string }) {
                   </button>
                 ))}
               </div>
+              {recent.length > 0 && (
+                <div className="pt-2 mt-2 border-t border-[var(--border-subtle)]">
+                  <div className="px-3 pt-3 pb-1.5 text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-3 h-3" />
+                    Recent
+                  </div>
+                  {recent.map((q) => (
+                    <button key={q.id} onClick={() => openSavedQuery(q)}
+                      className={`w-full text-left px-3 py-2 text-[13px] transition-colors flex items-center justify-between ${selectedQueryId === q.id && !editing ? 'bg-[var(--bg-surface)] text-[var(--brand-primary)] font-medium' : 'text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'}`}>
+                      <span className="truncate">{q.name}</span>
+                      {q.lastRunAt && (
+                        <span className="ml-2 text-[11px] text-[var(--text-muted)] shrink-0">{format(new Date(q.lastRunAt), 'MMM d')}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

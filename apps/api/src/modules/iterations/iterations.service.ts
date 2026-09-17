@@ -2,10 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { IterationsRepository } from './iterations.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
+import { TeamsService } from '../teams/teams.service.js';
 import {
   CreateIterationDto,
   UpdateIterationDto,
@@ -19,6 +19,7 @@ export class IterationsService {
   constructor(
     private readonly repo: IterationsRepository,
     private readonly projectsService: ProjectsService,
+    private readonly teamsService: TeamsService,
   ) {}
 
   // ─── Create ───────────────────────────────────────────────────────────────
@@ -28,6 +29,11 @@ export class IterationsService {
 
     // Validate dates
     this.repo.validateDates(data.startDate, data.endDate);
+
+    // A parent iteration must belong to the same project and stay within depth limits
+    if (data.parentId) {
+      await this.repo.validateParent(projectId, data.parentId);
+    }
 
     // Check for overlap within same parent scope
     await this.repo.checkDateOverlap(
@@ -44,9 +50,14 @@ export class IterationsService {
 
   // ─── List ─────────────────────────────────────────────────────────────────
 
-  async findAllByProject(userId: string, projectId: string) {
+  async findAllByProject(userId: string, projectId: string, teamId?: string) {
     await this.projectsService.assertProjectMember(projectId, userId);
-    return this.repo.findAllByProject(projectId);
+    const all = await this.repo.findAllByProject(projectId);
+    if (!teamId || teamId === 'default' || teamId === 'undefined') return all;
+    await this.teamsService.assertTeamMember(projectId, teamId, userId);
+    const scope = await this.teamsService.getTeamScope(projectId, teamId);
+    const selected = new Set(scope.iterationIds);
+    return all.filter((it) => selected.has(it.id));
   }
 
   // ─── Single ───────────────────────────────────────────────────────────────
@@ -75,6 +86,11 @@ export class IterationsService {
       throw new BadRequestException(
         'Use the /activate or /complete endpoints to change sprint state',
       );
+    }
+
+    // Validate parent hierarchy changes (same project, no cycles, depth limit)
+    if (data.parentId !== undefined && (data.parentId ?? null) !== null) {
+      await this.repo.validateParent(projectId, data.parentId!, id);
     }
 
     // Validate dates when changing either boundary
@@ -114,6 +130,19 @@ export class IterationsService {
           data[field] != null ? String(data[field]) : null,
         );
       }
+    }
+    if (
+      data.parentId !== undefined &&
+      (data.parentId ?? null) !== iteration.parentId
+    ) {
+      await this.repo.addHistory(
+        id,
+        userId,
+        'PARENT_CHANGED',
+        'parent_id',
+        iteration.parentId,
+        data.parentId ?? null,
+      );
     }
     if (data.startDate !== undefined || data.endDate !== undefined) {
       await this.repo.addHistory(
@@ -176,6 +205,12 @@ export class IterationsService {
       throw new BadRequestException('Only active iterations can be completed');
     }
 
+    if (opts.targetIterationId && opts.targetIterationId === id) {
+      throw new BadRequestException(
+        'Cannot move incomplete items into the iteration being completed',
+      );
+    }
+
     // If moving to a specific iteration, validate it exists and belongs to this project
     if (opts.incompleteAction === 'MOVE_TO_NEXT') {
       if (!opts.targetIterationId) {
@@ -229,6 +264,19 @@ export class IterationsService {
       throw new NotFoundException('Iteration not found');
     }
 
+    if (iteration.state === 'ACTIVE') {
+      throw new BadRequestException(
+        'Cannot delete an active iteration. Complete it before deleting.',
+      );
+    }
+
+    const childCount = await this.repo.countChildren(id);
+    if (childCount > 0) {
+      throw new BadRequestException(
+        'Cannot delete an iteration that has child iterations. Move or delete the children first.',
+      );
+    }
+
     await this.repo.addHistory(id, userId, 'DELETED');
     await this.repo.remove(id);
     return { success: true };
@@ -261,7 +309,7 @@ export class IterationsService {
       throw new NotFoundException('Iteration not found');
     }
 
-    await this.repo.removeWorkItem(workItemId, userId);
+    await this.repo.removeWorkItem(iterationId, workItemId, userId);
     return { success: true };
   }
 
@@ -278,6 +326,11 @@ export class IterationsService {
       throw new NotFoundException('Iteration not found');
     }
 
+    // No-op if source and target are the same iteration
+    if (!data.targetIterationId || data.targetIterationId === iterationId) {
+      return { success: true, movedCount: 0 };
+    }
+
     if (data.targetIterationId) {
       const target = await this.repo.findOne(data.targetIterationId);
       if (!target || target.projectId !== projectId) {
@@ -291,7 +344,7 @@ export class IterationsService {
 
   // ─── Sprint backlog (enriched) ────────────────────────────────────────────
 
-  async getSprintBacklog(userId: string, projectId: string, id: string) {
+  async getSprintBacklog(userId: string, projectId: string, id: string, teamId?: string) {
     await this.projectsService.assertProjectMember(projectId, userId);
 
     const iteration = await this.repo.findOne(id);
@@ -300,7 +353,62 @@ export class IterationsService {
     }
 
     const project = await this.projectsService.findOne(userId, projectId);
-    return this.repo.getSprintWorkItems(id, project.key);
+    const areaIds = await this.resolveTeamScope(userId, projectId, teamId, iteration);
+    return this.repo.getSprintWorkItems(id, project.key, areaIds);
+  }
+
+  // ─── Sprint board (grouped by workflow state) ─────────────────────────────
+
+  /**
+   * Returns the sprint board: the same work items assigned to this iteration as
+   * the backlog, grouped by the project's workflow state. Empty state columns
+   * are included so the frontend renders the full workflow.
+   */
+  async getSprintBoard(userId: string, projectId: string, id: string, teamId?: string) {
+    await this.projectsService.assertProjectMember(projectId, userId);
+
+    const iteration = await this.repo.findOne(id);
+    if (!iteration || iteration.projectId !== projectId) {
+      throw new NotFoundException('Iteration not found');
+    }
+
+    const project = await this.projectsService.findOne(userId, projectId);
+    const areaIds = await this.resolveTeamScope(userId, projectId, teamId, iteration);
+    const [items, states] = await Promise.all([
+      this.repo.getSprintWorkItems(id, project.key, areaIds),
+      this.repo.getWorkflowStates(projectId),
+    ]);
+
+    const groups = states.map((state) => ({
+      state,
+      items: items.filter((item) => item.state === state.key),
+    }));
+
+    return {
+      iteration,
+      states,
+      groups,
+      total: items.length,
+    };
+  }
+
+  /**
+   * When a team is selected, verify membership and that the sprint belongs to
+   * the team's configured iterations, then return the team's area filter.
+   */
+  private async resolveTeamScope(
+    userId: string,
+    projectId: string,
+    teamId: string | undefined,
+    iteration: { id: string },
+  ): Promise<string[] | undefined> {
+    if (!teamId || teamId === 'default' || teamId === 'undefined') return undefined;
+    await this.teamsService.assertTeamMember(projectId, teamId, userId);
+    const scope = await this.teamsService.getTeamScope(projectId, teamId);
+    if (!scope.iterationIds.includes(iteration.id)) {
+      throw new NotFoundException('Iteration not found');
+    }
+    return scope.areaIds.length > 0 ? scope.areaIds : undefined;
   }
 
   // ─── Legacy (kept for board compatibility) ────────────────────────────────

@@ -44,6 +44,45 @@ export class ProjectsRepository {
         )
         .execute();
 
+      // Every project gets a default area and default team so the team model
+      // works out of the box. The creator becomes the team admin.
+      const area = await trx
+        .insertInto('areas')
+        .values({ project_id: project.id, name: data.name, parent_id: null })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      const team = await trx
+        .insertInto('teams')
+        .values({
+          project_id: project.id,
+          name: `${data.name} Team`,
+          description: `Default team for ${data.name}`,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      await trx
+        .insertInto('team_configurations')
+        .values({
+          team_id: team.id,
+          board_config: { collapsedCategories: false, hideEmptyColumns: false },
+          backlog_config: { showInProgressItems: false },
+          default_area_id: area.id,
+          default_iteration_id: null,
+        })
+        .execute();
+
+      await trx
+        .insertInto('team_areas')
+        .values({ team_id: team.id, area_id: area.id })
+        .execute();
+
+      await trx
+        .insertInto('team_members')
+        .values({ team_id: team.id, user_id: data.created_by, role: 'ADMIN' })
+        .execute();
+
       return project;
     });
   }

@@ -2,6 +2,7 @@
 import { Suspense, use, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useWorkItems, WorkItem } from '@/hooks/useWorkItems';
+import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
 import { CreateWorkItemModal } from '@/components/CreateWorkItemModal';
 import { Search, Filter } from 'lucide-react';
@@ -19,6 +20,7 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { selectedTeamId } = useProjectContext();
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -28,7 +30,7 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
   const openModal = () => router.push(`${pathname}?new=1`);
   const closeModal = () => router.replace(pathname);
 
-  const { data: workItems = [], isLoading } = useWorkItems(resolvedParams.projectId, statusFilter ? { state: statusFilter } : {});
+  const { data: workItems = [], isLoading } = useWorkItems(resolvedParams.projectId, statusFilter ? { state: statusFilter } : {}, selectedTeamId);
 
   const filteredItems = workItems.filter((i: WorkItem) => 
     i.title.toLowerCase().includes(search.toLowerCase()) || 
@@ -151,6 +153,7 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
       {isCreateModalOpen && (
         <CreateWorkItemModal
           projectId={resolvedParams.projectId}
+          teamId={selectedTeamId}
           onClose={closeModal}
         />
       )}

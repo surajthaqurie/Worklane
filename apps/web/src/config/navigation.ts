@@ -24,4 +24,5 @@ export const projectNavigation = [
 
 export const projectSettingsNavigation = [
   { label: 'Project Settings', href: '/settings', icon: Settings, match: '/settings' },
+  { label: 'Teams', href: '/settings/teams', icon: Users, match: '/settings/teams' },
 ];

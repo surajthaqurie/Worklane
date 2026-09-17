@@ -67,6 +67,7 @@ import {
 import { useIterations, Iteration } from '@/hooks/useIterations';
 import { useWorkItemStates } from '@/hooks/useWorkItemStates';
 import { useProjectMembers, useAreas } from '@/hooks/useProjects';
+import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -99,6 +100,8 @@ interface FlatNode {
 // ─── Main Backlog Component ───────────────────────────────────────────────────
 
 export function Backlog({ projectId }: { projectId: string }) {
+  const { selectedTeamId } = useProjectContext();
+
   // ── Filter state ────────────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -117,6 +120,7 @@ export function Backlog({ projectId }: { projectId: string }) {
 
   const activeFilters: BacklogFilters = useMemo(() => {
     const f: BacklogFilters = { parentId: null };
+    if (selectedTeamId) f.teamId = selectedTeamId;
     if (debouncedSearch) f.search = debouncedSearch;
     if (filterType) f.type = filterType;
     if (filterState) f.state = filterState;
@@ -124,7 +128,7 @@ export function Backlog({ projectId }: { projectId: string }) {
     if (filterAssignedTo) f.assignedTo = filterAssignedTo;
     if (filterIterationId) f.iterationId = filterIterationId;
     return f;
-  }, [debouncedSearch, filterType, filterState, filterPriority, filterAssignedTo, filterIterationId]);
+  }, [selectedTeamId, debouncedSearch, filterType, filterState, filterPriority, filterAssignedTo, filterIterationId]);
 
   const hasActiveFilters = !!(
     debouncedSearch || filterType || filterState || filterPriority || filterAssignedTo || filterIterationId
@@ -173,8 +177,8 @@ export function Backlog({ projectId }: { projectId: string }) {
   const createWorkItem = useCreateWorkItem(projectId);
   const updateWorkItem = useUpdateWorkItem(projectId);
   const transitionState = useTransitionWorkItemState(projectId);
-  const reorderItem = useReorderBacklogItem(projectId);
-  const bulkAssignIteration = useBulkAssignIteration(projectId);
+  const reorderItem = useReorderBacklogItem(projectId, selectedTeamId);
+  const bulkAssignIteration = useBulkAssignIteration(projectId, selectedTeamId);
 
   // ── DnD sensors ──────────────────────────────────────────────────────────
   const sensors = useSensors(
@@ -189,13 +193,18 @@ export function Backlog({ projectId }: { projectId: string }) {
   const handleCreate = useCallback(
     async (title: string, type: WorkItemType, parentId: string | null) => {
       if (!title.trim()) return;
-      await createWorkItem.mutateAsync({ title: title.trim(), type, parentId });
+      await createWorkItem.mutateAsync({
+        title: title.trim(),
+        type,
+        parentId,
+        ...(selectedTeamId ? { teamId: selectedTeamId } : {}),
+      });
       setCreatingUnder(null);
       if (parentId && !expanded.has(parentId)) {
         setExpanded((prev) => new Set(prev).add(parentId));
       }
     },
-    [createWorkItem, expanded],
+    [createWorkItem, expanded, selectedTeamId],
   );
 
   // ── Handle inline edit save ───────────────────────────────────────────────
@@ -430,6 +439,7 @@ export function Backlog({ projectId }: { projectId: string }) {
                       item={item}
                       depth={0}
                       projectId={projectId}
+                      teamId={selectedTeamId}
                       expanded={expanded}
                       onToggleExpand={toggleExpand}
                       editingId={editingId}
@@ -550,6 +560,7 @@ interface BacklogRowProps {
   item: BacklogItem;
   depth: number;
   projectId: string;
+  teamId?: string | null;
   expanded: Set<string>;
   onToggleExpand: (id: string) => void;
   editingId: string | null;
@@ -578,6 +589,7 @@ function BacklogRow({
   item,
   depth,
   projectId,
+  teamId,
   expanded,
   onToggleExpand,
   editingId,
@@ -605,7 +617,7 @@ function BacklogRow({
   // Load children lazily when expanded
   const childrenQuery = useBacklogLevel(
     projectId,
-    { parentId: item.id },
+    { parentId: item.id, teamId: teamId ?? undefined },
     { enabled: isExpanded },
   );
   const children = childrenQuery.data?.items ?? [];
@@ -899,6 +911,7 @@ function BacklogRow({
                 item={child}
                 depth={depth + 1}
                 projectId={projectId}
+                teamId={teamId}
                 expanded={expanded}
                 onToggleExpand={onToggleExpand}
                 editingId={editingId}

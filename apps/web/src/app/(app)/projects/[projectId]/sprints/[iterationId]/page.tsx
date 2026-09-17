@@ -1,15 +1,16 @@
 'use client';
 import React, { useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useIteration, useUpdateIteration, useDeleteIteration, useRemoveWorkItemFromIteration } from '@/hooks/useIterations';
+import { useIteration, useUpdateIteration, useDeleteIteration, useRemoveWorkItemFromIteration, useSprintBoard, useIterations, useActivateIteration, useCompleteIteration } from '@/hooks/useIterations';
 import { format } from 'date-fns';
 import Link from 'next/link';
-import { useIterationWorkItems } from '@/hooks/useIterations';
 import { WorkItem, useUpdateWorkItem, useTransitionWorkItemState } from '@/hooks/useWorkItems';
-import { useWorkItemStates } from '@/hooks/useWorkItemStates';
+import { WorkItemState } from '@/hooks/useWorkItemStates';
 import { Board } from '@/components/Board';
 import { StatesManager } from '@/components/StatesManager';
 import { WorkItemDrawer } from '@/components/WorkItemDrawer';
+import { CompleteSprintDialog } from '@/components/CompleteSprintDialog';
+import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { Trash2 } from 'lucide-react';
 import { DndContext, DragEndEvent } from '@dnd-kit/core';
 import { BacklogSidebar } from './BacklogSidebar';
@@ -21,20 +22,34 @@ export default function IterationDetailPage() {
   const router = useRouter();
   const projectId = params.projectId as string;
   const iterationId = params.iterationId as string;
+  const { selectedTeamId } = useProjectContext();
 
   const { data: iteration, isLoading } = useIteration(projectId, iterationId);
-  const { data: workItems = [], isLoading: isLoadingWorkItems } = useIterationWorkItems(projectId, iterationId, {});
-  const { data: states = [] } = useWorkItemStates(projectId);
+  const { data: board, isLoading: isLoadingWorkItems } = useSprintBoard(projectId, iterationId, selectedTeamId);
+  const workItems = useMemo(
+    () => board?.groups.flatMap((g) => g.items) ?? [],
+    [board],
+  );
+  const states = (board?.states ?? []) as WorkItemState[];
   const updateIteration = useUpdateIteration(projectId);
   const deleteIteration = useDeleteIteration(projectId);
   const removeWorkItem = useRemoveWorkItemFromIteration(projectId);
   const updateWorkItem = useUpdateWorkItem(projectId);
   const transitionWorkItem = useTransitionWorkItemState(projectId);
+  const activateIteration = useActivateIteration(projectId);
+  const completeIteration = useCompleteIteration(projectId);
+  const { data: iterations = [] } = useIterations(projectId, selectedTeamId);
+
+  const doneCount = useMemo(
+    () => board?.groups.filter((g) => g.state.isDone).reduce((n, g) => n + g.items.length, 0) ?? 0,
+    [board],
+  );
 
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({ name: '', goal: '' });
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isCompleteOpen, setIsCompleteOpen] = useState(false);
 
   const storyByParentId = useMemo(() => {
     const map: Record<string, { key: string; title: string }> = {};
@@ -63,21 +78,25 @@ export default function IterationDetailPage() {
     setIsEditing(false);
   };
 
-  const handleStateChange = async (newState: string) => {
-    try {
-      await updateIteration.mutateAsync({
-        id: iterationId,
-        data: { state: newState },
-      });
-    } catch {
-      alert('Failed to update state. Only one active iteration is allowed per project.');
-    }
+  const handleStartIteration = () => {
+    activateIteration.mutate(iterationId, {
+      onError: (err: Error) => {
+        alert(err.message || 'Failed to start sprint. Only one active sprint is allowed per project.');
+      },
+    });
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete iteration "${iteration.name}"? Work items will be moved back to the backlog.`)) return;
-    await deleteIteration.mutateAsync(iterationId);
-    router.push(`/projects/${projectId}/iterations`);
+    if (!window.confirm(
+      `Delete ${iteration.state === 'ACTIVE' ? 'this active' : ''} iteration "${iteration.name}"?\n` +
+      'Active sprints must be completed first, and sprints with child sprints cannot be deleted.',
+    )) return;
+    try {
+      await deleteIteration.mutateAsync(iterationId);
+      router.push(`/projects/${projectId}/sprints`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete sprint.');
+    }
   };
 
   const handleRemoveWorkItem = async (item: WorkItem) => {
@@ -110,7 +129,7 @@ export default function IterationDetailPage() {
     <div className="flex flex-col h-full w-full">
       <div className="flex-shrink-0 bg-[var(--bg-app)] border-b border-[var(--border-subtle)] pb-6 mb-6">
         <div className="flex justify-between items-start mb-4">
-          <Link href={`/projects/${projectId}/iterations`} className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">&larr; Back to Iterations</Link>
+          <Link href={`/projects/${projectId}/sprints`} className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">&larr; Back to Sprints</Link>
         </div>
 
         <div className="flex justify-between items-start">
@@ -139,6 +158,11 @@ export default function IterationDetailPage() {
             )}
 
             <div className="flex items-center gap-6 text-[13px]">
+              {iteration.path && iteration.path !== iteration.name && (
+                <div className="text-[var(--text-muted)] font-mono text-[12px]" title={iteration.path}>
+                  {iteration.path}
+                </div>
+              )}
               <div className="text-[var(--text-secondary)] font-medium">
                 {format(new Date(iteration.startDate), 'MMM d, yyyy')} &rarr; {format(new Date(iteration.endDate), 'MMM d, yyyy')}
               </div>
@@ -160,13 +184,13 @@ export default function IterationDetailPage() {
 
           <div className="flex gap-2">
             {iteration.state === 'PLANNED' && (
-              <button onClick={() => handleStateChange('ACTIVE')} className="bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white px-4 py-2 rounded-[var(--radius-button)] text-[13px] font-medium transition-colors">
-                Start Iteration
+              <button onClick={handleStartIteration} className="bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white px-4 py-2 rounded-[var(--radius-button)] text-[13px] font-medium transition-colors">
+                Start Sprint
               </button>
             )}
             {iteration.state === 'ACTIVE' && (
-              <button onClick={() => handleStateChange('COMPLETED')} className="bg-[var(--status-done)] hover:bg-[#0ea5e9] text-white px-4 py-2 rounded-[var(--radius-button)] text-[13px] font-medium transition-colors">
-                Complete Iteration
+              <button onClick={() => setIsCompleteOpen(true)} className="bg-[var(--status-done)] hover:bg-[#0ea5e9] text-white px-4 py-2 rounded-[var(--radius-button)] text-[13px] font-medium transition-colors">
+                Complete Sprint
               </button>
             )}
             <button
@@ -191,35 +215,64 @@ export default function IterationDetailPage() {
           </h2>
           <div className="flex items-center gap-2">
             <Link
-              href={`/projects/${projectId}/backlog`}
+              href={`/projects/${projectId}/backlogs`}
               className="inline-flex items-center px-3 py-2 text-[13px] font-medium text-[var(--brand-primary)] hover:bg-[var(--bg-surface-selected)] rounded-[var(--radius-button)] transition-colors"
             >
               + Add items from backlog
             </Link>
+            <button
+              onClick={() => setIsSidebarOpen((open) => !open)}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium rounded-[var(--radius-button)] transition-colors border ${
+                isSidebarOpen
+                  ? 'bg-[var(--bg-surface-selected)] text-[var(--brand-primary)] border-[var(--brand-primary)]/30'
+                  : 'bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
+              }`}
+              title="Toggle backlog sidebar"
+            >
+              <PanelRightOpen className="w-4 h-4" />
+              Backlog
+            </button>
             <StatesManager projectId={projectId} />
           </div>
         </div>
 
         {isLoadingWorkItems ? (
           <div className="text-[13px] text-[var(--text-muted)]">Loading items...</div>
-        ) : workItems.length === 0 ? (
-          <div className="text-[13px] text-[var(--text-muted)] p-8 text-center border border-[var(--border-subtle)] rounded-[var(--radius-card)] bg-[var(--bg-surface)]">
-            No items in this iteration yet. Drag items from the backlog to plan your iteration.
-          </div>
         ) : (
-          <Board
-            items={workItems}
-            states={states}
-            onStateChange={() => {}} disableInternalDnd={true}
-            onSelectItem={setSelectedItem}
-            onRemoveItem={handleRemoveWorkItem}
-            storyByParentId={storyByParentId}
-          />
+          <>
+            {workItems.length === 0 && (
+              <div className="text-[13px] text-[var(--text-muted)] mb-3">
+                This sprint has no items yet. Drag items from the backlog sidebar onto a column to plan your sprint.
+              </div>
+            )}
+            <Board
+              items={workItems}
+              states={states}
+              onStateChange={() => {}} disableInternalDnd={true}
+              onSelectItem={setSelectedItem}
+              onRemoveItem={handleRemoveWorkItem}
+              storyByParentId={storyByParentId}
+            />
+          </>
         )}
         </div>
         {isSidebarOpen && <BacklogSidebar projectId={projectId} onClose={() => setIsSidebarOpen(false)} />}
       </div>
     </DndContext>
+
+      {isCompleteOpen && iteration && (
+        <CompleteSprintDialog
+          iteration={iteration}
+          iterations={iterations.filter(
+            (it) => it.state !== 'COMPLETED' && it.id !== iteration.id,
+          )}
+          onComplete={completeIteration}
+          onClose={() => setIsCompleteOpen(false)}
+          incompleteCount={workItems.length - doneCount}
+          workItemsCount={workItems.length}
+          doneWorkItemsCount={doneCount}
+        />
+      )}
 
       {selectedItem && (
         <WorkItemDrawer item={selectedItem} onClose={() => setSelectedItem(null)} />

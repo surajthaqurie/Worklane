@@ -63,8 +63,16 @@ export function useProjectOverview(projectId: string) {
   });
 }
 
+export type ProjectArea = {
+  id: string;
+  project_id: string;
+  name: string;
+  parent_id: string | null;
+  created_at: string;
+};
+
 export function useAreas(projectId: string) {
-  return useQuery({
+  return useQuery<ProjectArea[]>({
     queryKey: ['projects', projectId, 'areas'],
     queryFn: async () => {
       const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/areas`);

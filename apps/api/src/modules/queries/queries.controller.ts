@@ -55,6 +55,12 @@ export class QueriesController {
     return this.queriesService.findAll(this.getUserId(req), projectId);
   }
 
+  // Declared before @Get(':id') so the literal path takes precedence.
+  @Get('recent')
+  recent(@Req() req: any, @Param('projectId') projectId: string) {
+    return this.queriesService.recent(this.getUserId(req), projectId);
+  }
+
   @Get(':id')
   findOne(
     @Req() req: any,

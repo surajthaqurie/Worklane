@@ -23,11 +23,13 @@ export const queryFieldSchema = z.enum([
   'priority',
   'assignedTo',
   'iterationId',
+  'areaId',
   'parentId',
   'createdBy',
   'createdAt',
   'updatedAt',
   'completedAt',
+  'tags',
 ]);
 
 export const queryClauseSchema = z.object({

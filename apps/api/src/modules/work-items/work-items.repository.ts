@@ -1,11 +1,19 @@
 import { CreateWorkItemDto, UpdateWorkItemDto } from "./dto/work-items.dto.js";
-import { WorkItemFilterDto } from "./dto/filter.dto.js";
 import { Injectable, ConflictException } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
 import { sql } from 'kysely';
 
 @Injectable()
 export class WorkItemsRepository {
+  async getIterationProjectId(iterationId: string): Promise<string | null> {
+    const iteration = await db
+      .selectFrom('iterations')
+      .select('project_id')
+      .where('id', '=', iterationId)
+      .executeTakeFirst();
+    return iteration?.project_id ?? null;
+  }
+
   async createWorkItem(projectId: string, userId: string, data: CreateWorkItemDto) {
     return await db.transaction().execute(async (trx) => {
       const project = await trx
@@ -106,9 +114,29 @@ export class WorkItemsRepository {
       query = query.where('area_id', '=', filters.areaId);
     }
     
-    if (filters.teamId) {
-      // Assuming we need to join or there's a team relation. Actually work_items don't have team_id.
-      // But we can filter by area_id or just ignore if not applicable. For now, leave teamId as is (handled conceptually).
+    if (filters.teamId && filters.teamId !== 'default' && filters.teamId !== 'undefined') {
+      // A team's view of project-scoped work: items in the team's areas, and in
+      // the team's iterations (or not yet assigned to any iteration).
+      query = query.where((eb) =>
+        eb.and([
+          eb(
+            'area_id',
+            'in',
+            db.selectFrom('team_areas').where('team_id', '=', filters.teamId).select('area_id'),
+          ),
+          eb.or([
+            eb('iteration_id', 'is', null),
+            eb(
+              'iteration_id',
+              'in',
+              db
+                .selectFrom('team_iterations')
+                .where('team_id', '=', filters.teamId)
+                .select('iteration_id'),
+            ),
+          ]),
+        ]),
+      );
     }
     
     if (filters.tags) {

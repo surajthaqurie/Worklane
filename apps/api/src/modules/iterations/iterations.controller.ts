@@ -7,6 +7,7 @@ import {
   Patch,
   Delete,
   Req,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../projects/auth.guard.js';
@@ -40,8 +41,12 @@ export class IterationsController {
   }
 
   @Get()
-  findAll(@Req() req: any, @Param('projectId') projectId: string) {
-    return this.iterationsService.findAllByProject(this.uid(req), projectId);
+  findAll(
+    @Req() req: any,
+    @Param('projectId') projectId: string,
+    @Query('teamId') teamId?: string,
+  ) {
+    return this.iterationsService.findAllByProject(this.uid(req), projectId, teamId);
   }
 
   @Get(':id')
@@ -113,8 +118,26 @@ export class IterationsController {
     @Req() req: any,
     @Param('projectId') projectId: string,
     @Param('id') id: string,
+    @Query('teamId') teamId?: string,
   ) {
-    return this.iterationsService.getSprintBacklog(this.uid(req), projectId, id);
+    return this.iterationsService.getSprintBacklog(this.uid(req), projectId, id, teamId);
+  }
+
+  // ─── Sprint board ──────────────────────────────────────────────────────────
+
+  /**
+   * GET /projects/:projectId/iterations/:id/board
+   * Returns the sprint board: work items assigned to this iteration grouped by
+   * the project's workflow states (including empty columns).
+   */
+  @Get(':id/board')
+  getBoard(
+    @Req() req: any,
+    @Param('projectId') projectId: string,
+    @Param('id') id: string,
+    @Query('teamId') teamId?: string,
+  ) {
+    return this.iterationsService.getSprintBoard(this.uid(req), projectId, id, teamId);
   }
 
   // ─── Work item assignment ─────────────────────────────────────────────────

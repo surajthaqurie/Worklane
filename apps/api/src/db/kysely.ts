@@ -38,6 +38,29 @@ export interface Database {
     name: string;
     description: string | null;
     created_at: ColumnType<Date, string | undefined, never>;
+    updated_at: ColumnType<Date, string | undefined, string | Date>;
+  };
+  team_members: {
+    team_id: string;
+    user_id: string;
+    role: Generated<'ADMIN' | 'MEMBER'>;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
+  team_configurations: {
+    team_id: string;
+    board_config: any;
+    backlog_config: any;
+    default_iteration_id: string | null;
+    default_area_id: string | null;
+    updated_at: ColumnType<Date, string | undefined, string | Date>;
+  };
+  team_iterations: {
+    team_id: string;
+    iteration_id: string;
+  };
+  team_areas: {
+    team_id: string;
+    area_id: string;
   };
   areas: {
     id: Generated<string>;
@@ -125,6 +148,14 @@ export interface Database {
     sort_order: Generated<number>;
     created_at: ColumnType<Date, string | undefined, never>;
     updated_at: ColumnType<Date, string | undefined, string | Date>;
+  };
+  query_runs: {
+    id: Generated<string>;
+    project_id: string;
+    query_id: string | null;
+    user_id: string;
+    definition: any;
+    ran_at: ColumnType<Date, string | undefined, never>;
   };
   work_item_comments: {
     id: Generated<string>;

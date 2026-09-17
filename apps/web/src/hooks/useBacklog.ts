@@ -49,6 +49,7 @@ export interface BacklogFilters {
   assignedTo?: string;
   iterationId?: string;
   areaId?: string;
+  teamId?: string;
   limit?: number;
   offset?: number;
 }
@@ -141,6 +142,7 @@ export function useBacklogLevel(
       if (filters.assignedTo) params.set('assignedTo', filters.assignedTo);
       if (filters.iterationId) params.set('iterationId', filters.iterationId);
       if (filters.areaId) params.set('areaId', filters.areaId);
+      if (filters.teamId) params.set('teamId', filters.teamId);
       if (filters.limit !== undefined) params.set('limit', String(filters.limit));
       if (filters.offset !== undefined) params.set('offset', String(filters.offset));
 
@@ -156,7 +158,7 @@ export function useBacklogLevel(
 }
 
 /** Reorder a single item in the backlog (drag-and-drop). */
-export function useReorderBacklogItem(projectId: string) {
+export function useReorderBacklogItem(projectId: string, teamId?: string | null) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -168,7 +170,7 @@ export function useReorderBacklogItem(projectId: string) {
       const res = await fetchWithAuth(`${API_URL}/projects/${projectId}/backlog/reorder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, teamId: teamId ?? undefined }),
       });
       if (!res.ok) throw new Error('Failed to reorder backlog item');
       return res.json();
@@ -193,7 +195,7 @@ export function useReorderBacklogItem(projectId: string) {
 }
 
 /** Bulk assign iteration to multiple items. */
-export function useBulkAssignIteration(projectId: string) {
+export function useBulkAssignIteration(projectId: string, teamId?: string | null) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -203,7 +205,7 @@ export function useBulkAssignIteration(projectId: string) {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, teamId: teamId ?? undefined }),
         },
       );
       if (!res.ok) throw new Error('Failed to assign iteration');

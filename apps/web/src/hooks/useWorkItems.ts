@@ -40,6 +40,19 @@ export function useWorkItemChildren(projectId: string, parentId: string, options
   });
 }
 
+export function useWorkItem(workItemId: string | null) {
+  return useQuery<WorkItem>({
+    queryKey: ['work-items', workItemId, 'detail'],
+    queryFn: async () => {
+      if (!workItemId) throw new Error('No work item id');
+      const res = await fetchWithAuth(`${API_URL}/work-items/${workItemId}`);
+      if (!res.ok) throw new Error('Failed to fetch work item');
+      return res.json();
+    },
+    enabled: !!workItemId
+  });
+}
+
 export function useBoardWorkItems(projectId: string, boardId: string, filters: Record<string, string> = {}) {
   return useQuery({
     queryKey: ['projects', projectId, 'boards', boardId, 'work-items', filters],

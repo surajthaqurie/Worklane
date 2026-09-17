@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Menu, Search, Moon, Sun } from 'lucide-react';
+import { Menu, Moon, Sun } from 'lucide-react';
 import { useTheme } from '../providers';
+import { GlobalSearch } from '../GlobalSearch';
 
 interface AppTopbarProps {
   onMenuClick: () => void;
@@ -31,17 +32,7 @@ export function AppTopbar({ onMenuClick }: AppTopbarProps) {
           <Menu className="w-5 h-5" aria-hidden="true" />
         </button>
         <div className="flex w-full md:ml-0 max-w-md items-center">
-          <div className="relative w-full text-[var(--text-muted)] focus-within:text-[var(--text-primary)] transition-colors">
-            <div className="absolute inset-y-0 left-0 flex items-center pointer-events-none pl-3">
-              <Search className="w-4 h-4" aria-hidden="true" />
-            </div>
-            <input
-              id="search-field"
-              className="block w-full py-1.5 pl-9 pr-3 text-[13px] bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-              placeholder="Search TaskForge (⌘K)"
-              type="search"
-            />
-          </div>
+          <GlobalSearch />
         </div>
       </div>
       <div className="flex items-center ml-4 md:ml-6 gap-3">

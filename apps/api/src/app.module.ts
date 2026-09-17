@@ -7,6 +7,7 @@ import { IterationsModule } from './modules/iterations/iterations.module.js';
 import { WorkItemStatesModule } from './modules/work-item-states/work-item-states.module.js';
 import { QueriesModule } from './modules/queries/queries.module.js';
 import { TeamsModule } from './modules/teams/teams.module.js';
+import { SearchModule } from './modules/search/search.module.js';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { TeamsModule } from './modules/teams/teams.module.js';
     WorkItemStatesModule,
     QueriesModule,
     TeamsModule,
+    SearchModule,
   ],
   controllers: [AppController],
   providers: [AppService],

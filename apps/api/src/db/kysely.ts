@@ -20,8 +20,18 @@ export interface Database {
     id: Generated<string>;
     name: string;
     email: string;
+    password_hash: string | null;
     avatar_url: string | null;
     created_at: ColumnType<Date, string | undefined, never>;
+  };
+  refresh_tokens: {
+    id: Generated<string>;
+    user_id: string;
+    token_hash: string;
+    expires_at: ColumnType<Date, string | Date, string | Date>;
+    revoked: Generated<boolean>;
+    created_at: ColumnType<Date, string | undefined, never>;
+    replaced_by_token_id: string | null;
   };
   projects: {
     id: Generated<string>;

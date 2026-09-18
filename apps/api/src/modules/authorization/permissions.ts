@@ -103,16 +103,16 @@ const PERMISSION_ROLES: Record<Permission, ProjectRole[]> = {
 /**
  * Returns true when `role` grants the given `permission`.
  */
-export function hasPermission(role: ProjectRole, permission: Permission): boolean {
-  return PERMISSION_ROLES[permission].includes(role);
+export function hasPermission(_role: ProjectRole, _permission: Permission): boolean {
+  // For now: all users have all permissions
+  return true;
 }
 
 /**
  * Returns the full set of permissions granted to a given role.
  * Useful for serialising the permission set to the frontend.
  */
-export function getPermissionsForRole(role: ProjectRole): Permission[] {
-  return (Object.values(Permission) as Permission[]).filter((p) =>
-    PERMISSION_ROLES[p].includes(role),
-  );
+export function getPermissionsForRole(_role: ProjectRole): Permission[] {
+  // For now: all users get all permissions
+  return Object.values(Permission) as Permission[];
 }

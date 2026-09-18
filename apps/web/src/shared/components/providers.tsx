@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, useCallback, useLayoutEffect, useSyncExternalStore, createContext, useContext } from 'react';
 import { ToastProvider } from '@/shared/components/ui/Toast';
+import { AuthProvider } from '@/shared/context/AuthContext';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -110,7 +111,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider defaultTheme="system" storageKey="taskforge-theme">
       <QueryClientProvider client={queryClient}>
-        <ToastProvider>{children}</ToastProvider>
+        <AuthProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

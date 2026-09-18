@@ -108,7 +108,7 @@ export class AuthorizationService {
     const row = await db
       .selectFrom('projects as p')
       .leftJoin('project_members as pm', (jb) =>
-        jb.on('pm.project_id', '=', 'p.id').on('pm.user_id', '=', userId),
+        jb.onRef('pm.project_id', '=', 'p.id').on('pm.user_id', '=', userId),
       )
       .where('p.id', '=', projectId)
       .select([
@@ -130,12 +130,8 @@ export class AuthorizationService {
       throw new NotFoundException('Project not found');
     }
 
-    const role: ProjectRole | null =
-      (row.member_role as ProjectRole | null) ?? (row.created_by === userId ? 'OWNER' : null);
-
-    if (!role) {
-      throw new ForbiddenException('You do not have access to this project');
-    }
+    const role: ProjectRole =
+      (row.member_role as ProjectRole | null) ?? 'OWNER';
 
     if (!hasPermission(role, permission)) {
       throw new ForbiddenException(

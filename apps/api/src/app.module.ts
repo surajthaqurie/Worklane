@@ -10,11 +10,13 @@ import { TeamsModule } from './modules/teams/teams.module.js';
 import { SearchModule } from './modules/search/search.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { BoardsModule } from './modules/boards/boards.module.js';
+import { AuthModule } from './modules/auth/auth.module.js';
 import { APP_FILTER } from '@nestjs/core';
 import { AppExceptionFilter } from './common/exceptions/app-exception.filter.js';
 
 @Module({
   imports: [
+    AuthModule,
     ProjectsModule,
     WorkItemsModule,
     IterationsModule,

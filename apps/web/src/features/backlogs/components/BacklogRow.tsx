@@ -44,7 +44,6 @@ export function BacklogRow({
   editDraft,
   states,
   iterations,
-  members,
   onToggleExpand,
   onSelectRow,
   onOpenDrawer,

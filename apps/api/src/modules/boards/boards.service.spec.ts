@@ -72,6 +72,8 @@ describe('BoardsService', () => {
       name: 'Dev Board',
       columns: [
         { id: 'col-1', name: 'Planned', mappedStates: ['TODO'], wipLimit: 10 },
+        { id: 'col-2', name: 'In Dev', mappedStates: ['IN_PROGRESS'], wipLimit: 5 },
+        { id: 'col-3', name: 'Shipped', mappedStates: ['DONE'], wipLimit: null },
       ],
       cardFields: { showType: true },
       filterConfig: { backlogLevel: 'STORY' },
@@ -81,6 +83,8 @@ describe('BoardsService', () => {
       name: 'Dev Board',
       columns: [
         { id: 'col-1', name: 'Planned', mappedStates: ['TODO'], wipLimit: 10 },
+        { id: 'col-2', name: 'In Dev', mappedStates: ['IN_PROGRESS'], wipLimit: 5 },
+        { id: 'col-3', name: 'Shipped', mappedStates: ['DONE'], wipLimit: null },
       ],
     });
 
@@ -103,6 +107,31 @@ describe('BoardsService', () => {
         name: 'Invalid Board',
         columns: [
           { id: 'col-1', name: 'Unknown', mappedStates: ['NON_EXISTENT_STATE'] },
+        ],
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should reject board columns that leave a workflow state unmapped', async () => {
+    await expect(
+      service.createBoard('u1', 'p1', {
+        name: 'Incomplete Board',
+        columns: [
+          { id: 'col-1', name: 'To Do', mappedStates: ['TODO'] },
+          { id: 'col-2', name: 'In Progress', mappedStates: ['IN_PROGRESS'] },
+        ],
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should reject a workflow state mapped to more than one column', async () => {
+    await expect(
+      service.createBoard('u1', 'p1', {
+        name: 'Duplicate Board',
+        columns: [
+          { id: 'col-1', name: 'To Do', mappedStates: ['TODO', 'IN_PROGRESS'] },
+          { id: 'col-2', name: 'Also In Progress', mappedStates: ['IN_PROGRESS'] },
+          { id: 'col-3', name: 'Done', mappedStates: ['DONE'] },
         ],
       }),
     ).rejects.toThrow(BadRequestException);
@@ -144,6 +173,8 @@ describe('BoardsService', () => {
       name: 'Updated Board',
       columns: [
         { id: 'col-1', name: 'Backlog', mappedStates: ['TODO'], wipLimit: 5 },
+        { id: 'col-2', name: 'In Dev', mappedStates: ['IN_PROGRESS'], wipLimit: 3 },
+        { id: 'col-3', name: 'Shipped', mappedStates: ['DONE'], wipLimit: null },
       ],
     });
 
@@ -158,5 +189,144 @@ describe('BoardsService', () => {
     repo.listByProject.mockResolvedValue([{ id: 'b1' }]);
 
     await expect(service.deleteBoard('u1', 'p1', 'b1')).rejects.toThrow(BadRequestException);
+  });
+
+  describe('getBoard — default alias', () => {
+    const board: any = {
+      id: 'b1',
+      projectId: 'p1',
+      teamId: 'team-1',
+      name: 'Main Board',
+      filterConfig: { backlogLevel: 'STORY' },
+    };
+
+    it('resolves the "default" alias to the first listed board', async () => {
+      repo.listByProject.mockResolvedValue([board]);
+
+      const result = await service.getBoard('u1', 'p1', 'default');
+
+      expect(result.id).toBe('b1');
+      expect(repo.getById).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFound when the board does not exist', async () => {
+      repo.getById.mockResolvedValue(undefined);
+
+      await expect(service.getBoard('u1', 'p1', 'missing')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getBoardWorkItems — filter merging', () => {
+    const board: any = {
+      id: 'b1',
+      projectId: 'p1',
+      teamId: 'team-1',
+      filterConfig: {
+        backlogLevel: 'STORY',
+        assignedTo: 'u-fixed',
+        areaId: 'area-fixed',
+        tags: 'bug,ui',
+        iterationId: 'iter-fixed',
+        search: 'board-default-search',
+      },
+    };
+
+    it('passes the board filter config through to the work item query', async () => {
+      repo.getById.mockResolvedValue(board);
+      workItemsService.findAll.mockResolvedValue([{ id: 'wi-1' }]);
+
+      const result = await service.getBoardWorkItems('u1', 'p1', 'b1');
+
+      expect(workItemsService.findAll).toHaveBeenCalledWith(
+        'u1',
+        'p1',
+        expect.objectContaining({
+          backlogLevel: 'STORY',
+          assignedTo: 'u-fixed',
+          areaId: 'area-fixed',
+          tags: 'bug,ui',
+          iterationId: 'iter-fixed',
+          search: 'board-default-search',
+          teamId: 'team-1',
+        }),
+      );
+      expect(result).toEqual([{ id: 'wi-1' }]);
+    });
+
+    it('lets explicit query filters override the board config', async () => {
+      repo.getById.mockResolvedValue(board);
+      workItemsService.findAll.mockResolvedValue([]);
+
+      await service.getBoardWorkItems('u1', 'p1', 'b1', {
+        assignedTo: 'u-query',
+        areaId: 'area-query',
+        iterationId: 'iter-query',
+        tags: 'hot',
+        search: 'query-search',
+        teamId: 'team-2',
+      });
+
+      expect(workItemsService.findAll).toHaveBeenCalledWith(
+        'u1',
+        'p1',
+        expect.objectContaining({
+          assignedTo: 'u-query',
+          areaId: 'area-query',
+          iterationId: 'iter-query',
+          tags: 'hot',
+          search: 'query-search',
+          teamId: 'team-2',
+        }),
+      );
+    });
+
+    it('falls back to the board team when no team filter is supplied', async () => {
+      repo.getById.mockResolvedValue(board);
+      workItemsService.findAll.mockResolvedValue([]);
+
+      await service.getBoardWorkItems('u1', 'p1', 'b1', { search: 'only-search' });
+
+      expect(workItemsService.findAll).toHaveBeenCalledWith(
+        'u1',
+        'p1',
+        expect.objectContaining({ teamId: 'team-1', search: 'only-search' }),
+      );
+    });
+
+    it('resolves the default board alias through listBoards and merges its config', async () => {
+      repo.listByProject.mockResolvedValue([board]);
+      workItemsService.findAll.mockResolvedValue([]);
+
+      await service.getBoardWorkItems('u1', 'p1', 'default');
+
+      // listByProject returned boards, so no auto-seed happens.
+      expect(repo.create).not.toHaveBeenCalled();
+      expect(workItemsService.findAll).toHaveBeenCalledWith(
+        'u1',
+        'p1',
+        expect.objectContaining({ backlogLevel: 'STORY', teamId: 'team-1' }),
+      );
+    });
+
+    it('seeds and uses a default board when the project has none', async () => {
+      repo.listByProject.mockResolvedValue([]);
+      repo.create.mockResolvedValue({
+        id: 'seed-1',
+        projectId: 'p1',
+        name: 'Main Board',
+        teamId: null,
+        filterConfig: { backlogLevel: 'STORY' },
+      });
+      workItemsService.findAll.mockResolvedValue([]);
+
+      await service.getBoardWorkItems('u1', 'p1', 'default');
+
+      expect(repo.create).toHaveBeenCalled();
+      expect(workItemsService.findAll).toHaveBeenCalledWith(
+        'u1',
+        'p1',
+        expect.objectContaining({ backlogLevel: 'STORY' }),
+      );
+    });
   });
 });

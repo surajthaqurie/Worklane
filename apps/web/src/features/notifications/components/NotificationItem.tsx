@@ -69,7 +69,7 @@ export function NotificationItem({ notification: n, onMarkAsRead }: Notification
         </p>
         {n.metadata?.snippet && (
           <p className="text-[11px] text-[var(--text-secondary)] truncate italic mt-0.5">
-            "{String(n.metadata.snippet)}"
+            &ldquo;{String(n.metadata.snippet)}&rdquo;
           </p>
         )}
         <p className="text-[10px] text-[var(--text-secondary)] mt-1 opacity-70">

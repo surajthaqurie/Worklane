@@ -1,12 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
-import { sql } from 'kysely';
+import { sql, type SqlBool } from 'kysely';
 import {
   WorkItemHistoryAction,
   WorkItemHistoryEntryInput,
   WorkItemHistoryField,
 } from '../work-item-history/work-item-history.constants.js';
 import { WorkItemHistoryService } from '../work-item-history/work-item-history.service.js';
+import type {
+  WorkItemPriority,
+  WorkItemType,
+} from './work-item.types.js';
 
 export interface BacklogItem {
   id: string;
@@ -93,7 +97,7 @@ export class BacklogRepository {
       const searchStr = opts.search.trim();
       query = query.where((eb) => {
         const conditions: any[] = [
-          eb('wi.search_vector', '@@', sql`plainto_tsquery('english', ${searchStr})`),
+          sql<SqlBool>`wi.search_vector @@ plainto_tsquery('english', ${searchStr})`,
           eb('wi.title', 'ilike', `%${searchStr}%`),
         ];
         const seqMatch = searchStr.match(/(?:^[a-zA-Z]+-)(\d+)$|^(\d+)$/);
@@ -104,9 +108,9 @@ export class BacklogRepository {
         return eb.or(conditions);
       });
     }
-    if (opts.type) query = query.where('wi.type', '=', opts.type as any);
+    if (opts.type) query = query.where('wi.type', '=', opts.type as WorkItemType);
     if (opts.state) query = query.where('wi.state', '=', opts.state);
-    if (opts.priority) query = query.where('wi.priority', '=', opts.priority as any);
+    if (opts.priority) query = query.where('wi.priority', '=', opts.priority as WorkItemPriority);
     if (opts.assignedTo) {
       if (opts.assignedTo === 'UNASSIGNED') {
         query = query.where('wi.assigned_to', 'is', null);

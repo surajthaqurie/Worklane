@@ -47,7 +47,7 @@ export default function IterationDetailPage() {
   const { data: iterations = [] } = useIterations(projectId, selectedTeamId);
 
   const doneCount = useMemo(
-    () => board?.groups.filter((g) => (g.state as unknown as { isDone?: boolean }).isDone).reduce((n, g) => n + g.items.length, 0) ?? 0,
+    () => board?.groups.filter((g) => g.state.isDone).reduce((n, g) => n + g.items.length, 0) ?? 0,
     [board]
   );
 

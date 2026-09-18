@@ -16,7 +16,6 @@ import { CompleteSprintDialog } from '@/features/iterations/components/CompleteS
 import { Modal } from '@/shared/components/ui/Modal';
 import { Spinner, ErrorState } from '@/shared/components/ui';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
-import { formatApiError } from '@/shared/utils/error';
 
 const STATE_CONFIG: Record<
   Iteration['status'] | string,
@@ -66,10 +65,9 @@ export function Iterations({ projectId }: { projectId: string }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [completingIteration, setCompletingIteration] = useState<Iteration | null>(null);
 
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
-  const defaultEnd = format(new Date(Date.now() + 14 * 86400000), 'yyyy-MM-dd');
-
   const openCreate = () => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const defaultEnd = format(new Date(Date.now() + 14 * 86400000), 'yyyy-MM-dd');
     setCreateForm({ name: '', goal: '', startDate: todayStr, endDate: defaultEnd });
     setShowCreate(true);
   };

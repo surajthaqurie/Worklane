@@ -1,10 +1,9 @@
 import { z } from 'zod';
-import { WorkItemState } from '../work-item-transitions.service.js';
 
 export const StateTransitionSchema = z.object({
-  state: z.enum(['New', 'Active', 'Resolved', 'Closed', 'Removed']),
+  state: z.string().trim().min(1, { message: 'Target state is required' }),
 });
 
 export class StateTransitionDto {
-  state: WorkItemState;
+  state!: string;
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, useEffect, useLayoutEffect, createContext, useContext } from 'react';
+import { useState, useCallback, useLayoutEffect, useSyncExternalStore, createContext, useContext } from 'react';
 import { ToastProvider } from '@/shared/components/ui/Toast';
 
 type Theme = 'light' | 'dark' | 'system';
@@ -16,6 +16,41 @@ const ThemeProviderContext = createContext<ThemeProviderState>({
   setTheme: () => null,
 });
 
+const isTheme = (value: string | null): value is Theme =>
+  value === 'light' || value === 'dark' || value === 'system';
+
+function subscribeToStorage(onStoreChange: () => void) {
+  window.addEventListener('storage', onStoreChange);
+  return () => window.removeEventListener('storage', onStoreChange);
+}
+
+function useThemeStore(storageKey: string, defaultTheme: Theme) {
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => subscribeToStorage(onStoreChange),
+    [],
+  );
+
+  const getSnapshot = useCallback(
+    () => {
+      const stored = window.localStorage.getItem(storageKey);
+      return isTheme(stored) ? stored : defaultTheme;
+    },
+    [storageKey, defaultTheme],
+  );
+
+  const theme = useSyncExternalStore(subscribe, getSnapshot, () => defaultTheme);
+
+  const setTheme = useCallback(
+    (next: Theme) => {
+      window.localStorage.setItem(storageKey, next);
+      window.dispatchEvent(new Event('storage'));
+    },
+    [storageKey],
+  );
+
+  return { theme, setTheme };
+}
+
 export function ThemeProvider({
   children,
   defaultTheme = 'system',
@@ -25,17 +60,9 @@ export function ThemeProvider({
   defaultTheme?: Theme;
   storageKey?: string;
 }) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    const stored = localStorage.getItem(storageKey) as Theme | null;
-    if (stored) setTheme(stored);
-  }, [storageKey]);
+  const { theme, setTheme } = useThemeStore(storageKey, defaultTheme);
 
   useLayoutEffect(() => {
-    if (!mounted) return;
     const root = window.document.documentElement;
 
     root.classList.remove('light', 'dark');
@@ -50,15 +77,9 @@ export function ThemeProvider({
     }
 
     root.classList.add(theme);
-  }, [theme, mounted]);
+  }, [theme]);
 
-  const value = {
-    theme,
-    setTheme: (t: Theme) => {
-      localStorage.setItem(storageKey, t);
-      setTheme(t);
-    },
-  };
+  const value = { theme, setTheme };
 
   return (
     <ThemeProviderContext.Provider value={value}>

@@ -1,15 +1,7 @@
 import { apiClient } from '@/shared/utils/apiClient';
-import { BoardConfig, BoardColumn, CardFields } from '@/shared/types/boards';
+import { BoardConfig, BoardColumn, CardFields, FilterConfig } from '@/shared/types/boards';
 
-export interface FilterConfig {
-  backlogLevel?: 'EPIC' | 'FEATURE' | 'STORY';
-  types?: string[];
-  assignedTo?: string | null;
-  tags?: string | null;
-  search?: string | null;
-  iterationId?: string | null;
-  areaId?: string | null;
-}
+export type { FilterConfig } from '@/shared/types/boards';
 
 export const boardsApi = {
   getBoards: (projectId: string, teamId?: string | null) => {

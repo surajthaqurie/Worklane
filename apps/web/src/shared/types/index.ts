@@ -5,5 +5,4 @@ export * from './work-items';
 export * from './boards';
 export * from './backlogs';
 export * from './iterations';
-export * from './queries';
 export * from './notifications';

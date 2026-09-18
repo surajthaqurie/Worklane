@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { queriesApi, SavedQuery, QueryDefinition, QueryField, QueryOperator } from '../api/queriesApi';
+import { queriesApi, SavedQuery, QueryDefinition } from '../api/queriesApi';
 import { useToast } from '@/shared/hooks/useToast';
 import { formatApiError } from '@/shared/utils/error';
 

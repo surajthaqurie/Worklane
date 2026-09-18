@@ -9,7 +9,6 @@ import {
   useMarkAllNotificationsAsRead,
 } from '../hooks/useNotifications';
 import { NotificationItem } from './NotificationItem';
-import { Notification } from '@/shared/types/notifications';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 const DEFAULT_USER_ID = '11111111-1111-1111-1111-111111111111';

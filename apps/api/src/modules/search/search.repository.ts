@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
-import { sql } from 'kysely';
+import { sql, type SqlBool } from 'kysely';
 import type { GlobalSearchDto } from './dto/search.dto.js';
 
 export interface WorkItemSearchResult {
@@ -89,8 +89,8 @@ export class SearchRepository {
 
     if (searchQ) {
       query = query.where((eb) => {
-        const conditions: any[] = [
-          eb('wi.search_vector', '@@', sql`plainto_tsquery('english', ${searchQ})`),
+        const conditions = [
+          sql<SqlBool>`wi.search_vector @@ plainto_tsquery('english', ${searchQ})`,
           eb('wi.title', 'ilike', `%${searchQ}%`),
           eb('wi.description', 'ilike', `%${searchQ}%`),
           // Match raw work item ID (covers UUID lookups without UUID cast errors).

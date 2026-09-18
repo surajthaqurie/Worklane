@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useSyncExternalStore } from 'react';
 import { useProject } from '@/features/projects/hooks/useProjects';
 import { useTeams } from '@/features/teams/hooks/useTeams';
 import { useProjectPermissions } from '@/shared/hooks/useProjectPermissions';
@@ -32,6 +32,23 @@ export function useProjectContext() {
   return ctx;
 }
 
+function useLocalStorageValue(key: string): string | null {
+  const subscribe = useCallback((onStoreChange: () => void) => {
+    window.addEventListener('storage', onStoreChange);
+    return () => window.removeEventListener('storage', onStoreChange);
+  }, []);
+
+  const getSnapshot = useCallback(() => {
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }, [key]);
+
+  return useSyncExternalStore(subscribe, getSnapshot, () => null);
+}
+
 export function ProjectLayoutClient({
   children,
   projectId,
@@ -46,30 +63,20 @@ export function ProjectLayoutClient({
   const { can, canAll, canAny, role: projectRole } = useProjectPermissions(projectId);
 
   const storageKey = `worklane:selectedTeam:${projectId}`;
-  const [selectedTeamId, setSelectedTeamIdState] = useState<string | null>(null);
-
-  useEffect(() => {
-    let stored: string | null = null;
-    try {
-      stored = window.localStorage.getItem(storageKey);
-    } catch {
-      stored = null;
-    }
-    setSelectedTeamIdState(stored);
-  }, [storageKey]);
+  const selectedTeamId = useLocalStorageValue(storageKey);
 
   const effectiveTeamId =
     selectedTeamId && teams.some((t) => t.id === selectedTeamId) ? selectedTeamId : null;
 
   const setSelectedTeamId = useCallback(
     (id: string | null) => {
-      setSelectedTeamIdState(id);
       try {
         if (id) window.localStorage.setItem(storageKey, id);
         else window.localStorage.removeItem(storageKey);
       } catch {
         // ignore storage errors
       }
+      window.dispatchEvent(new Event('storage'));
     },
     [storageKey]
   );

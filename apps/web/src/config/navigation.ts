@@ -1,4 +1,4 @@
-import { Home, Folder, Settings, LayoutDashboard, ListTodo, List, Play, Users, SearchCheck, LineChart, SquareKanban } from 'lucide-react';
+import { Home, Folder, Settings, LayoutDashboard, List, Play, Users, SearchCheck, SquareKanban } from 'lucide-react';
 
 export const globalNavigation = [
   { label: 'Dashboard', href: '/dashboard', icon: Home, match: '/dashboard' },

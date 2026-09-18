@@ -1,5 +1,14 @@
 import { Kysely, PostgresDialect, Generated, ColumnType } from 'kysely';
 import { Pool } from 'pg';
+import type {
+  BoardCardFieldsJson,
+  BoardColumnsJson,
+  BoardFilterConfigJson,
+  QueryDefinitionJson,
+  TeamBacklogConfig,
+  TeamBoardConfig,
+  NotificationMetadataJson,
+} from './json-types.js';
 
 export interface Database {
   organizations: {
@@ -49,8 +58,16 @@ export interface Database {
   };
   team_configurations: {
     team_id: string;
-    board_config: any;
-    backlog_config: any;
+    board_config: ColumnType<
+      TeamBoardConfig | Record<string, unknown>,
+      TeamBoardConfig | Record<string, unknown> | string,
+      TeamBoardConfig | Record<string, unknown> | string
+    >;
+    backlog_config: ColumnType<
+      TeamBacklogConfig | Record<string, unknown>,
+      TeamBacklogConfig | Record<string, unknown> | string,
+      TeamBacklogConfig | Record<string, unknown> | string
+    >;
     default_iteration_id: string | null;
     default_area_id: string | null;
     updated_at: ColumnType<Date, string | undefined, string | Date>;
@@ -111,7 +128,7 @@ export interface Database {
     updated_at: ColumnType<Date, string | undefined, string | Date>;
     completed_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
     closed_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
-    search_vector: ColumnType<any, never, never>;
+    search_vector: ColumnType<never, never, never>;
     backlog_order: number;
     backlog_rank: Generated<number>;
   };
@@ -145,7 +162,11 @@ export interface Database {
     is_shared: Generated<boolean>;
     created_by: string;
     folder: string | null;
-    definition: any;
+    definition: ColumnType<
+      QueryDefinitionJson | string,
+      QueryDefinitionJson | string,
+      QueryDefinitionJson | string
+    >;
     sort_order: Generated<number>;
     created_at: ColumnType<Date, string | undefined, never>;
     updated_at: ColumnType<Date, string | undefined, string | Date>;
@@ -155,7 +176,11 @@ export interface Database {
     project_id: string;
     query_id: string | null;
     user_id: string;
-    definition: any;
+    definition: ColumnType<
+      QueryDefinitionJson | string | null,
+      QueryDefinitionJson | string | null,
+      QueryDefinitionJson | string | null
+    >;
     ran_at: ColumnType<Date, string | undefined, never>;
   };
   work_item_comments: {
@@ -195,7 +220,11 @@ export interface Database {
     type: string;
     work_item_id: string | null;
     actor_id: string;
-    metadata: any;
+    metadata: ColumnType<
+      NotificationMetadataJson | string,
+      NotificationMetadataJson | string,
+      NotificationMetadataJson | string
+    >;
     read_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
     created_at: ColumnType<Date, string | undefined, never>;
   };
@@ -206,9 +235,9 @@ export interface Database {
     name: string;
     description: string | null;
     is_default: Generated<boolean>;
-    columns: ColumnType<any, any, any>;
-    card_fields: ColumnType<any, any, any>;
-    filter_config: ColumnType<any, any, any>;
+    columns: ColumnType<BoardColumnsJson | string, BoardColumnsJson | string, BoardColumnsJson | string>;
+    card_fields: ColumnType<BoardCardFieldsJson | string, BoardCardFieldsJson | string, BoardCardFieldsJson | string>;
+    filter_config: ColumnType<BoardFilterConfigJson | string, BoardFilterConfigJson | string, BoardFilterConfigJson | string>;
     created_at: ColumnType<Date, string | undefined, never>;
   };
 }

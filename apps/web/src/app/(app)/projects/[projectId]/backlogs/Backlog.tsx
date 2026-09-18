@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { BacklogItem, BacklogFilters } from '@/shared/types/backlogs';
 import { WorkItem } from '@/shared/types/work-items';
 import { useBacklogLevel, useReorderBacklogItem, useBulkAssignIteration } from '@/features/backlogs/hooks/useBacklog';
-import { useCreateWorkItem, useUpdateWorkItem } from '@/features/work-items/hooks/useWorkItems';
+import { useUpdateWorkItem } from '@/features/work-items/hooks/useWorkItems';
 import { useWorkItemStates } from '@/features/work-items/hooks/useWorkItemStates';
 import { useIterations } from '@/features/iterations/hooks/useIterations';
 import { useProjectMembers } from '@/features/projects/hooks/useProjects';
@@ -203,7 +203,7 @@ export function Backlog({ projectId }: { projectId: string }) {
         members={members}
         onToggleExpand={toggleExpand}
         onSelectRow={handleSelectRow}
-        onOpenDrawer={(item) => setDrawerItem(item as unknown as WorkItem)}
+        onOpenDrawer={setDrawerItem}
         onAddChild={() => setIsCreateModalOpen(true)}
         onStartEditing={handleStartEditing}
         onCancelEditing={handleCancelEditing}

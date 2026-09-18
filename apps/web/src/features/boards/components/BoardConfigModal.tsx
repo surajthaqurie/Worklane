@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { BoardConfig, BoardColumn, CardFields } from '@/shared/types/boards';
+import { BoardConfig, BoardColumn, CardFields, FilterConfig, BacklogLevel } from '@/shared/types/boards';
 import { WorkItemState } from '@/shared/types/work-items';
 import { useUpdateBoard, useCreateBoard } from '../hooks/useBoards';
 import { useTeams } from '@/features/teams/hooks/useTeams';
 import { Modal } from '@/shared/components/ui/Modal';
-import { Plus, ChevronUp, ChevronDown, Trash2, AlertTriangle, Settings2, Sliders, Layout, Info } from 'lucide-react';
+import { Plus, ChevronUp, ChevronDown, Trash2, AlertTriangle, Settings2, Sliders, Layout, Filter } from 'lucide-react';
 import { formatApiError } from '@/shared/utils/error';
 
 export interface BoardConfigModalProps {
@@ -31,7 +31,7 @@ export function BoardConfigModal({
   const createBoard = useCreateBoard(projectId);
   const { data: teams = [] } = useTeams(projectId);
 
-  const [activeTab, setActiveTab] = useState<'columns' | 'cardFields' | 'general'>('columns');
+  const [activeTab, setActiveTab] = useState<'columns' | 'cardFields' | 'filters' | 'general'>('columns');
   const [name, setName] = useState(board?.name || 'Custom Board');
   const [description, setDescription] = useState(board?.description || '');
   const [teamId, setTeamId] = useState<string | null>(board?.teamId ?? null);
@@ -62,6 +62,18 @@ export function BoardConfigModal({
   });
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [filterConfig, setFilterConfig] = useState<FilterConfig>(() => {
+    return board?.filterConfig || {};
+  });
+
+  const handleFilterChange = <K extends keyof FilterConfig>(
+    field: K,
+    value: FilterConfig[K] | null
+  ) => {
+    setErrorMsg(null);
+    setFilterConfig((prev) => ({ ...prev, [field]: value ?? undefined }));
+  };
 
   const handleAddColumn = () => {
     const unmappedState = states.find(
@@ -146,6 +158,7 @@ export function BoardConfigModal({
             teamId,
             columns,
             cardFields,
+            filterConfig,
           },
         });
         if (onSaved) onSaved(res.id);
@@ -156,6 +169,7 @@ export function BoardConfigModal({
           teamId,
           columns,
           cardFields,
+          filterConfig,
         });
         if (onSaved) onSaved(res.id);
       }
@@ -198,6 +212,17 @@ export function BoardConfigModal({
           >
             <Sliders className="w-3.5 h-3.5" />
             Card Customization
+          </button>
+          <button
+            onClick={() => setActiveTab('filters')}
+            className={`flex items-center gap-1.5 px-4 py-2 border-b-2 transition-colors ${
+              activeTab === 'filters'
+                ? 'border-[var(--brand-primary)] text-[var(--brand-primary)]'
+                : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            Filters
           </button>
           <button
             onClick={() => setActiveTab('general')}
@@ -355,7 +380,92 @@ export function BoardConfigModal({
           </div>
         )}
 
-        {/* Tab 3: General Settings */}
+        {/* Tab 3: Filters */}
+        {activeTab === 'filters' && (
+          <div className="flex flex-col gap-4">
+            <span className="text-xs text-[var(--text-secondary)]">
+              Default filters applied when this board is opened. Users can still refine them live.
+            </span>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-[var(--text-secondary)]">Backlog Level</label>
+              <select
+                value={filterConfig.backlogLevel ?? ''}
+                onChange={(e) =>
+                  handleFilterChange('backlogLevel', (e.target.value || null) as BacklogLevel | null)
+                }
+                className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
+              >
+                <option value="">All Levels</option>
+                <option value="EPIC">Epics</option>
+                <option value="FEATURE">Features</option>
+                <option value="STORY">Stories & Bugs</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-[var(--text-secondary)]">Work Item Types</label>
+              <div className="flex flex-wrap gap-1.5">
+                {(['EPIC', 'FEATURE', 'STORY', 'TASK', 'BUG'] as const).map((type) => {
+                  const enabled = filterConfig.types?.includes(type) ?? true;
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => {
+                        const current = filterConfig.types ?? ['EPIC', 'FEATURE', 'STORY', 'TASK', 'BUG'];
+                        const next = enabled
+                          ? current.filter((t) => t !== type)
+                          : [...current, type];
+                        setFilterConfig((prev) => ({
+                          ...prev,
+                          types: next.length === 0 || next.length === 5 ? undefined : next,
+                        }));
+                      }}
+                      className={`px-2.5 py-1 rounded text-[11px] font-medium border transition-colors ${
+                        enabled
+                          ? 'bg-[var(--brand-primary)] text-white border-transparent'
+                          : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:border-[var(--border-default)]'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="text-[11px] text-[var(--text-muted)]">
+                Disabled types are hidden from this board.
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-[var(--text-secondary)]">Assignee</label>
+              <select
+                value={filterConfig.assignedTo ?? ''}
+                onChange={(e) =>
+                  handleFilterChange('assignedTo', e.target.value || null)
+                }
+                className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
+              >
+                <option value="">Any Assignee</option>
+                <option value="UNASSIGNED">Unassigned</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-[var(--text-secondary)]">Tag Filter</label>
+              <input
+                type="text"
+                value={filterConfig.tags ?? ''}
+                onChange={(e) => handleFilterChange('tags', e.target.value || null)}
+                placeholder="Comma separated tags"
+                className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: General Settings */}
         {activeTab === 'general' && (
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">

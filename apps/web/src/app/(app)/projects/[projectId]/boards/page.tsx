@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { useBoardWorkItems, useTransitionWorkItemState } from '@/features/work-items/hooks/useWorkItems';
+import { useWorkItems, useTransitionWorkItemState } from '@/features/work-items/hooks/useWorkItems';
 import { useWorkItemStates } from '@/features/work-items/hooks/useWorkItemStates';
 import { useBoards } from '@/features/boards/hooks/useBoards';
 import { BoardConfig } from '@/shared/types/boards';
@@ -46,6 +46,19 @@ export default function ProjectBoardPage() {
     return () => clearTimeout(handler);
   }, [search]);
 
+  // Apply the board's persisted filter defaults whenever the active board
+  // changes (render-time adjustment, per React's "state derived from props"
+  // guidance). Live edits by the user are left untouched.
+  const [filteredBoardId, setFilteredBoardId] = useState<string | undefined>(activeBoard?.id);
+  if (filteredBoardId !== activeBoard?.id) {
+    setFilteredBoardId(activeBoard?.id);
+    const cfg = activeBoard?.filterConfig || {};
+    setBacklogLevel(cfg.backlogLevel ?? 'STORY');
+    setSearch(cfg.search ?? '');
+    setTags(cfg.tags ?? '');
+    setAssignedTo(cfg.assignedTo ?? '');
+  }
+
   const typeFilter = useMemo(() => {
     if (backlogLevel === 'EPIC') return 'EPIC';
     if (backlogLevel === 'FEATURE') return 'FEATURE';
@@ -56,18 +69,44 @@ export default function ProjectBoardPage() {
     data: workItems = [],
     isLoading: isLoadingWorkItems,
     error,
-  } = useBoardWorkItems(projectId, selectedTeamId);
+  } = useWorkItems(projectId, selectedTeamId);
 
   const transitionWorkItem = useTransitionWorkItemState(projectId);
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
 
   const boardItems = useMemo(() => {
+    const allowedTypes = activeBoard?.filterConfig?.types;
+    const searchQuery = debouncedSearch.trim().toLowerCase();
+    const tagQuery = tags
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+
     return workItems.filter((item) => {
-      if (backlogLevel === 'STORY') return item.type === 'STORY' || item.type === 'BUG';
-      if (typeFilter) return item.type === typeFilter;
+      if (backlogLevel === 'STORY') {
+        if (item.type !== 'STORY' && item.type !== 'BUG') return false;
+      } else if (typeFilter) {
+        if (item.type !== typeFilter) return false;
+      }
+      if (allowedTypes && allowedTypes.length > 0 && !allowedTypes.includes(item.type)) {
+        return false;
+      }
+      if (searchQuery) {
+        const haystack = `${item.title} ${item.key} ${item.description ?? ''}`.toLowerCase();
+        if (!haystack.includes(searchQuery)) return false;
+      }
+      if (tagQuery.length > 0) {
+        const itemTags = (item.tags ?? []).map((t) => t.toLowerCase());
+        if (!tagQuery.some((t) => itemTags.includes(t))) return false;
+      }
+      if (assignedTo === 'UNASSIGNED') {
+        if (item.assignedTo) return false;
+      } else if (assignedTo) {
+        if (item.assignedTo !== assignedTo) return false;
+      }
       return true;
     });
-  }, [workItems, backlogLevel, typeFilter]);
+  }, [workItems, backlogLevel, typeFilter, activeBoard?.filterConfig?.types, debouncedSearch, tags, assignedTo]);
 
   const storyByParentId = useMemo(() => {
     const map: Record<string, { key: string; title: string }> = {};

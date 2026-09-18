@@ -15,7 +15,7 @@ export function useProjectPermissions(projectId: string | null | undefined) {
     queryFn: async () => {
       try {
         return await apiClient.get<ProjectPermissions>(`/projects/${projectId}/my-permissions`);
-      } catch (e: unknown) {
+      } catch {
         return { role: null, permissions: [] };
       }
     },

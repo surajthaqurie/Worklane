@@ -4,7 +4,13 @@ import { WorkItemsRepository } from './work-items.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+
+const PROJECT_STATES = [
+  { key: 'TODO', isDone: false },
+  { key: 'IN_PROGRESS', isDone: false },
+  { key: 'DONE', isDone: true },
+];
 
 describe('WorkItemTransitionsService', () => {
   let service: WorkItemTransitionsService;
@@ -15,6 +21,7 @@ describe('WorkItemTransitionsService', () => {
   beforeEach(async () => {
     repo = {
       getWorkItemById: vi.fn(),
+      getProjectStates: vi.fn().mockResolvedValue(PROJECT_STATES),
       updateState: vi.fn(),
     };
 
@@ -47,66 +54,60 @@ describe('WorkItemTransitionsService', () => {
     service = module.get<WorkItemTransitionsService>(WorkItemTransitionsService);
   });
 
-  it('should allow valid transition', async () => {
-    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'New', type: 'TASK' });
-    authz.requireProjectPermission.mockResolvedValue({ role: 'ADMIN' });
-    repo.updateState.mockResolvedValue({ id: '1', state: 'Active' });
+  it('should allow any transition to a state defined in the project workflow', async () => {
+    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'TODO', type: 'TASK' });
+    repo.updateState.mockResolvedValue({ id: '1', state: 'IN_PROGRESS' });
 
-    const result = await service.transitionState('u1', '1', 'Active');
-    expect(result.state).toBe('Active');
-    expect(repo.updateState).toHaveBeenCalledWith('1', 'u1', 'New', 'Active');
+    const result = await service.transitionState('u1', '1', 'IN_PROGRESS');
+
+    expect(result.state).toBe('IN_PROGRESS');
+    expect(repo.updateState).toHaveBeenCalledWith('1', 'u1', 'TODO', 'IN_PROGRESS', false);
   });
 
-  it('should reject invalid transition', async () => {
-    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'New', type: 'TASK' });
-    authz.requireProjectPermission.mockResolvedValue({ role: 'ADMIN' });
+  it('should derive completion from the target state isDone flag', async () => {
+    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'IN_PROGRESS', type: 'TASK' });
+    repo.updateState.mockResolvedValue({ id: '1', state: 'DONE' });
+
+    await service.transitionState('u1', '1', 'DONE');
+
+    expect(repo.updateState).toHaveBeenCalledWith('1', 'u1', 'IN_PROGRESS', 'DONE', true);
+  });
+
+  it('should reject a target state that is not part of the project workflow', async () => {
+    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'TODO', type: 'TASK' });
 
     await expect(service.transitionState('u1', '1', 'Resolved')).rejects.toThrow(BadRequestException);
+    expect(repo.updateState).not.toHaveBeenCalled();
+  });
+
+  it('should reject a missing work item', async () => {
+    repo.getWorkItemById.mockResolvedValue(undefined);
+
+    await expect(service.transitionState('u1', 'missing', 'DONE')).rejects.toThrow(NotFoundException);
     expect(repo.updateState).not.toHaveBeenCalled();
   });
 
   it('should reject unauthorized transition', async () => {
-    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'New', type: 'TASK' });
+    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'TODO', type: 'TASK' });
     authz.requireProjectPermission.mockRejectedValue(new ForbiddenException());
 
-    await expect(service.transitionState('u1', '1', 'Active')).rejects.toThrow(ForbiddenException);
+    await expect(service.transitionState('u1', '1', 'IN_PROGRESS')).rejects.toThrow(ForbiddenException);
     expect(repo.updateState).not.toHaveBeenCalled();
   });
 
-  it('should reject already closed item if trying to transition to something not allowed', async () => {
-    // Current Closed -> Active is allowed. Closed -> Resolved is not.
-    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'Closed', type: 'TASK' });
-    projectsService.assertProjectMember.mockResolvedValue(true);
-
-    await expect(service.transitionState('u1', '1', 'Resolved')).rejects.toThrow(BadRequestException);
-  });
-
-  it('should allow reopening item', async () => {
-    // Current Closed -> Active is allowed.
-    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'Closed', type: 'TASK' });
-    projectsService.assertProjectMember.mockResolvedValue(true);
-    repo.updateState.mockResolvedValue({ id: '1', state: 'Active' });
-
-    const result = await service.transitionState('u1', '1', 'Active');
-    expect(result.state).toBe('Active');
-  });
-
   it('should prevent transitioning to the same state', async () => {
-    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'Active', type: 'TASK' });
-    projectsService.assertProjectMember.mockResolvedValue(true);
+    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'IN_PROGRESS', type: 'TASK' });
 
-    await expect(service.transitionState('u1', '1', 'Active')).rejects.toThrow(BadRequestException);
+    await expect(service.transitionState('u1', '1', 'IN_PROGRESS')).rejects.toThrow(BadRequestException);
     expect(repo.updateState).not.toHaveBeenCalled();
   });
 
   it('should handle concurrent updates by surfacing ConflictException from repo', async () => {
-    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'New', type: 'TASK' });
-    projectsService.assertProjectMember.mockResolvedValue(true);
-    
-    // Simulate repository throwing a ConflictException due to optimistic concurrency check failure
+    repo.getWorkItemById.mockResolvedValue({ id: '1', project_id: 'p1', state: 'TODO', type: 'TASK' });
+
     const { ConflictException } = await import('@nestjs/common');
     repo.updateState.mockRejectedValue(new ConflictException('Concurrent update detected'));
 
-    await expect(service.transitionState('u1', '1', 'Active')).rejects.toThrow(ConflictException);
+    await expect(service.transitionState('u1', '1', 'IN_PROGRESS')).rejects.toThrow(ConflictException);
   });
 });

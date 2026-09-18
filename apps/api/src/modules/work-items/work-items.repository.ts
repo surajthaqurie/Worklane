@@ -1,7 +1,7 @@
 import { CreateWorkItemDto, UpdateWorkItemDto } from "./dto/work-items.dto.js";
 import { Injectable, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
-import { sql } from 'kysely';
+import { sql, type SqlBool } from 'kysely';
 import {
   WorkItemHistoryAction,
   WorkItemHistoryField,
@@ -28,6 +28,16 @@ export class WorkItemsRepository {
       .where('id', '=', areaId)
       .executeTakeFirst();
     return area?.project_id ?? null;
+  }
+
+  async getProjectStates(projectId: string): Promise<{ key: string; isDone: boolean }[]> {
+    const rows = await db
+      .selectFrom('work_item_states')
+      .where('project_id', '=', projectId)
+      .select(['key', 'is_done'])
+      .orderBy('sort_order', 'asc')
+      .execute();
+    return rows.map((r) => ({ key: r.key, isDone: r.is_done }));
   }
 
   async createWorkItem(projectId: string, userId: string, data: CreateWorkItemDto) {
@@ -176,11 +186,7 @@ export class WorkItemsRepository {
       const searchStr = String(filters.search).trim();
       query = query.where((eb) => {
         const conditions = [
-          eb(
-            'search_vector',
-            '@@',
-            sql`plainto_tsquery('english', ${searchStr})`,
-          ),
+          sql<SqlBool>`search_vector @@ plainto_tsquery('english', ${searchStr})`,
           eb('title', 'ilike', `%${searchStr}%`),
         ];
 
@@ -586,20 +592,21 @@ export class WorkItemsRepository {
     return { success: true };
   }
 
-  async updateState(id: string, userId: string, oldState: string, newState: string) {
+  async updateState(
+    id: string,
+    userId: string,
+    oldState: string,
+    newState: string,
+    isDone: boolean,
+  ) {
     return await db.transaction().execute(async (trx) => {
-      const isDone = ['Resolved', 'Closed'].includes(newState);
+      const now = new Date();
       const updateData: any = {
         state: newState,
-        updated_at: new Date(),
-        completed_at: isDone ? new Date() : null,
+        updated_at: now,
+        completed_at: isDone ? now : null,
+        closed_at: isDone ? now : null,
       };
-
-      if (newState === 'Closed') {
-          updateData.closed_at = new Date();
-      } else if (oldState === 'Closed' && newState !== 'Closed') {
-          updateData.closed_at = null;
-      }
 
       const updated = await trx
         .updateTable('work_items')

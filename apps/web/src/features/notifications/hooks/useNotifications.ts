@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { notificationsApi } from '../api/notificationsApi';
-import { NotificationsResponse, Notification } from '@/shared/types/notifications';
+import { NotificationsResponse } from '@/shared/types/notifications';
 import { useToast } from '@/shared/hooks/useToast';
 import { formatApiError } from '@/shared/utils/error';
 

@@ -19,13 +19,33 @@ export const getNotificationsQuerySchema = z.object({
 
 export type GetNotificationsQuery = z.infer<typeof getNotificationsQuerySchema>;
 
+/**
+ * Free-form JSON attached to a notification. Known keys are typed; arbitrary
+ * per-type extras are allowed and treated as unknown.
+ */
+export interface NotificationMetadata {
+  title?: string;
+  key?: string;
+  actorName?: string;
+  commentId?: string;
+  snippet?: string;
+  oldState?: string;
+  newState?: string;
+  iterationId?: string;
+  sprintName?: string;
+  previousIterationId?: string | null;
+  oldParentId?: string | null;
+  newParentId?: string | null;
+  [key: string]: unknown;
+}
+
 export interface NotificationDto {
   id: string;
   userId: string;
   type: NotificationType | string;
   workItemId: string | null;
   actorId: string;
-  metadata: Record<string, any>;
+  metadata: NotificationMetadata;
   readAt: string | null;
   createdAt: string;
 }

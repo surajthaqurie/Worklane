@@ -135,8 +135,8 @@ export function StatesManager({ projectId }: { projectId: string }) {
               <label className="flex items-center gap-1.5 text-[12px] text-[var(--text-secondary)] cursor-pointer shrink-0">
                 <input
                   type="checkbox"
-                  checked={state.category === 'COMPLETED' || state.category === 'RESOLVED'}
-                  onChange={(e) => updateState.mutate({ id: state.id, data: { category: e.target.checked ? 'COMPLETED' : 'PROPOSED' } })}
+                  checked={state.isDone}
+                  onChange={(e) => updateState.mutate({ id: state.id, data: { isDone: e.target.checked } })}
                   className="w-3.5 h-3.5 accent-[var(--iteration-completed)] cursor-pointer"
                 />
                 Done

@@ -273,4 +273,57 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
     const result = await transitionsService.transitionState(memberUserId, itemInProjectA, 'Active');
     expect(result.state).toBe('Active');
   });
+
+  // ─── 4. Assignment Authorization ────────────────────────────────────────────
+
+  async function makeWorkItemsService(overrides: Record<string, any> = {}) {
+    return new WorkItemsService(
+      {
+        getWorkItemById: async (id: string) => {
+          const item = await db.selectFrom('work_items').where('id', '=', id).selectAll().executeTakeFirst();
+          return item ? { ...item, tags: [] } : undefined;
+        },
+        updateWorkItem: async () => undefined,
+        ...overrides,
+      } as any,
+      projectsService,
+      {} as any,
+      authzService,
+      { notifyAssigned: async () => {} } as any,
+    );
+  }
+
+  it('grants WORK_ITEM_ASSIGN to any project member', async () => {
+    const perm = await authzService.requireProjectPermission(
+      projectAId,
+      memberUserId,
+      Permission.WORK_ITEM_ASSIGN,
+    );
+    expect(perm.role).toBe('MEMBER');
+  });
+
+  it('prevents a non-member from assigning work items', async () => {
+    const service = await makeWorkItemsService();
+
+    await expect(
+      service.update(nonMemberUserId, itemInProjectA, { assignedTo: memberUserId }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('prevents assigning a work item to an iteration in another project', async () => {
+    const service = await makeWorkItemsService({ getIterationProjectId: async () => projectBId });
+
+    await expect(
+      service.update(ownerUserId, itemInProjectA, { iterationId: 'some-iteration-id' }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('prevents assigning a work item from another project to a local iteration', async () => {
+    const service = await makeWorkItemsService({ getIterationProjectId: async () => projectAId });
+
+    // Item lives in Project B, iteration in Project A → mismatched scope.
+    await expect(
+      service.update(ownerUserId, itemInProjectB, { iterationId: 'some-iteration-id' }),
+    ).rejects.toThrow(ForbiddenException);
+  });
 });

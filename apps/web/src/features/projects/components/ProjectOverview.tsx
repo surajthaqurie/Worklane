@@ -5,19 +5,6 @@ import { useProjectOverview } from '../hooks/useProjects';
 import { format } from 'date-fns';
 import { Spinner, ErrorState, EmptyState } from '@/shared/components/ui';
 
-interface ActivityItem {
-  id: string;
-  user_name?: string;
-  actorName?: string;
-  action: string;
-  work_item_seq?: number | string;
-  work_item_title?: string;
-  field?: string | null;
-  old_value?: string | null;
-  new_value?: string | null;
-  created_at: string;
-}
-
 export function ProjectOverview({ projectId }: { projectId: string }) {
   const { data, isLoading, error, refetch } = useProjectOverview(projectId);
 
@@ -37,41 +24,15 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
     return <EmptyState title="No project overview available" />;
   }
 
-  const rawData = data as unknown as Record<string, unknown>;
-  const stats = (rawData.stats || {
-    total: data.totalWorkItems || 0,
-    todo: data.openWorkItems || 0,
-    inProgress: 0,
-    done: data.completedWorkItems || 0,
-    bugs: 0,
-  }) as {
-    total: number;
-    todo: number;
-    inProgress: number;
-    done: number;
-    bugs: number;
-  };
-
-  const activeIteration = rawData.activeIteration as {
-    name: string;
-    start_date?: string;
-    startDate?: string;
-    end_date?: string;
-    endDate?: string;
-    completedItems?: number;
-    remainingItems?: number;
-    progress?: number;
-  } | null;
-
-  const recentActivity = (rawData.recentActivity || []) as ActivityItem[];
+  const { stats, activeIteration, recentActivity } = data;
 
   const total = stats.total || 1;
   const todoPct = (stats.todo / total) * 100;
   const inProgPct = (stats.inProgress / total) * 100;
   const donePct = (stats.done / total) * 100;
 
-  const startDate = activeIteration?.start_date || activeIteration?.startDate;
-  const endDate = activeIteration?.end_date || activeIteration?.endDate;
+  const startDate = activeIteration?.start_date;
+  const endDate = activeIteration?.end_date;
 
   return (
     <div className="flex flex-col gap-8">
@@ -189,7 +150,7 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
             {recentActivity.map((act) => (
               <div key={act.id} className="pt-4 flex flex-col gap-1 first:pt-0">
                 <div className="text-sm text-[var(--text-primary)]">
-                  <span className="font-medium">{act.user_name || act.actorName || 'User'}</span>{' '}
+                  <span className="font-medium">{act.user_name}</span>{' '}
                   <span className="text-[var(--text-secondary)]">
                     {act.action === 'CREATED' ? 'created' : 'updated'}
                   </span>{' '}

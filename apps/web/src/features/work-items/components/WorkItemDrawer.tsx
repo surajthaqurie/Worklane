@@ -14,12 +14,12 @@ import {
   useTransitionWorkItemState,
 } from '../hooks/useWorkItems';
 import { WorkItem } from '@/shared/types';
-import { useProjectMembers, useAreas } from '@/features/projects/hooks/useProjects';
+import { useProjectMembers } from '@/features/projects/hooks/useProjects';
 import { useIterations } from '@/features/iterations/hooks/useIterations';
 import { useWorkItemStates } from '../hooks/useWorkItemStates';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Spinner } from '@/shared/components/ui/Spinner';
-import { WorkItemTypeBadge, WorkItemPriorityBadge } from './WorkItemBadge';
+import { WorkItemTypeBadge } from './WorkItemBadge';
 
 export interface WorkItemDrawerProps {
   item: WorkItem | null;
@@ -49,7 +49,6 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
 
   const { data: members = [] } = useProjectMembers(projectId);
   const { data: iterations = [] } = useIterations(projectId);
-  const { data: areas = [] } = useAreas(projectId);
   const { data: allWorkItems = [] } = useWorkItems(projectId);
   const { data: states = [] } = useWorkItemStates(projectId);
 

@@ -32,10 +32,7 @@ export function Queries({ projectId }: { projectId: string }) {
   const [draftDef, setDraftDef] = useState<QueryDefinition>(DEFAULT_DEFINITION);
   const [selectedWorkItem, setSelectedWorkItem] = useState<WorkItem | null>(null);
 
-  const results: WorkItem[] = useMemo(
-    () => (Array.isArray(runQuery.data) ? (runQuery.data as WorkItem[]) : []),
-    [runQuery.data]
-  );
+  const results: WorkItem[] = useMemo(() => runQuery.data?.items ?? [], [runQuery.data]);
 
   const openSavedQuery = (q: SavedQuery) => {
     setSelectedQueryId(q.id);

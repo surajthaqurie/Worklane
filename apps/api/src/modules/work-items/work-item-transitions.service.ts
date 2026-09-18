@@ -5,46 +5,6 @@ import { Permission } from '../authorization/permissions.js';
 
 import { NotificationsService } from '../notifications/notifications.service.js';
 
-export type WorkItemState = 'New' | 'Active' | 'Resolved' | 'Closed' | 'Removed';
-
-export const STATE_TRANSITIONS: Record<string, Record<WorkItemState, WorkItemState[]>> = {
-  EPIC: {
-    New: ['Active', 'Closed', 'Removed'],
-    Active: ['Resolved', 'Closed', 'New'],
-    Resolved: ['Active', 'Closed'],
-    Closed: ['Active'],
-    Removed: ['New'],
-  },
-  FEATURE: {
-    New: ['Active', 'Closed', 'Removed'],
-    Active: ['Resolved', 'Closed', 'New'],
-    Resolved: ['Active', 'Closed'],
-    Closed: ['Active'],
-    Removed: ['New'],
-  },
-  STORY: {
-    New: ['Active', 'Closed', 'Removed'],
-    Active: ['Resolved', 'Closed', 'New'],
-    Resolved: ['Active', 'Closed'],
-    Closed: ['Active'],
-    Removed: ['New'],
-  },
-  TASK: {
-    New: ['Active', 'Closed', 'Removed'],
-    Active: ['Resolved', 'Closed', 'New'],
-    Resolved: ['Active', 'Closed'],
-    Closed: ['Active'],
-    Removed: ['New'],
-  },
-  BUG: {
-    New: ['Active', 'Closed', 'Removed'],
-    Active: ['Resolved', 'Closed', 'New'],
-    Resolved: ['Active', 'Closed'],
-    Closed: ['Active'],
-    Removed: ['New'],
-  },
-};
-
 @Injectable()
 export class WorkItemTransitionsService {
   constructor(
@@ -66,26 +26,31 @@ export class WorkItemTransitionsService {
       Permission.WORK_ITEM_CHANGE_STATE,
     );
 
-    const currentState = item.state as WorkItemState;
-    const type = item.type;
-
-    if (!STATE_TRANSITIONS[type]) {
-      throw new BadRequestException(`No state transitions defined for work item type ${type}`);
-    }
-
-    const validTransitions = STATE_TRANSITIONS[type][currentState] || [];
+    const currentState = item.state as string;
 
     if (currentState === targetState) {
       throw new BadRequestException(`Work item is already in state ${targetState}`);
     }
 
-    if (!validTransitions.includes(targetState as WorkItemState)) {
+    // The project's configurable workflow is the single source of truth: any
+    // state defined for the project is a valid target (Azure Boards style),
+    // and completion is derived from that state's `isDone` flag.
+    const projectStates = await this.repo.getProjectStates(item.project_id);
+    const target = projectStates.find((s) => s.key === targetState);
+
+    if (!target) {
       throw new BadRequestException(
-        `Invalid state transition from ${currentState} to ${targetState} for type ${type}`,
+        `Unknown state "${targetState}" for this project's workflow`,
       );
     }
 
-    const updated = await this.repo.updateState(id, userId, currentState, targetState);
+    const updated = await this.repo.updateState(
+      id,
+      userId,
+      currentState,
+      targetState,
+      target.isDone,
+    );
 
     await this.notifications.notifyStateChanged({
       actorId: userId,

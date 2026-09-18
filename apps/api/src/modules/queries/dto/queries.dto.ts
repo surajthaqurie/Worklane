@@ -69,12 +69,15 @@ export const runQuerySchema = z.object({
   definition: queryDefinitionSchema,
 });
 
+export type QueryClause = z.infer<typeof queryClauseSchema>;
+export type QueryDefinition = z.infer<typeof queryDefinitionSchema>;
+
 export class CreateQueryDto {
   name: string;
   description?: string | null;
   isShared?: boolean;
   folder?: string | null;
-  definition: any;
+  definition: QueryDefinition;
 }
 
 export class UpdateQueryDto {
@@ -82,5 +85,5 @@ export class UpdateQueryDto {
   description?: string | null;
   isShared?: boolean;
   folder?: string | null;
-  definition?: any;
+  definition?: QueryDefinition;
 }

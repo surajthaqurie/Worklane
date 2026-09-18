@@ -6,7 +6,14 @@ import {
 import { BoardsRepository, BoardRow } from './boards.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { WorkItemsService } from '../work-items/work-items.service.js';
-import { CreateBoardDto, UpdateBoardDto, BoardColumn, CardFields, FilterConfig } from './dto/boards.dto.js';
+import {
+  CreateBoardDto,
+  UpdateBoardDto,
+  BoardColumn,
+  CardFields,
+  CreateBoardSchema,
+  UpdateBoardSchema,
+} from './dto/boards.dto.js';
 
 const DEFAULT_CARD_FIELDS: CardFields = {
   showType: true,
@@ -50,23 +57,27 @@ export class BoardsService {
 
   async createBoard(userId: string, projectId: string, dto: CreateBoardDto): Promise<BoardRow> {
     await this.projectsService.assertProjectMember(projectId, userId);
-    const name = dto.name?.trim();
-    if (!name) {
-      throw new BadRequestException('Board name is required');
+
+    const parsed = CreateBoardSchema.safeParse(dto);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid board configuration');
     }
+    const data = parsed.data;
 
     const projectStates = await this.repo.getProjectStates(projectId);
-    const columns = dto.columns || this.generateDefaultColumns(projectStates);
+    const columns = data.columns || this.generateDefaultColumns(projectStates);
     this.validateColumns(columns, projectStates);
 
-    const cardFields = { ...DEFAULT_CARD_FIELDS, ...(dto.cardFields || {}) };
-    const filterConfig = dto.filterConfig || {};
+    const cardFields = data.cardFields
+      ? { ...DEFAULT_CARD_FIELDS, ...data.cardFields }
+      : DEFAULT_CARD_FIELDS;
+    const filterConfig = data.filterConfig || {};
 
     return this.repo.create({
       projectId,
-      teamId: dto.teamId || null,
-      name,
-      description: dto.description?.trim() || null,
+      teamId: data.teamId || null,
+      name: data.name,
+      description: data.description?.trim() || null,
       isDefault: false,
       columns,
       cardFields,
@@ -81,37 +92,40 @@ export class BoardsService {
     dto: UpdateBoardDto,
   ): Promise<BoardRow> {
     await this.projectsService.assertProjectMember(projectId, userId);
+
+    const parsed = UpdateBoardSchema.safeParse(dto);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid board configuration');
+    }
+    const data = parsed.data;
+
     const existing = await this.repo.getById(projectId, boardId);
     if (!existing) {
       throw new NotFoundException('Board not found');
     }
 
-    if (dto.name !== undefined && !dto.name.trim()) {
-      throw new BadRequestException('Board name cannot be empty');
-    }
-
     const projectStates = await this.repo.getProjectStates(projectId);
     let columns = existing.columns;
-    if (dto.columns !== undefined) {
-      columns = dto.columns;
+    if (data.columns !== undefined) {
+      columns = data.columns;
       this.validateColumns(columns, projectStates);
     }
 
     let cardFields = existing.cardFields;
-    if (dto.cardFields !== undefined) {
-      cardFields = { ...DEFAULT_CARD_FIELDS, ...existing.cardFields, ...dto.cardFields };
+    if (data.cardFields !== undefined) {
+      cardFields = { ...DEFAULT_CARD_FIELDS, ...existing.cardFields, ...data.cardFields };
     }
 
     let filterConfig = existing.filterConfig;
-    if (dto.filterConfig !== undefined) {
-      filterConfig = { ...existing.filterConfig, ...dto.filterConfig };
+    if (data.filterConfig !== undefined) {
+      filterConfig = { ...existing.filterConfig, ...data.filterConfig };
     }
 
     return this.repo.update(boardId, {
-      name: dto.name?.trim(),
-      description: dto.description,
-      teamId: dto.teamId,
-      isDefault: dto.isDefault,
+      name: data.name,
+      description: data.description,
+      teamId: data.teamId,
+      isDefault: data.isDefault,
       columns,
       cardFields,
       filterConfig,
@@ -201,6 +215,35 @@ export class BoardsService {
             );
           }
         }
+      }
+    }
+
+    // Board presentation maps workflow states to columns. Every state must be
+    // covered by exactly one column so cards never disappear from the board or
+    // render in multiple columns, and so drag targets stay unambiguous.
+    if (validStateKeys.size > 0) {
+      const coverage = new Map<string, { count: number; columns: string[] }>();
+      for (const col of columns) {
+        for (const stateKey of col.mappedStates) {
+          const entry = coverage.get(stateKey) ?? { count: 0, columns: [] };
+          entry.count += 1;
+          entry.columns.push(col.name);
+          coverage.set(stateKey, entry);
+        }
+      }
+
+      const duplicated = [...coverage.entries()].filter(([, e]) => e.count > 1);
+      if (duplicated.length > 0) {
+        throw new BadRequestException(
+          `Workflow state "${duplicated[0][0]}" is mapped to more than one column (${duplicated[0][1].columns.join(', ')}). Each state must map to exactly one column.`,
+        );
+      }
+
+      const missing = [...validStateKeys].filter((key) => !coverage.has(key));
+      if (missing.length > 0) {
+        throw new BadRequestException(
+          `Every workflow state must map to a column. States not mapped: ${missing.join(', ')}`,
+        );
       }
     }
   }

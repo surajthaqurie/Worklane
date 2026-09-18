@@ -6,9 +6,12 @@ export interface WorkItemState {
   projectId: string;
   key: string;
   name: string;
-  category: 'PROPOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'RESOLVED';
-  order: number;
   color?: string;
+  sortOrder: number;
+  isDone: boolean;
+  isDefault: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface WorkItem {

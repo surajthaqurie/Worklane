@@ -3,13 +3,12 @@ import { workItemsApi } from '../api/workItemsApi';
 import {
   WorkItem,
   WorkItemActivity,
-  WorkItemComment,
   WorkItemCommentPage,
   CreateWorkItemDto,
   UpdateWorkItemDto,
 } from '@/shared/types/work-items';
-import { BacklogResponse, BacklogItem } from '@/shared/types/backlogs';
-import { SprintBoard, SprintBoardGroup } from '@/shared/types/boards';
+import { BacklogResponse } from '@/shared/types/backlogs';
+import { SprintBoard } from '@/shared/types/boards';
 import { formatApiError } from '@/shared/utils/error';
 import { useToast } from '@/shared/hooks/useToast';
 
@@ -48,7 +47,7 @@ function updateWorkItemInCache(
         });
 
         if (movedItem) {
-          const targetGroupIndex = newGroups.findIndex((g) => g.state === (movedItem as WorkItem).state);
+          const targetGroupIndex = newGroups.findIndex((g) => g.state.key === (movedItem as WorkItem).state);
           if (targetGroupIndex !== -1) {
             newGroups[targetGroupIndex] = {
               ...newGroups[targetGroupIndex],
@@ -70,14 +69,6 @@ function updateWorkItemInCache(
 export function useWorkItems(projectId: string, teamId?: string | null) {
   return useQuery<WorkItem[]>({
     queryKey: teamId ? ['projects', projectId, 'work-items', { teamId }] : ['projects', projectId, 'work-items'],
-    queryFn: () => workItemsApi.getWorkItems(projectId, teamId ? { teamId } : undefined),
-    enabled: !!projectId,
-  });
-}
-
-export function useBoardWorkItems(projectId: string, teamId?: string | null) {
-  return useQuery<WorkItem[]>({
-    queryKey: ['projects', projectId, 'work-items', 'board', teamId ? { teamId } : 'all'],
     queryFn: () => workItemsApi.getWorkItems(projectId, teamId ? { teamId } : undefined),
     enabled: !!projectId,
   });

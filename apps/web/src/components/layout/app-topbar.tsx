@@ -1,10 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useSyncExternalStore } from 'react';
 import { Menu, Moon, Sun } from 'lucide-react';
-import { useTheme } from '../providers';
+import { useTheme } from '@/shared/components/providers';
 import { GlobalSearch } from '@/shared/components/ui/GlobalSearch';
 import { NotificationsPopover } from '@/features/notifications/components/NotificationsPopover';
+
+const emptySubscribe = () => () => {};
 
 interface AppTopbarProps {
   onMenuClick: () => void;
@@ -12,11 +14,11 @@ interface AppTopbarProps {
 
 export function AppTopbar({ onMenuClick }: AppTopbarProps) {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 
   const isDark =
     theme === 'dark' ||

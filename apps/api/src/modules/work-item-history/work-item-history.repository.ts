@@ -50,7 +50,7 @@ export class WorkItemHistoryRepository {
   }
 
   /** Returns the immutable history for one work item, oldest first. */
-  async findByWorkItemId(workItemId: string): Promise<HistoryRowWithActor[]> {
+  async findByWorkItemId(workItemId: string, limit: number = 100): Promise<HistoryRowWithActor[]> {
     return await db
       .selectFrom('work_item_history')
       .innerJoin('users', 'users.id', 'work_item_history.user_id')
@@ -69,6 +69,7 @@ export class WorkItemHistoryRepository {
       ])
       .orderBy('work_item_history.inserted_at', 'asc')
       .orderBy('work_item_history.id', 'asc')
+      .limit(limit)
       .execute();
   }
 }

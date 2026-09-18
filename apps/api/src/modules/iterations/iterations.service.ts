@@ -4,7 +4,6 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { IterationsRepository } from './iterations.repository.js';
-import { ProjectsService } from '../projects/projects.service.js';
 import { TeamsService } from '../teams/teams.service.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { Permission } from '../authorization/permissions.js';
@@ -23,7 +22,6 @@ import { db } from '../../db/kysely.js';
 export class IterationsService {
   constructor(
     private readonly repo: IterationsRepository,
-    private readonly projectsService: ProjectsService,
     private readonly teamsService: TeamsService,
     private readonly authz: AuthorizationService,
     private readonly notifications: NotificationsService,
@@ -393,14 +391,17 @@ export class IterationsService {
   // ─── Sprint backlog (enriched) ────────────────────────────────────────────
 
   async getSprintBacklog(userId: string, projectId: string, id: string, teamId?: string) {
-    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_VIEW);
+    const { project } = await this.authz.requireProjectPermissionWithProject(
+      projectId,
+      userId,
+      Permission.ITERATION_VIEW,
+    );
 
     const iteration = await this.repo.findOne(id);
     if (!iteration || iteration.projectId !== projectId) {
       throw new NotFoundException('Iteration not found');
     }
 
-    const project = await this.projectsService.findOne(userId, projectId);
     const areaIds = await this.resolveTeamScope(userId, projectId, teamId, iteration);
     return this.repo.getSprintWorkItems(id, project.key, areaIds);
   }
@@ -413,14 +414,17 @@ export class IterationsService {
    * are included so the frontend renders the full workflow.
    */
   async getSprintBoard(userId: string, projectId: string, id: string, teamId?: string) {
-    await this.authz.requireProjectPermission(projectId, userId, Permission.ITERATION_VIEW);
+    const { project } = await this.authz.requireProjectPermissionWithProject(
+      projectId,
+      userId,
+      Permission.ITERATION_VIEW,
+    );
 
     const iteration = await this.repo.findOne(id);
     if (!iteration || iteration.projectId !== projectId) {
       throw new NotFoundException('Iteration not found');
     }
 
-    const project = await this.projectsService.findOne(userId, projectId);
     const areaIds = await this.resolveTeamScope(userId, projectId, teamId, iteration);
     const [items, states] = await Promise.all([
       this.repo.getSprintWorkItems(id, project.key, areaIds),

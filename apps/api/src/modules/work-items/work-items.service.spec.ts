@@ -81,6 +81,12 @@ describe('WorkItemsService', () => {
         userId,
         role: 'ADMIN',
       })),
+      requireProjectPermissionWithProject: vi.fn(
+        async (projectId: string, userId: string) => ({
+          project: { id: projectId, key: 'P1', name: 'Proj' },
+          membership: { projectId, userId, role: 'ADMIN' },
+        }),
+      ),
     };
 
     notifications = {
@@ -168,7 +174,7 @@ describe('WorkItemsService', () => {
     });
 
     it('requires WORK_ITEM_CREATE before creating', async () => {
-      authz.requireProjectPermission.mockRejectedValue(new ForbiddenException());
+      authz.requireProjectPermissionWithProject.mockRejectedValue(new ForbiddenException());
 
       await expect(
         service.create('u1', 'p1', { type: 'TASK', title: 'Nope' }),
@@ -247,7 +253,7 @@ describe('WorkItemsService', () => {
 
       await service.update('u1', 'wi-1', { assignedTo: 'u2' });
 
-      expect(authz.requireProjectPermission).toHaveBeenCalledWith('p1', 'u1', Permission.WORK_ITEM_ASSIGN);
+      expect(authz.requireProjectPermissionWithProject).toHaveBeenCalledWith('p1', 'u1', Permission.WORK_ITEM_ASSIGN);
     });
 
     it('requires WORK_ITEM_EDIT when other fields are updated at the same time', async () => {
@@ -255,7 +261,7 @@ describe('WorkItemsService', () => {
 
       await service.update('u1', 'wi-1', { assignedTo: 'u2', title: 'Renamed' });
 
-      expect(authz.requireProjectPermission).toHaveBeenCalledWith('p1', 'u1', Permission.WORK_ITEM_EDIT);
+      expect(authz.requireProjectPermissionWithProject).toHaveBeenCalledWith('p1', 'u1', Permission.WORK_ITEM_EDIT);
     });
 
     it('requires WORK_ITEM_EDIT for a title-only update', async () => {
@@ -263,14 +269,14 @@ describe('WorkItemsService', () => {
 
       await service.update('u1', 'wi-1', { title: 'Renamed' });
 
-      expect(authz.requireProjectPermission).toHaveBeenCalledWith('p1', 'u1', Permission.WORK_ITEM_EDIT);
+      expect(authz.requireProjectPermissionWithProject).toHaveBeenCalledWith('p1', 'u1', Permission.WORK_ITEM_EDIT);
     });
 
     it('rejects reassignment without WORK_ITEM_ASSIGN even when WORK_ITEM_EDIT is held', async () => {
       await givenItems([mockItem({ id: 'wi-1', assigned_to: null })]);
-      authz.requireProjectPermission.mockImplementation(async (_p: string, _u: string, permission: Permission) => {
+      authz.requireProjectPermissionWithProject.mockImplementation(async (_p: string, _u: string, permission: Permission) => {
         if (permission === Permission.WORK_ITEM_ASSIGN) throw new ForbiddenException();
-        return { role: 'ADMIN' };
+        return { project: { id: _p, key: 'P1' }, membership: { role: 'ADMIN' } };
       });
 
       await expect(service.update('u1', 'wi-1', { assignedTo: 'u2' })).rejects.toThrow(
@@ -442,7 +448,7 @@ describe('WorkItemsService', () => {
 
       const result = await service.findOne('u1', 'wi-1');
 
-      expect(authz.requireProjectPermission).toHaveBeenCalledWith('p1', 'u1', Permission.WORK_ITEM_VIEW);
+      expect(authz.requireProjectPermissionWithProject).toHaveBeenCalledWith('p1', 'u1', Permission.WORK_ITEM_VIEW);
       expect(result.key).toBe('P1-7');
     });
 

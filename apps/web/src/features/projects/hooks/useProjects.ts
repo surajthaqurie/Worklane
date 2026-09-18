@@ -6,6 +6,7 @@ export function useProjects() {
   return useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: () => projectsApi.getProjects(),
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -14,6 +15,7 @@ export function useProject(projectId: string) {
     queryKey: ['projects', projectId],
     queryFn: () => projectsApi.getProject(projectId),
     enabled: !!projectId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -22,6 +24,7 @@ export function useProjectMembers(projectId: string) {
     queryKey: ['projects', projectId, 'members'],
     queryFn: () => projectsApi.getProjectMembers(projectId),
     enabled: !!projectId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -30,6 +33,7 @@ export function useProjectOverview(projectId: string) {
     queryKey: ['projects', projectId, 'overview'],
     queryFn: () => projectsApi.getProjectOverview(projectId),
     enabled: !!projectId,
+    staleTime: 30 * 1000,
   });
 }
 
@@ -38,6 +42,7 @@ export function useAreas(projectId: string) {
     queryKey: ['projects', projectId, 'areas'],
     queryFn: () => projectsApi.getAreas(projectId),
     enabled: !!projectId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -46,6 +51,7 @@ export function useTags(projectId: string) {
     queryKey: ['projects', projectId, 'tags'],
     queryFn: () => projectsApi.getTags(projectId),
     enabled: !!projectId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

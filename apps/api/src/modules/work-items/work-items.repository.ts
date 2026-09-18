@@ -116,6 +116,15 @@ export class WorkItemsRepository {
 
     if (filters.state) query = query.where('state', '=', filters.state);
     if (filters.type) query = query.where('type', '=', filters.type);
+    if (filters.types) {
+      const raw: string[] = Array.isArray(filters.types)
+        ? filters.types
+        : String(filters.types).split(',');
+      const typesList: ('EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG')[] = raw
+        .map((t: string) => String(t).trim())
+        .filter((t: string) => Boolean(t)) as ('EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG')[];
+      if (typesList.length > 0) query = query.where('type', 'in', typesList);
+    }
     if (filters.priority)
       query = query.where('priority', '=', filters.priority);
     if (filters.assignedTo) {
@@ -204,17 +213,45 @@ export class WorkItemsRepository {
     const limit = filters.limit ? parseInt(filters.limit) : 50;
     const offset = filters.offset ? parseInt(filters.offset) : 0;
 
+    // Lean list: `description` and `points` are payload-heavy and only needed
+    // on detail views, so they are excluded by default. Callers that render
+    // them (e.g. kanban cards) opt back in via `fields=description,points`.
+    const leanColumns = [
+      'id',
+      'project_id',
+      'seq_no',
+      'parent_id',
+      'type',
+      'title',
+      'state',
+      'priority',
+      'assigned_to',
+      'created_by',
+      'created_at',
+      'updated_at',
+      'completed_at',
+      'iteration_id',
+      'area_id',
+      'backlog_order',
+    ] as const;
+    const optionalColumns: ('description' | 'points')[] = [];
+    if (filters.fields) {
+      const requestedFields = new Set(
+        String(filters.fields)
+          .split(',')
+          .map((f: string) => f.trim())
+          .filter(Boolean),
+      );
+      if (requestedFields.has('description')) optionalColumns.push('description');
+      if (requestedFields.has('points')) optionalColumns.push('points');
+    }
+
+    const hasChildrenExpr = sql<boolean>`EXISTS (
+      SELECT 1 FROM work_items AS children WHERE children.parent_id = work_items.id
+    )`.as('has_children');
+
     return await query
-      .select((eb) => [
-        'id', 'project_id', 'seq_no', 'parent_id', 'type', 'title', 'description', 
-        'state', 'priority', 'points', 'assigned_to', 'created_by', 'created_at', 
-        'updated_at', 'completed_at', 'closed_at', 'iteration_id', 'area_id', 'backlog_order',
-        eb.exists(
-          eb.selectFrom('work_items as children')
-            .whereRef('children.parent_id', '=', 'work_items.id')
-            .select('children.id')
-        ).as('has_children')
-      ])
+      .select([...leanColumns, ...optionalColumns, hasChildrenExpr])
       .orderBy('backlog_order', 'asc')
       .orderBy('seq_no', 'desc')
       .limit(limit)

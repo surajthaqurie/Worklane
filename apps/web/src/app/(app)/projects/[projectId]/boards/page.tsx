@@ -59,54 +59,36 @@ export default function ProjectBoardPage() {
     setAssignedTo(cfg.assignedTo ?? '');
   }
 
-  const typeFilter = useMemo(() => {
-    if (backlogLevel === 'EPIC') return 'EPIC';
-    if (backlogLevel === 'FEATURE') return 'FEATURE';
-    return undefined;
+  const selectedTypes = useMemo(() => {
+    if (backlogLevel === 'EPIC') return ['EPIC'];
+    if (backlogLevel === 'FEATURE') return ['FEATURE'];
+    return ['STORY', 'BUG'];
   }, [backlogLevel]);
+
+  // Intersect the board level with the board's persisted type restriction, then
+  // let the API do the filtering (index-backed) instead of filtering the 500-row
+  // client cache. `NONE` is a sentinel that matches nothing.
+  const typesFilter = useMemo(() => {
+    const allowed = activeBoard?.filterConfig?.types ?? [];
+    const set = selectedTypes.filter((t) => allowed.length === 0 || allowed.includes(t));
+    return set.length > 0 ? set.join(',') : 'NONE';
+  }, [selectedTypes, activeBoard?.filterConfig?.types]);
 
   const {
     data: workItems = [],
     isLoading: isLoadingWorkItems,
     error,
-  } = useWorkItems(projectId, selectedTeamId);
+  } = useWorkItems(projectId, selectedTeamId, {
+    types: typesFilter,
+    search: debouncedSearch.trim() || undefined,
+    tags: tags.trim() || undefined,
+    assignedTo: assignedTo || undefined,
+    limit: '500',
+    fields: 'points',
+  });
 
   const transitionWorkItem = useTransitionWorkItemState(projectId);
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
-
-  const boardItems = useMemo(() => {
-    const allowedTypes = activeBoard?.filterConfig?.types;
-    const searchQuery = debouncedSearch.trim().toLowerCase();
-    const tagQuery = tags
-      .split(',')
-      .map((t) => t.trim().toLowerCase())
-      .filter(Boolean);
-
-    return workItems.filter((item) => {
-      if (backlogLevel === 'STORY') {
-        if (item.type !== 'STORY' && item.type !== 'BUG') return false;
-      } else if (typeFilter) {
-        if (item.type !== typeFilter) return false;
-      }
-      if (allowedTypes && allowedTypes.length > 0 && !allowedTypes.includes(item.type)) {
-        return false;
-      }
-      if (searchQuery) {
-        const haystack = `${item.title} ${item.key} ${item.description ?? ''}`.toLowerCase();
-        if (!haystack.includes(searchQuery)) return false;
-      }
-      if (tagQuery.length > 0) {
-        const itemTags = (item.tags ?? []).map((t) => t.toLowerCase());
-        if (!tagQuery.some((t) => itemTags.includes(t))) return false;
-      }
-      if (assignedTo === 'UNASSIGNED') {
-        if (item.assignedTo) return false;
-      } else if (assignedTo) {
-        if (item.assignedTo !== assignedTo) return false;
-      }
-      return true;
-    });
-  }, [workItems, backlogLevel, typeFilter, activeBoard?.filterConfig?.types, debouncedSearch, tags, assignedTo]);
 
   const storyByParentId = useMemo(() => {
     const map: Record<string, { key: string; title: string }> = {};
@@ -189,7 +171,7 @@ export default function ProjectBoardPage() {
             <h2 className="text-[14px] font-semibold text-[var(--text-primary)]">
               Board ·{' '}
               <span className="text-[var(--text-secondary)] font-medium">
-                {boardItems.length} {boardItems.length === 1 ? 'item' : 'items'}
+                {workItems.length} {workItems.length === 1 ? 'item' : 'items'}
               </span>
             </h2>
 
@@ -244,7 +226,7 @@ export default function ProjectBoardPage() {
           <ErrorState error={error} title="Failed to load board" />
         ) : (
           <Board
-            items={boardItems}
+            items={workItems}
             states={states}
             board={activeBoard}
             onStateChange={handleDragState}

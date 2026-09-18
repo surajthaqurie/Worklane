@@ -17,7 +17,7 @@ export interface BoardColumnProps {
   storyByParentId: Record<string, { key: string; title: string }>;
 }
 
-export function BoardColumn({
+export const BoardColumn = React.memo(function BoardColumn({
   column,
   items,
   states,
@@ -103,4 +103,4 @@ export function BoardColumn({
       </div>
     </div>
   );
-}
+});

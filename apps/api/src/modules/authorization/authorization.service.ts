@@ -8,6 +8,20 @@ export interface ProjectMembership {
   role: ProjectRole;
 }
 
+/** Raw `projects` row as returned by `requireProjectPermissionWithProject`. */
+export interface ProjectRow {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
+  key: string;
+  created_by: string;
+  archived: boolean;
+  next_work_item_seq: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
 /**
  * Central authorization service.
  *
@@ -68,17 +82,56 @@ export class AuthorizationService {
     userId: string,
     permission: Permission,
   ): Promise<ProjectMembership> {
-    const project = await db
-      .selectFrom('projects')
-      .where('id', '=', projectId)
-      .select(['id'])
+    const { membership } = await this.requireProjectPermissionWithProject(
+      projectId,
+      userId,
+      permission,
+    );
+    return membership;
+  }
+
+  /**
+   * Like `requireProjectPermission` but also returns the full project row from
+   * the SAME query that resolves the role. Callers that need the project (e.g.
+   * for its `key` when formatting work-item identifiers) should prefer this
+   * over chaining `requireProjectPermission` + a separate project lookup.
+   *
+   * Resolves the role via a single LEFT JOIN on `project_members`, so worst
+   * case previously (3 queries: project existence + member row + creator
+   * fallback) collapses to 1 round-trip.
+   */
+  async requireProjectPermissionWithProject(
+    projectId: string,
+    userId: string,
+    permission: Permission,
+  ): Promise<{ project: ProjectRow; membership: ProjectMembership }> {
+    const row = await db
+      .selectFrom('projects as p')
+      .leftJoin('project_members as pm', (jb) =>
+        jb.on('pm.project_id', '=', 'p.id').on('pm.user_id', '=', userId),
+      )
+      .where('p.id', '=', projectId)
+      .select([
+        'p.id',
+        'p.organization_id',
+        'p.name',
+        'p.description',
+        'p.key',
+        'p.created_by',
+        'p.archived',
+        'p.next_work_item_seq',
+        'p.created_at',
+        'p.updated_at',
+        'pm.role as member_role',
+      ])
       .executeTakeFirst();
 
-    if (!project) {
+    if (!row) {
       throw new NotFoundException('Project not found');
     }
 
-    const role = await this.getProjectRole(projectId, userId);
+    const role: ProjectRole | null =
+      (row.member_role as ProjectRole | null) ?? (row.created_by === userId ? 'OWNER' : null);
 
     if (!role) {
       throw new ForbiddenException('You do not have access to this project');
@@ -90,7 +143,10 @@ export class AuthorizationService {
       );
     }
 
-    return { projectId, userId, role };
+    // Strip the joined-in role column so the returned project matches a raw row.
+    const { member_role, ...project } = row;
+
+    return { project, membership: { projectId, userId, role } };
   }
 
   /**

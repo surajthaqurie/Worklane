@@ -9,6 +9,7 @@ import { useWorkItemStates } from '@/features/work-items/hooks/useWorkItemStates
 import { useIterations } from '@/features/iterations/hooks/useIterations';
 import { useProjectMembers } from '@/features/projects/hooks/useProjects';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
+import { useDebounce } from '@/shared/hooks/useDebounce';
 import { BacklogHeader } from '@/features/backlogs/components/BacklogHeader';
 import { BacklogTable, FlatNode } from '@/features/backlogs/components/BacklogTable';
 import { WorkItemDrawer } from '@/features/work-items/components/WorkItemDrawer';
@@ -20,6 +21,7 @@ export function Backlog({ projectId }: { projectId: string }) {
   const { selectedTeamId } = useProjectContext();
 
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [filterType, setFilterType] = useState('');
   const [filterState, setFilterState] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
@@ -39,14 +41,14 @@ export function Backlog({ projectId }: { projectId: string }) {
     () => ({
       parentId: null,
       teamId: selectedTeamId || undefined,
-      search: search || undefined,
+      search: debouncedSearch || undefined,
       type: filterType || undefined,
       state: filterState || undefined,
       priority: filterPriority || undefined,
       assignedTo: filterAssignedTo || undefined,
       iterationId: filterIterationId === 'backlog' ? undefined : filterIterationId || undefined,
     }),
-    [selectedTeamId, search, filterType, filterState, filterPriority, filterAssignedTo, filterIterationId]
+    [selectedTeamId, debouncedSearch, filterType, filterState, filterPriority, filterAssignedTo, filterIterationId]
   );
 
   const { data: topLevel, isLoading, error } = useBacklogLevel(projectId, filters);

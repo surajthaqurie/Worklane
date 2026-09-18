@@ -20,9 +20,11 @@ export class WorkItemsService {
 
   async create(userId: string, projectId: string, data: CreateWorkItemDto) {
     // Never trust projectId from the client alone — confirm membership via authz
-    await this.authz.requireProjectPermission(projectId, userId, Permission.WORK_ITEM_CREATE);
-
-    const project = await this.projectsService.assertProjectMember(projectId, userId);
+    const { project } = await this.authz.requireProjectPermissionWithProject(
+      projectId,
+      userId,
+      Permission.WORK_ITEM_CREATE,
+    );
 
     if (data.parentId) {
       // validateParent already checks cross-project (parent must be in same project)
@@ -59,9 +61,12 @@ export class WorkItemsService {
   }
 
   async findAll(userId: string, projectId: string, filters: WorkItemFilterDto) {
-    await this.authz.requireProjectPermission(projectId, userId, Permission.WORK_ITEM_VIEW);
+    const { project } = await this.authz.requireProjectPermissionWithProject(
+      projectId,
+      userId,
+      Permission.WORK_ITEM_VIEW,
+    );
 
-    const project = await this.projectsService.assertProjectMember(projectId, userId);
     if (filters.teamId && filters.teamId !== 'default' && filters.teamId !== 'undefined') {
       await this.teamsService.assertTeamMember(projectId, filters.teamId, userId);
     }
@@ -75,9 +80,11 @@ export class WorkItemsService {
     if (!item) throw new NotFoundException('Work item not found');
 
     // Derive the project from the item, never from client input
-    await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_VIEW);
-
-    const project = await this.projectsService.assertProjectMember(item.project_id, userId);
+    const { project } = await this.authz.requireProjectPermissionWithProject(
+      item.project_id,
+      userId,
+      Permission.WORK_ITEM_VIEW,
+    );
     return this.mapWorkItem(item, project.key);
   }
 
@@ -86,15 +93,18 @@ export class WorkItemsService {
     if (!item) throw new NotFoundException('Work item not found');
 
     // Determine required permission based on what fields are being changed
-    if (data.assignedTo !== undefined && Object.keys(data).length === 1) {
-      // Only assigning — requires WORK_ITEM_ASSIGN
-      await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_ASSIGN);
-    } else {
-      // General edit — requires WORK_ITEM_EDIT
-      await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_EDIT);
-    }
+    const permission =
+      data.assignedTo !== undefined && Object.keys(data).length === 1
+        ? // Only assigning — requires WORK_ITEM_ASSIGN
+          Permission.WORK_ITEM_ASSIGN
+        : // General edit — requires WORK_ITEM_EDIT
+          Permission.WORK_ITEM_EDIT;
 
-    const project = await this.projectsService.assertProjectMember(item.project_id, userId);
+    const { project } = await this.authz.requireProjectPermissionWithProject(
+      item.project_id,
+      userId,
+      permission,
+    );
 
     if ((data as any).state !== undefined) {
       throw new BadRequestException('State transitions must be done via the dedicated transition endpoint');
@@ -254,10 +264,14 @@ export class WorkItemsService {
   async addComment(userId: string, id: string, content: string) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
-    await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_VIEW);
+
+    const { project } = await this.authz.requireProjectPermissionWithProject(
+      item.project_id,
+      userId,
+      Permission.WORK_ITEM_VIEW,
+    );
 
     const comment = await this.repo.createComment(id, userId, content);
-    const project = await this.projectsService.assertProjectMember(item.project_id, userId);
     const key = `${project.key}-${item.seq_no}`;
 
     await this.parseAndNotifyMentions(
@@ -323,7 +337,12 @@ export class WorkItemsService {
   ) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
-    await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_VIEW);
+
+    const { project } = await this.authz.requireProjectPermissionWithProject(
+      item.project_id,
+      userId,
+      Permission.WORK_ITEM_VIEW,
+    );
 
     const updated = await this.repo.updateComment(
       commentId,
@@ -332,7 +351,6 @@ export class WorkItemsService {
       expectedVersion,
     );
 
-    const project = await this.projectsService.assertProjectMember(item.project_id, userId);
     const key = `${project.key}-${item.seq_no}`;
 
     await this.parseAndNotifyMentions(

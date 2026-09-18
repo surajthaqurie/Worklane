@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { sql } from 'kysely';
 import { db } from '../../db/kysely.js';
 
 export const DEFAULT_WORK_ITEM_STATES = [
@@ -179,12 +180,6 @@ export class ProjectsRepository {
   }
 
   async getProjectOverview(projectId: string) {
-    const workItems = await db
-      .selectFrom('work_items')
-      .where('project_id', '=', projectId)
-      .select(['id', 'state', 'type'])
-      .execute();
-
     const states = await db
       .selectFrom('work_item_states')
       .where('project_id', '=', projectId)
@@ -192,13 +187,26 @@ export class ProjectsRepository {
       .orderBy('sort_order', 'asc')
       .execute();
 
-    const stateCounts: Record<string, number> = {};
-    for (const item of workItems) {
-      stateCounts[item.state] = (stateCounts[item.state] || 0) + 1;
-    }
-
     const firstStateKey = states[0]?.key;
     const doneStates = new Set(states.filter((s) => s.is_done).map((s) => s.key));
+
+    // Aggregate counts in SQL instead of shipping every row to Node so
+    // projects with a large work-item backlog stay O(states) not O(items).
+    const groups = await db
+      .selectFrom('work_items')
+      .where('project_id', '=', projectId)
+      .select(['state', 'type', sql<number>`count(*)::int`.as('count')])
+      .groupBy(['state', 'type'])
+      .execute();
+
+    const stateCounts: Record<string, number> = {};
+    let bugCount = 0;
+    let total = 0;
+    for (const g of groups) {
+      stateCounts[g.state] = (stateCounts[g.state] || 0) + g.count;
+      if (g.type === 'BUG') bugCount += g.count;
+      total += g.count;
+    }
 
     const activeIteration = await db
       .selectFrom('iterations')
@@ -229,21 +237,26 @@ export class ProjectsRepository {
 
     let activeIterationStats = null;
     if (activeIteration) {
-      const iterationItems = await db
+      const iterationGroups = await db
         .selectFrom('work_items')
         .where('iteration_id', '=', activeIteration.id)
-        .select(['id', 'state'])
+        .select(['state', sql<number>`count(*)::int`.as('count')])
+        .groupBy('state')
         .execute();
 
-      const completed = iterationItems.filter((i) => doneStates.has(i.state)).length;
-      const total = iterationItems.length;
+      let completed = 0;
+      let iterationTotal = 0;
+      for (const g of iterationGroups) {
+        if (doneStates.has(g.state)) completed += g.count;
+        iterationTotal += g.count;
+      }
 
       activeIterationStats = {
         ...activeIteration,
         completedItems: completed,
-        remainingItems: total - completed,
-        totalItems: total,
-        progress: total > 0 ? Math.round((completed / total) * 100) : 0,
+        remainingItems: iterationTotal - completed,
+        totalItems: iterationTotal,
+        progress: iterationTotal > 0 ? Math.round((completed / iterationTotal) * 100) : 0,
       };
     }
 
@@ -253,11 +266,11 @@ export class ProjectsRepository {
     const todo = firstStateKey ? stateCounts[firstStateKey] || 0 : 0;
 
     const stats = {
-      total: workItems.length,
+      total,
       todo,
-      inProgress: Math.max(0, workItems.length - todo - done),
+      inProgress: Math.max(0, total - todo - done),
       done,
-      bugs: workItems.filter((i) => i.type === 'BUG').length,
+      bugs: bugCount,
     };
 
     return {

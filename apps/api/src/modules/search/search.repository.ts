@@ -63,8 +63,14 @@ export class SearchRepository {
     let query = db
       .selectFrom('work_items as wi')
       .innerJoin('projects as p', 'p.id', 'wi.project_id')
-      .leftJoin('users as u', 'u.id', 'wi.assigned_to')
-      .where((eb) =>
+      .leftJoin('users as u', 'u.id', 'wi.assigned_to');
+
+    // Optional single-project scope. Membership is asserted upstream in the
+    // service via assertProjectMember.
+    if (filters.projectId) {
+      query = query.where('wi.project_id', '=', filters.projectId);
+    } else {
+      query = query.where((eb) =>
         eb(
           'wi.project_id',
           'in',
@@ -80,21 +86,16 @@ export class SearchRepository {
             .select('p.id'),
         ),
       );
-
-    // Optional single-project scope. Membership is asserted upstream in the
-    // service via assertProjectMember.
-    if (filters.projectId) {
-      query = query.where('wi.project_id', '=', filters.projectId);
     }
 
     if (searchQ) {
       query = query.where((eb) => {
-        const conditions = [
+        const conditions: any[] = [
           sql<SqlBool>`wi.search_vector @@ plainto_tsquery('english', ${searchQ})`,
           eb('wi.title', 'ilike', `%${searchQ}%`),
           eb('wi.description', 'ilike', `%${searchQ}%`),
-          // Match raw work item ID (covers UUID lookups without UUID cast errors).
-          eb(sql`wi.id::text`, '=', searchQ),
+          // Match assigned user by name directly using the joined table
+          eb('u.name', 'ilike', `%${searchQ}%`),
           // Match tags.
           eb.exists(
             eb
@@ -104,15 +105,12 @@ export class SearchRepository {
               .where('t.name', 'ilike', `%${searchQ}%`)
               .select('wit.work_item_id'),
           ),
-          // Match assigned user by name.
-          eb.exists(
-            eb
-              .selectFrom('users as au')
-              .whereRef('au.id', '=', 'wi.assigned_to')
-              .where('au.name', 'ilike', `%${searchQ}%`)
-              .select('au.id'),
-          ),
         ];
+
+        // Match raw work item ID if search term is a valid UUID format
+        if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(searchQ)) {
+          conditions.push(eb('wi.id', '=', searchQ));
+        }
 
         // Project key + sequence ("PROJ-123") or bare sequence ("123").
         const seqMatch = searchQ.match(/(?:^[a-zA-Z]+-)?(\d+)$/);

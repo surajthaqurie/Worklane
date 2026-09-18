@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import {
   useWorkItemComments,
   useWorkItemActivity,
+  useWorkItemDetail,
   useAddComment,
   useUpdateComment,
   useDeleteComment,
@@ -39,6 +40,9 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
   const { data: commentPages, isLoading: isLoadingComments } = useWorkItemComments(itemId);
   const comments = commentPages?.pages.flatMap((p) => p.items) ?? [];
   const { data: activity = [], isLoading: isLoadingActivity } = useWorkItemActivity(itemId);
+  // Lean list responses (board, backlog, grid) omit `description`/`points`;
+  // fetch the full row so editing never clobbers fields we didn't receive.
+  const { data: detail } = useWorkItemDetail(itemId);
 
   const addComment = useAddComment(itemId);
   const updateComment = useUpdateComment(itemId);
@@ -49,10 +53,12 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
 
   const { data: members = [] } = useProjectMembers(projectId);
   const { data: iterations = [] } = useIterations(projectId);
-  const { data: allWorkItems = [] } = useWorkItems(projectId);
+  const { data: allWorkItems = [] } = useWorkItems(projectId, undefined, { limit: '50' });
   const { data: states = [] } = useWorkItemStates(projectId);
 
   if (!item) return null;
+
+  const current = detail ?? item;
 
   const handleDeleteWorkItem = () => {
     if (confirm('Are you sure you want to delete this work item?')) {
@@ -76,17 +82,17 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
   const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && tagInput.trim()) {
       e.preventDefault();
-      const currentTags = item.tags || [];
-      if (!currentTags.includes(tagInput.trim())) {
-        handleUpdate('tags', [...currentTags, tagInput.trim()]);
+      const existingTags = current.tags || [];
+      if (!existingTags.includes(tagInput.trim())) {
+        handleUpdate('tags', [...existingTags, tagInput.trim()]);
       }
       setTagInput('');
     }
   };
 
   const handleRemoveTag = (tagToRemove: string) => {
-    const currentTags = item.tags || [];
-    handleUpdate('tags', currentTags.filter((t: string) => t !== tagToRemove));
+    const existingTags = current.tags || [];
+    handleUpdate('tags', existingTags.filter((t: string) => t !== tagToRemove));
   };
 
   const handleAddComment = () => {
@@ -122,11 +128,11 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
       onClose={onClose}
       title={
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-[var(--text-muted)] font-normal">{item.key}</span>
-          <WorkItemTypeBadge type={item.type} />
+          <span className="font-mono text-xs text-[var(--text-muted)] font-normal">{current.key}</span>
+          <WorkItemTypeBadge type={current.type} />
         </div>
       }
-      subtitle={item.title}
+      subtitle={current.title}
     >
       <div className="flex flex-col h-full">
         {/* Navigation Tabs */}
@@ -169,22 +175,22 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
             <div className="flex flex-col gap-6">
               {/* Title & Description */}
               <div className="flex flex-col gap-3">
-                <input
-                  type="text"
-                  defaultValue={item.title}
-                  onBlur={(e) => {
-                    if (e.target.value.trim() && e.target.value !== item.title) {
-                      handleUpdate('title', e.target.value.trim());
-                    }
-                  }}
+<input
+                    type="text"
+                    defaultValue={current.title}
+                    onBlur={(e) => {
+                      if (e.target.value.trim() && e.target.value !== current.title) {
+                        handleUpdate('title', e.target.value.trim());
+                      }
+                    }}
                   className="text-lg font-semibold bg-transparent border-b border-transparent hover:border-[var(--border-default)] focus:border-[var(--border-focus)] outline-none transition-colors text-[var(--text-primary)]"
                 />
 
                 <textarea
-                  defaultValue={item.description || ''}
+                  defaultValue={current.description || ''}
                   placeholder="Add a detailed description..."
                   onBlur={(e) => {
-                    if (e.target.value !== (item.description || '')) {
+                    if (e.target.value !== (current.description || '')) {
                       handleUpdate('description', e.target.value);
                     }
                   }}
@@ -198,7 +204,7 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-medium text-[var(--text-muted)]">State</label>
                   <select
-                    value={item.state}
+                    value={current.state}
                     onChange={(e) => handleUpdate('state', e.target.value)}
                     className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
                   >
@@ -213,7 +219,7 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-medium text-[var(--text-muted)]">Priority</label>
                   <select
-                    value={item.priority}
+                    value={current.priority}
                     onChange={(e) => handleUpdate('priority', e.target.value)}
                     className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
                   >
@@ -227,7 +233,7 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-medium text-[var(--text-muted)]">Assignee</label>
                   <select
-                    value={item.assignedTo || ''}
+                    value={current.assignedTo || ''}
                     onChange={(e) => handleUpdate('assignedTo', e.target.value || null)}
                     className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
                   >
@@ -245,10 +251,10 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                   <input
                     type="number"
                     min={0}
-                    defaultValue={item.points ?? ''}
+                    defaultValue={current.points ?? ''}
                     onBlur={(e) => {
                       const val = e.target.value ? parseInt(e.target.value, 10) : null;
-                      if (val !== item.points) handleUpdate('points', val);
+                      if (val !== current.points) handleUpdate('points', val);
                     }}
                     className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
                   />
@@ -257,7 +263,7 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-medium text-[var(--text-muted)]">Parent Item</label>
                   <select
-                    value={item.parentId || ''}
+                    value={current.parentId || ''}
                     onChange={(e) => handleUpdate('parentId', e.target.value || null)}
                     className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
                   >
@@ -275,7 +281,7 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-medium text-[var(--text-muted)]">Iteration</label>
                   <select
-                    value={item.iterationId || ''}
+                    value={current.iterationId || ''}
                     onChange={(e) => handleUpdate('iterationId', e.target.value || null)}
                     className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
                   >
@@ -293,7 +299,7 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
               <div className="border-t border-[var(--border-subtle)] pt-4 flex flex-col gap-2">
                 <label className="text-[11px] font-medium text-[var(--text-muted)]">Tags</label>
                 <div className="flex flex-wrap gap-1.5 items-center">
-                  {(item.tags || []).map((t: string) => (
+                  {(current.tags || []).map((t: string) => (
                     <span
                       key={t}
                       className="inline-flex items-center gap-1 bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] px-2 py-0.5 rounded-full text-xs"
@@ -329,7 +335,7 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                   Delete Work Item
                 </button>
                 <div className="text-[11px] text-[var(--text-muted)]">
-                  Created {format(new Date(item.createdAt), 'MMM d, yyyy')}
+                  Created {format(new Date(current.createdAt), 'MMM d, yyyy')}
                 </div>
               </div>
             </div>

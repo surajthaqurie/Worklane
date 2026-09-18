@@ -205,8 +205,8 @@ export class WorkItemHistoryService {
    * Returns the activity timeline for a work item, oldest first. Structured
    * values are enriched into display labels and a human-readable description.
    */
-  async getActivity(workItemId: string): Promise<WorkItemActivityEntry[]> {
-    const rows = await this.repository.findByWorkItemId(workItemId);
+  async getActivity(workItemId: string, limit?: number): Promise<WorkItemActivityEntry[]> {
+    const rows = await this.repository.findByWorkItemId(workItemId, limit);
     if (rows.length === 0) return [];
 
     const lookups = await this.loadLookups(rows);

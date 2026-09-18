@@ -69,10 +69,21 @@ export function Board({
     onStateChange(item.id, targetStateKey);
   };
 
+  const itemsByColumnId = useMemo(() => {
+    const map = new Map<string, WorkItem[]>();
+    for (const col of columns) {
+      map.set(
+        col.id,
+        items.filter((w) => col.mappedStates.includes(w.state))
+      );
+    }
+    return map;
+  }, [columns, items]);
+
   const content = (
     <div className="flex gap-4 overflow-x-auto pb-4 items-stretch h-full w-full min-h-[400px]">
       {columns.map((col) => {
-        const columnItems = items.filter((w) => col.mappedStates.includes(w.state));
+        const columnItems = itemsByColumnId.get(col.id) || [];
         return (
           <BoardColumn
             key={col.id}

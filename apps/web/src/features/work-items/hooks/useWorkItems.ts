@@ -66,10 +66,66 @@ function updateWorkItemInCache(
   });
 }
 
-export function useWorkItems(projectId: string, teamId?: string | null) {
+// A work-item mutation can touch the item lists, the backlog tree, and any
+// iteration board that renders the item. Restricting invalidation to these
+// scopes keeps boards config, members, areas, tags, overview, and other
+// project queries from refetching on every edit.
+function invalidateWorkItemScopes(queryClient: QueryClient, projectId: string) {
+  queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
+  queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'backlog'] });
+  queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'iterations'] });
+}
+
+function cancelWorkItemScopes(queryClient: QueryClient, projectId: string) {
+  queryClient.cancelQueries({ queryKey: ['projects', projectId, 'work-items'] });
+  queryClient.cancelQueries({ queryKey: ['projects', projectId, 'backlog'] });
+  queryClient.cancelQueries({ queryKey: ['projects', projectId, 'iterations'] });
+}
+
+export interface WorkItemsQuery {
+  search?: string;
+  tags?: string;
+  assignedTo?: string;
+  types?: string;
+  state?: string;
+  iterationId?: string;
+  areaId?: string;
+  parentId?: string;
+  priority?: string;
+  limit?: string;
+  offset?: string;
+  fields?: string;
+}
+
+function buildWorkItemsParams(teamId?: string | null, filters?: WorkItemsQuery): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (teamId) params.teamId = teamId;
+  if (!filters) return params;
+  const entries: Array<[string, string | undefined]> = [
+    ['search', filters.search],
+    ['tags', filters.tags],
+    ['assignedTo', filters.assignedTo],
+    ['types', filters.types],
+    ['state', filters.state],
+    ['iterationId', filters.iterationId],
+    ['areaId', filters.areaId],
+    ['parentId', filters.parentId],
+    ['priority', filters.priority],
+    ['limit', filters.limit],
+    ['offset', filters.offset],
+    ['fields', filters.fields],
+  ];
+  for (const [key, value] of entries) {
+    if (value) params[key] = value;
+  }
+  return params;
+}
+
+export function useWorkItems(projectId: string, teamId?: string | null, filters?: WorkItemsQuery) {
+  const params = buildWorkItemsParams(teamId, filters);
   return useQuery<WorkItem[]>({
-    queryKey: teamId ? ['projects', projectId, 'work-items', { teamId }] : ['projects', projectId, 'work-items'],
-    queryFn: () => workItemsApi.getWorkItems(projectId, teamId ? { teamId } : undefined),
+    queryKey: ['projects', projectId, 'work-items', params],
+    queryFn: () => workItemsApi.getWorkItems(projectId, params),
     enabled: !!projectId,
   });
 }
@@ -90,7 +146,7 @@ export function useCreateWorkItem(projectId: string) {
     mutationFn: (data: CreateWorkItemDto) => workItemsApi.createWorkItem(projectId, data),
     onSuccess: (newItem) => {
       toast.showSuccess('Created work item', newItem.key);
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
+      invalidateWorkItemScopes(queryClient, projectId);
     },
     onError: (err) => {
       toast.showError('Failed to create work item', formatApiError(err));
@@ -106,7 +162,7 @@ export function useUpdateWorkItem(projectId: string) {
     mutationFn: ({ id, data }: { id: string; data: UpdateWorkItemDto }) =>
       workItemsApi.updateWorkItem(id, data),
     onMutate: async ({ id, data }) => {
-      await queryClient.cancelQueries({ queryKey: ['projects', projectId] });
+      cancelWorkItemScopes(queryClient, projectId);
       await queryClient.cancelQueries({ queryKey: ['work-items', id] });
 
       updateWorkItemInCache(queryClient, projectId, id, (oldItem) => ({
@@ -116,10 +172,10 @@ export function useUpdateWorkItem(projectId: string) {
     },
     onError: (err) => {
       toast.showError('Failed to update work item', formatApiError(err));
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
+      invalidateWorkItemScopes(queryClient, projectId);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
+      invalidateWorkItemScopes(queryClient, projectId);
     },
   });
 }
@@ -132,7 +188,7 @@ export function useTransitionWorkItemState(projectId: string) {
     mutationFn: ({ id, state }: { id: string; state: string }) =>
       workItemsApi.transitionState(id, state),
     onMutate: async ({ id, state }) => {
-      await queryClient.cancelQueries({ queryKey: ['projects', projectId] });
+      cancelWorkItemScopes(queryClient, projectId);
 
       updateWorkItemInCache(queryClient, projectId, id, (oldItem) => ({
         ...oldItem,
@@ -141,10 +197,10 @@ export function useTransitionWorkItemState(projectId: string) {
     },
     onError: (err) => {
       toast.showError('State transition failed', formatApiError(err));
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
+      invalidateWorkItemScopes(queryClient, projectId);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
+      invalidateWorkItemScopes(queryClient, projectId);
     },
   });
 }
@@ -174,7 +230,7 @@ export function useDeleteWorkItem(projectId: string) {
         }
         return old;
       });
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
+      invalidateWorkItemScopes(queryClient, projectId);
     },
     onError: (err) => {
       toast.showError('Failed to delete work item', formatApiError(err));

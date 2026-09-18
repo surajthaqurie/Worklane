@@ -8,9 +8,12 @@ import { WorkItem } from '@/shared/types/work-items';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { WorkItemDrawer } from '@/features/work-items/components/WorkItemDrawer';
 import { CreateWorkItemModal } from '@/features/work-items/components/CreateWorkItemModal';
-import { Search, Filter, Loader2 } from 'lucide-react';
+import { Search, Filter, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '@/shared/hooks/useToast';
+import { useDebounce } from '@/shared/hooks/useDebounce';
 import { WorkItemPriorityBadge } from '@/features/work-items/components/WorkItemBadge';
+
+const PAGE_SIZE = 50;
 
 export default function WorkItemsPage({ params }: { params: Promise<{ projectId: string }> }) {
   return (
@@ -30,22 +33,27 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
   const { data: states = [] } = useWorkItemStates(resolvedParams.projectId);
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(0);
 
   const isCreateModalOpen = searchParams.get('new') === '1';
 
   const openModal = () => router.push(`${pathname}?new=1`);
   const closeModal = () => router.replace(pathname);
 
-  const { data: workItems = [], isLoading } = useWorkItems(resolvedParams.projectId, selectedTeamId);
+  const { data: workItems = [], isLoading } = useWorkItems(
+    resolvedParams.projectId,
+    selectedTeamId,
+    {
+      search: debouncedSearch.trim() || undefined,
+      state: statusFilter || undefined,
+      limit: String(PAGE_SIZE),
+      offset: String(page * PAGE_SIZE),
+    },
+  );
 
-  const filteredItems = workItems.filter((i) => {
-    const matchesSearch =
-      i.title.toLowerCase().includes(search.toLowerCase()) ||
-      i.key.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = !statusFilter || i.state === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const hasNextPage = workItems.length === PAGE_SIZE;
 
   return (
     <div className="w-full flex flex-col h-full relative p-6">
@@ -66,32 +74,65 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
         </div>
       </div>
 
-      <div className="mb-4 flex flex-col sm:flex-row gap-3">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-[var(--text-muted)]" />
-          <input
-            type="text"
-            placeholder="Search items..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-[13px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] transition-colors placeholder:text-[var(--text-muted)] text-[var(--text-primary)]"
-          />
+      <div className="mb-4 flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-[var(--text-muted)]" />
+            <input
+              type="text"
+              placeholder="Search items..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(0);
+              }}
+              className="w-full pl-9 pr-3 py-2 text-[13px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] transition-colors placeholder:text-[var(--text-muted)] text-[var(--text-primary)]"
+            />
+          </div>
+
+          <div className="relative w-full sm:w-48">
+            <Filter className="absolute left-3 top-2.5 w-4 h-4 text-[var(--text-muted)]" />
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(0);
+              }}
+              className="w-full pl-9 pr-3 py-2 text-[13px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] transition-colors appearance-none text-[var(--text-primary)]"
+            >
+              <option value="">All Statuses</option>
+              {states.map((s) => (
+                <option key={s.id} value={s.key}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="relative w-full sm:w-48">
-          <Filter className="absolute left-3 top-2.5 w-4 h-4 text-[var(--text-muted)]" />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-[13px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-button)] focus:outline-none focus:border-[var(--border-focus)] transition-colors appearance-none text-[var(--text-primary)]"
-          >
-            <option value="">All Statuses</option>
-            {states.map((s) => (
-              <option key={s.id} value={s.key}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+        {/* Pagination Controls */}
+        <div className="flex items-center gap-2 text-[13px] text-[var(--text-secondary)]">
+          <span>
+            Page {page + 1}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0 || isLoading}
+              className="p-1 rounded hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!hasNextPage || isLoading}
+              className="p-1 rounded hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Next Page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -115,14 +156,14 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
                       Loading work items...
                     </td>
                   </tr>
-                ) : filteredItems.length === 0 ? (
+                ) : workItems.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-8 text-center text-[13px] text-[var(--text-muted)]">
                       No work items found.
                     </td>
                   </tr>
                 ) : (
-                  filteredItems.map((item) => {
+                  workItems.map((item) => {
                     const isPending = isItemPending(item.id);
                     return (
                       <tr

@@ -16,7 +16,13 @@ export interface BoardCardProps {
   story?: { key: string; title: string };
 }
 
-export function BoardCard({ item, cardFields, onSelect, onRemove, story }: BoardCardProps) {
+export const BoardCard = React.memo(function BoardCard({
+  item,
+  cardFields,
+  onSelect,
+  onRemove,
+  story,
+}: BoardCardProps) {
   const { isItemPending } = useToast();
   const isPending = isItemPending(item.id);
 
@@ -129,4 +135,4 @@ export function BoardCard({ item, cardFields, onSelect, onRemove, story }: Board
       </div>
     </div>
   );
-}
+});

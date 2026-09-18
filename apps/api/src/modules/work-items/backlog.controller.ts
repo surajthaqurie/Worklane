@@ -11,7 +11,6 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '../projects/auth.guard.js';
 import { BacklogRepository } from './backlog.repository.js';
-import { ProjectsService } from '../projects/projects.service.js';
 import { TeamsService } from '../teams/teams.service.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { Permission } from '../authorization/permissions.js';
@@ -39,7 +38,6 @@ export class BacklogController {
   constructor(
     private readonly backlogRepo: BacklogRepository,
     private readonly workItemsRepo: WorkItemsRepository,
-    private readonly projectsService: ProjectsService,
     private readonly teamsService: TeamsService,
     private readonly authz: AuthorizationService,
     private readonly notifications: NotificationsService,
@@ -61,8 +59,11 @@ export class BacklogController {
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
-    await this.authz.requireProjectPermission(projectId, req.user.id, Permission.WORK_ITEM_VIEW);
-    const project = await this.projectsService.assertProjectMember(projectId, req.user.id);
+    const { project } = await this.authz.requireProjectPermissionWithProject(
+      projectId,
+      req.user.id,
+      Permission.WORK_ITEM_VIEW,
+    );
 
     let teamAreaIds: string[] | undefined;
     let teamIterationIds: string[] | undefined;

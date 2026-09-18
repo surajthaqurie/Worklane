@@ -19,13 +19,16 @@ export class ProjectsService {
    * Legacy compatibility helper used by other services (WorkItemsService, etc.)
    * to gate project access. Returns the project row.
    *
-   * @deprecated Prefer calling `authz.requireProjectPermission` directly in
-   *   the consuming service to specify the exact permission needed.
+   * @deprecated Prefer calling `authz.requireProjectPermissionWithProject`
+   *   directly in the consuming service to specify the exact permission needed
+   *   without a second project lookup.
    */
   async assertProjectMember(projectId: string, userId: string) {
-    const membership = await this.authz.requireProjectMember(projectId, userId);
-    const project = await this.repo.getProjectById(projectId);
-    if (!project) throw new NotFoundException('Project not found');
+    const { project, membership } = await this.authz.requireProjectPermissionWithProject(
+      projectId,
+      userId,
+      Permission.PROJECT_VIEW,
+    );
     // Attach role so callers can inspect it
     return { ...project, _role: membership.role };
   }

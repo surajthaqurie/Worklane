@@ -75,6 +75,12 @@ describe('IterationsService', () => {
         role: 'ADMIN',
       })),
       requireProjectMember: vi.fn(),
+      requireProjectPermissionWithProject: vi.fn().mockImplementation(
+        async (projectId, userId) => ({
+          project: { id: projectId, key: 'PROJ' },
+          membership: { projectId, userId, role: 'ADMIN' },
+        }),
+      ),
     };
 
     const notifications = {
@@ -429,7 +435,6 @@ describe('IterationsService', () => {
 
   it('should group sprint work items by workflow state', async () => {
     repo.findOne.mockResolvedValue(iteration);
-    projectsService.findOne.mockResolvedValue({ key: 'PROJ' });
     repo.getSprintWorkItems.mockResolvedValue([
       { id: 'a', state: 'TODO', title: 'A' },
       { id: 'b', state: 'IN_PROGRESS', title: 'B' },

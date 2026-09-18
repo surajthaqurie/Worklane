@@ -4,6 +4,7 @@ export const WorkItemFilterSchema = z.object({
   search: z.string().optional(),
   state: z.string().optional(),
   type: z.enum(['EPIC', 'FEATURE', 'STORY', 'TASK', 'BUG']).optional(),
+  types: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   assignedTo: z.string().optional(),
   iterationId: z.string().optional(),
@@ -13,12 +14,14 @@ export const WorkItemFilterSchema = z.object({
   limit: z.string().regex(/^\d+$/).optional(),
   offset: z.string().regex(/^\d+$/).optional(),
   parentId: z.string().optional(),
+  fields: z.string().optional(),
 });
 
 export class WorkItemFilterDto {
   search?: string;
   state?: string;
   type?: 'EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG';
+  types?: string | string[];
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   assignedTo?: string;
   iterationId?: string;
@@ -28,4 +31,5 @@ export class WorkItemFilterDto {
   limit?: string;
   offset?: string;
   parentId?: string;
+  fields?: string;
 }

@@ -114,7 +114,7 @@ export class AuthService {
     const accessToken = this.generateAccessToken(user);
     const refreshToken = await this.generateRefreshToken(user.id);
 
-    const { password_hash, ...userProfile } = user;
+    const { password_hash: _password_hash, ...userProfile } = user;
 
     return {
       user: userProfile,

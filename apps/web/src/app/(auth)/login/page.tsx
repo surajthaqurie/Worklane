@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/shared/context/AuthContext';
-import { LogIn, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
+import { formatApiError } from '@/shared/utils/error';
+import { LogIn, AlertCircle, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -19,33 +20,8 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-    } catch (err: any) {
-      setError(err?.message || 'Invalid email or password');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async () => {
-    setError(null);
-    setLoading(true);
-
-    const demoEmail = 'admin@worklane.io';
-    const demoPassword = 'Password123!';
-
-    try {
-      await login(demoEmail, demoPassword);
-    } catch (err: any) {
-      // If demo account does not exist yet, try to register it first
-      try {
-        const { register } = (await import('@/shared/context/AuthContext')).useAuth();
-        // Since we can't call hook inside handler, call API directly if needed or set inputs
-        setEmail(demoEmail);
-        setPassword(demoPassword);
-        setError('Demo user not found. Please click "Sign Up" to create an account or try logging in.');
-      } catch {
-        setError('Failed to log in with demo account');
-      }
+    } catch (err) {
+      setError(formatApiError(err, 'Invalid email or password'));
     } finally {
       setLoading(false);
     }

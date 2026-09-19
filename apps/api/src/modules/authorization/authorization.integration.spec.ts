@@ -1,10 +1,6 @@
-import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { ForbiddenException, BadRequestException } from '@nestjs/common';
 import { AuthorizationService } from './authorization.service.js';
 import { Permission } from './permissions.js';
-import { WorkItemsService } from '../work-items/work-items.service.js';
-import { WorkItemTransitionsService } from '../work-items/work-item-transitions.service.js';
-import { IterationsService } from '../iterations/iterations.service.js';
-import { TeamsService } from '../teams/teams.service.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { db } from '../../db/kysely.js';
 
@@ -15,10 +11,6 @@ const INTEGRATION = process.env.INTEGRATION === '1';
 describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () => {
   let authzService: AuthorizationService;
   let projectsService: ProjectsService;
-  let workItemsService: WorkItemsService;
-  let transitionsService: WorkItemTransitionsService;
-  let iterationsService: IterationsService;
-  let teamsService: TeamsService;
 
   let ownerUserId: string;
   let memberUserId: string;
@@ -43,10 +35,6 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
     nonMemberUserId = users[2].id;
 
     // 2. Setup Project A owned by ownerUserId, with memberUserId as MEMBER
-    const projARepo = {
-      createProject: async () => {},
-    } as any;
-
     projectsService = new ProjectsService(
       {
         getProjectById: async (id: string) => {

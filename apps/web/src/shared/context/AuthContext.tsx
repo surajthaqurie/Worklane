@@ -35,8 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userData = await apiClient.get<User>('/auth/me');
       setUser(userData);
       authTokens.setUser(userData);
-    } catch (err) {
-      // If /auth/me fails even after refresh attempt
+    } catch {
       authTokens.clearAuthData();
       setUser(null);
     } finally {
@@ -45,12 +44,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Initial load check stored user first for faster render
-    const cachedUser = authTokens.getUser();
-    if (cachedUser) {
-      setUser(cachedUser);
-    }
-    fetchCurrentUser();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- state only updates after the async /auth/me request resolves
+    void fetchCurrentUser();
   }, [fetchCurrentUser]);
 
   const login = async (email: string, password: string) => {

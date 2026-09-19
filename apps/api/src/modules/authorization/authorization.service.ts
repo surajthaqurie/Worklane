@@ -140,7 +140,7 @@ export class AuthorizationService {
     }
 
     // Strip the joined-in role column so the returned project matches a raw row.
-    const { member_role, ...project } = row;
+    const { member_role: _member_role, ...project } = row;
 
     return { project, membership: { projectId, userId, role } };
   }

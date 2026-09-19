@@ -75,10 +75,8 @@ export async function request<T = unknown>(
         ...options,
         _isRetry: true,
       });
-    } else {
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-        window.location.href = '/login';
-      }
+    } else if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.replace(new URL('/login', window.location.origin).toString());
     }
   }
 

@@ -1,19 +1,3 @@
-import { z } from 'zod';
-
-export const CreateWorkItemSchema = z.object({
-  type: z.enum(['EPIC', 'FEATURE', 'STORY', 'TASK', 'BUG']),
-  title: z.string().min(1).max(255),
-  description: z.string().optional().nullable(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-  points: z.number().int().min(0).optional().nullable(),
-  assignedTo: z.string().uuid().optional().nullable(),
-  parentId: z.string().uuid().optional().nullable(),
-  areaId: z.string().uuid().optional().nullable(),
-  iterationId: z.string().uuid().optional().nullable(),
-  teamId: z.string().uuid().optional().nullable(),
-  tags: z.array(z.string()).optional(),
-  closedAt: z.string().datetime().optional().nullable(),
-});
 export class CreateWorkItemDto {
   type: 'EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG';
   title: string;
@@ -29,20 +13,6 @@ export class CreateWorkItemDto {
   closedAt?: string | null;
 }
 
-export const UpdateWorkItemSchema = z.object({
-  type: z.enum(['EPIC', 'FEATURE', 'STORY', 'TASK', 'BUG']).optional(),
-  title: z.string().min(1).max(255).optional(),
-  description: z.string().optional().nullable(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-  points: z.number().int().min(0).optional().nullable(),
-  assignedTo: z.string().uuid().optional().nullable(),
-  parentId: z.string().uuid().optional().nullable(),
-  iterationId: z.string().uuid().optional().nullable(),
-  areaId: z.string().uuid().optional().nullable(),
-  tags: z.array(z.string()).optional(),
-  closedAt: z.string().datetime().optional().nullable(),
-  backlogOrder: z.number().optional(),
-});
 export class UpdateWorkItemDto {
   type?: 'EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG';
   title?: string;

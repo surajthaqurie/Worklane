@@ -56,50 +56,6 @@ export enum Permission {
   TEAM_MANAGE_SETTINGS = 'team:manage_settings',
 }
 
-// ─── Permission → roles mapping ───────────────────────────────────────────────
-//
-// A role grants a permission if the role appears in the permission's allowed
-// set. OWNER is always a superset of ADMIN which is a superset of MEMBER.
-//
-const PERMISSION_ROLES: Record<Permission, ProjectRole[]> = {
-  // Project
-  [Permission.PROJECT_VIEW]: ['OWNER', 'ADMIN', 'MEMBER'],
-  [Permission.PROJECT_EDIT]: ['OWNER', 'ADMIN'],
-  [Permission.PROJECT_DELETE]: ['OWNER'],
-  [Permission.PROJECT_MANAGE_MEMBERS]: ['OWNER', 'ADMIN'],
-  [Permission.PROJECT_MANAGE_TEAMS]: ['OWNER', 'ADMIN'],
-  [Permission.PROJECT_MANAGE_SETTINGS]: ['OWNER', 'ADMIN'],
-
-  // Work items
-  [Permission.WORK_ITEM_VIEW]: ['OWNER', 'ADMIN', 'MEMBER'],
-  [Permission.WORK_ITEM_CREATE]: ['OWNER', 'ADMIN', 'MEMBER'],
-  [Permission.WORK_ITEM_EDIT]: ['OWNER', 'ADMIN', 'MEMBER'],
-  [Permission.WORK_ITEM_ASSIGN]: ['OWNER', 'ADMIN', 'MEMBER'],
-  [Permission.WORK_ITEM_CHANGE_STATE]: ['OWNER', 'ADMIN', 'MEMBER'],
-  [Permission.WORK_ITEM_DELETE]: ['OWNER', 'ADMIN'],
-
-  // Iterations
-  [Permission.ITERATION_VIEW]: ['OWNER', 'ADMIN', 'MEMBER'],
-  [Permission.ITERATION_CREATE]: ['OWNER', 'ADMIN'],
-  [Permission.ITERATION_EDIT]: ['OWNER', 'ADMIN'],
-  [Permission.ITERATION_COMPLETE]: ['OWNER', 'ADMIN'],
-  [Permission.ITERATION_DELETE]: ['OWNER', 'ADMIN'],
-
-  // Queries
-  [Permission.QUERY_VIEW]: ['OWNER', 'ADMIN', 'MEMBER'],
-  [Permission.QUERY_CREATE]: ['OWNER', 'ADMIN', 'MEMBER'],
-  [Permission.QUERY_EDIT]: ['OWNER', 'ADMIN', 'MEMBER'],
-  [Permission.QUERY_DELETE]: ['OWNER', 'ADMIN', 'MEMBER'],
-
-  // Teams
-  [Permission.TEAM_VIEW]: ['OWNER', 'ADMIN', 'MEMBER'],
-  [Permission.TEAM_CREATE]: ['OWNER', 'ADMIN'],
-  [Permission.TEAM_EDIT]: ['OWNER', 'ADMIN'],
-  [Permission.TEAM_DELETE]: ['OWNER', 'ADMIN'],
-  [Permission.TEAM_MANAGE_MEMBERS]: ['OWNER', 'ADMIN'],
-  [Permission.TEAM_MANAGE_SETTINGS]: ['OWNER', 'ADMIN'],
-};
-
 /**
  * Returns true when `role` grants the given `permission`.
  */

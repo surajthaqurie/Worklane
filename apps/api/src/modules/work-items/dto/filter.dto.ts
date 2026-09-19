@@ -1,22 +1,3 @@
-import { z } from 'zod';
-
-export const WorkItemFilterSchema = z.object({
-  search: z.string().optional(),
-  state: z.string().optional(),
-  type: z.enum(['EPIC', 'FEATURE', 'STORY', 'TASK', 'BUG']).optional(),
-  types: z.string().optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-  assignedTo: z.string().optional(),
-  iterationId: z.string().optional(),
-  areaId: z.string().optional(),
-  teamId: z.string().optional(),
-  tags: z.string().optional(),
-  limit: z.string().regex(/^\d+$/).optional(),
-  offset: z.string().regex(/^\d+$/).optional(),
-  parentId: z.string().optional(),
-  fields: z.string().optional(),
-});
-
 export class WorkItemFilterDto {
   search?: string;
   state?: string;

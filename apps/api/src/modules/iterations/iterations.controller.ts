@@ -10,7 +10,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { AuthGuard } from '../projects/auth.guard.js';
+import { AuthGuard } from '../../common/auth/auth.guard.js';
 import { IterationsService } from './iterations.service.js';
 import {
   CreateIterationDto,

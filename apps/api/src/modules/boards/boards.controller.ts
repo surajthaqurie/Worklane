@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { BoardsService } from './boards.service.js';
 import { CreateBoardDto, UpdateBoardDto } from './dto/boards.dto.js';
-import { AuthGuard } from '../projects/auth.guard.js';
+import { AuthGuard } from '../../common/auth/auth.guard.js';
 
 @Controller('projects/:projectId/boards')
 @UseGuards(AuthGuard)

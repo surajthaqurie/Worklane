@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/shared/context/AuthContext';
+import { formatApiError } from '@/shared/utils/error';
 import { UserPlus, AlertCircle, ArrowRight } from 'lucide-react';
 
 export default function RegisterPage() {
@@ -26,8 +27,8 @@ export default function RegisterPage() {
 
     try {
       await register(name, email, password);
-    } catch (err: any) {
-      setError(err?.message || 'Registration failed. Please try again.');
+    } catch (err) {
+      setError(formatApiError(err, 'Registration failed. Please try again.'));
     } finally {
       setLoading(false);
     }

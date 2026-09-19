@@ -9,7 +9,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { AuthGuard } from '../projects/auth.guard.js';
+import { AuthGuard } from '../../common/auth/auth.guard.js';
 import { QueriesService } from './queries.service.js';
 import { CreateQueryDto, UpdateQueryDto } from './dto/queries.dto.js';
 

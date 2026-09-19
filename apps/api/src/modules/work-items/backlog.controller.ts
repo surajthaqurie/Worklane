@@ -9,7 +9,7 @@ import {
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
-import { AuthGuard } from '../projects/auth.guard.js';
+import { AuthGuard } from '../../common/auth/auth.guard.js';
 import { BacklogRepository } from './backlog.repository.js';
 import { TeamsService } from '../teams/teams.service.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';

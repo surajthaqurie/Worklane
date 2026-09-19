@@ -1,13 +1,3 @@
-import { z } from 'zod';
-
-export const createIterationSchema = z.object({
-  name: z.string().min(1).max(255),
-  goal: z.string().optional().nullable(),
-  startDate: z.string().datetime(),
-  endDate: z.string().datetime(),
-  parentId: z.string().uuid().optional().nullable(),
-});
-
 export class CreateIterationDto {
   name: string;
   goal?: string | null;
@@ -15,15 +5,6 @@ export class CreateIterationDto {
   endDate: string;
   parentId?: string | null;
 }
-
-export const updateIterationSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  goal: z.string().optional().nullable(),
-  startDate: z.string().datetime().optional(),
-  endDate: z.string().datetime().optional(),
-  parentId: z.string().uuid().optional().nullable(),
-  state: z.enum(['PLANNED', 'ACTIVE', 'COMPLETED']).optional(),
-});
 
 export class UpdateIterationDto {
   name?: string;

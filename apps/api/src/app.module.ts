@@ -1,6 +1,4 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller.js';
-import { AppService } from './app.service.js';
 import { ProjectsModule } from './modules/projects/projects.module.js';
 import { WorkItemsModule } from './modules/work-items/work-items.module.js';
 import { IterationsModule } from './modules/iterations/iterations.module.js';
@@ -27,9 +25,7 @@ import { AppExceptionFilter } from './common/exceptions/app-exception.filter.js'
     NotificationsModule,
     BoardsModule,
   ],
-  controllers: [AppController],
   providers: [
-    AppService,
     { provide: APP_FILTER, useClass: AppExceptionFilter },
   ],
 })

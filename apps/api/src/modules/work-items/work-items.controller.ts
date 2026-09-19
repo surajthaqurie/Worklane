@@ -14,7 +14,7 @@ import {
 import { WorkItemsService } from './work-items.service.js';
 import { CreateWorkItemDto, UpdateWorkItemDto } from './dto/work-items.dto.js';
 import { StateTransitionDto } from './dto/state-transition.dto.js';
-import { AuthGuard } from '../projects/auth.guard.js';
+import { AuthGuard } from '../../common/auth/auth.guard.js';
 import { WorkItemTransitionsService } from './work-item-transitions.service.js';
 import {
   createCommentSchema,

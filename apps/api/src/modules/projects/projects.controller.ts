@@ -8,7 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { AuthGuard } from './auth.guard.js';
+import { AuthGuard } from '../../common/auth/auth.guard.js';
 import { CurrentUser } from '../../common/auth/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/auth/authenticated-user.js';
 import { ProjectsService } from './projects.service.js';

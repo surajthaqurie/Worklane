@@ -10,7 +10,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { AuthGuard } from '../projects/auth.guard.js';
+import { AuthGuard } from '../../common/auth/auth.guard.js';
 import { NotificationsService } from './notifications.service.js';
 import { getNotificationsQuerySchema } from './dto/notifications.dto.js';
 

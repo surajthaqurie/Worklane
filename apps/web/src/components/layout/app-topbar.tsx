@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useSyncExternalStore } from 'react';
-import { Menu, Moon, Sun, LogOut, User as UserIcon } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut } from 'lucide-react';
 import { useTheme } from '@/shared/components/providers';
 import { GlobalSearch } from '@/shared/components/ui/GlobalSearch';
 import { NotificationsPopover } from '@/features/notifications/components/NotificationsPopover';

@@ -65,11 +65,6 @@ export const updateQuerySchema = createQuerySchema.partial({
   folder: true,
 });
 
-export const runQuerySchema = z.object({
-  definition: queryDefinitionSchema,
-});
-
-export type QueryClause = z.infer<typeof queryClauseSchema>;
 export type QueryDefinition = z.infer<typeof queryDefinitionSchema>;
 
 export class CreateQueryDto {

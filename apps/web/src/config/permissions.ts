@@ -10,46 +10,33 @@
  * They are used purely for UX gating — the real security enforcement
  * happens on the backend via AuthorizationService.
  */
+export type PermissionValue =
+  | 'project:view'
+  | 'project:edit'
+  | 'project:delete'
+  | 'project:manage_members'
+  | 'project:manage_teams'
+  | 'project:manage_settings'
+  | 'work_item:view'
+  | 'work_item:create'
+  | 'work_item:edit'
+  | 'work_item:assign'
+  | 'work_item:change_state'
+  | 'work_item:delete'
+  | 'iteration:view'
+  | 'iteration:create'
+  | 'iteration:edit'
+  | 'iteration:complete'
+  | 'iteration:delete'
+  | 'query:view'
+  | 'query:create'
+  | 'query:edit'
+  | 'query:delete'
+  | 'team:view'
+  | 'team:create'
+  | 'team:edit'
+  | 'team:delete'
+  | 'team:manage_members'
+  | 'team:manage_settings';
 
-export const Permission = {
-  // Project
-  PROJECT_VIEW: 'project:view',
-  PROJECT_EDIT: 'project:edit',
-  PROJECT_DELETE: 'project:delete',
-  PROJECT_MANAGE_MEMBERS: 'project:manage_members',
-  PROJECT_MANAGE_TEAMS: 'project:manage_teams',
-  PROJECT_MANAGE_SETTINGS: 'project:manage_settings',
-
-  // Work items
-  WORK_ITEM_VIEW: 'work_item:view',
-  WORK_ITEM_CREATE: 'work_item:create',
-  WORK_ITEM_EDIT: 'work_item:edit',
-  WORK_ITEM_ASSIGN: 'work_item:assign',
-  WORK_ITEM_CHANGE_STATE: 'work_item:change_state',
-  WORK_ITEM_DELETE: 'work_item:delete',
-
-  // Iterations
-  ITERATION_VIEW: 'iteration:view',
-  ITERATION_CREATE: 'iteration:create',
-  ITERATION_EDIT: 'iteration:edit',
-  ITERATION_COMPLETE: 'iteration:complete',
-  ITERATION_DELETE: 'iteration:delete',
-
-  // Queries
-  QUERY_VIEW: 'query:view',
-  QUERY_CREATE: 'query:create',
-  QUERY_EDIT: 'query:edit',
-  QUERY_DELETE: 'query:delete',
-
-  // Teams
-  TEAM_VIEW: 'team:view',
-  TEAM_CREATE: 'team:create',
-  TEAM_EDIT: 'team:edit',
-  TEAM_DELETE: 'team:delete',
-  TEAM_MANAGE_MEMBERS: 'team:manage_members',
-  TEAM_MANAGE_SETTINGS: 'team:manage_settings',
-} as const;
-
-export type PermissionKey = keyof typeof Permission;
-export type PermissionValue = (typeof Permission)[PermissionKey];
 export type ProjectRole = 'OWNER' | 'ADMIN' | 'MEMBER';

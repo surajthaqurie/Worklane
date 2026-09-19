@@ -10,7 +10,7 @@ import type { Response } from 'express';
 import { ZodError } from 'zod';
 
 /** Canonical error body returned for every error response. */
-export interface ErrorBody {
+interface ErrorBody {
   statusCode: number;
   message: string | string[];
   error: string;

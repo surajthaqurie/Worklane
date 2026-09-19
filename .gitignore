@@ -48,6 +48,13 @@ typings/
 # TypeScript cache
 *.tsbuildinfo
 
+# Turbo build cache
+.turbo
+
+# Playwright
+test-results/
+playwright-report/
+
 # Optional npm cache directory
 .npm
 

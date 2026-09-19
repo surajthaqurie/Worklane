@@ -33,7 +33,6 @@ describe.skipIf(!INTEGRATION)('Work item workflow (DB integration)', () => {
   let member: { id: string; name: string };
   let outsider: { id: string };
 
-  let epicId: string;
   let featureId: string;
   let storyId: string;
   let taskId: string;
@@ -108,7 +107,6 @@ describe.skipIf(!INTEGRATION)('Work item workflow (DB integration)', () => {
       title: 'WF Epic',
       priority: 'HIGH',
     });
-    epicId = epic.id;
     createdIds.push(epic.id);
 
     const feature = await workItemsService.create(owner.id, project.id, {

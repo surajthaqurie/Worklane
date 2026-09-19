@@ -1,1 +1,0 @@
-export { AuthGuard } from '../../common/auth/auth.guard.js';

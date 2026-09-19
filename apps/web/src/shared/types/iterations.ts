@@ -8,6 +8,7 @@ export interface Iteration {
   startDate: string | null;
   endDate: string | null;
   status: IterationStatus;
+  state?: IterationStatus;
   createdAt: string;
   updatedAt: string;
   workItemCount?: number;

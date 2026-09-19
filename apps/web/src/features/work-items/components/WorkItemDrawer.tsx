@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Copy, Check, Pencil } from 'lucide-react';
+import { Copy, Check, Pencil, X } from 'lucide-react';
 import {
   useWorkItemComments,
   useWorkItemActivity,
@@ -15,7 +15,8 @@ import {
   useWorkItems,
   useTransitionWorkItemState,
 } from '../hooks/useWorkItems';
-import { WorkItem } from '@/shared/types';
+import { WorkItem, WorkItemType } from '@/shared/types';
+import { PARENT_TYPES } from '@/shared/utils/hierarchy';
 import { useProjectMembers } from '@/features/projects/hooks/useProjects';
 import { useIterations } from '@/features/iterations/hooks/useIterations';
 import { useWorkItemStates } from '../hooks/useWorkItemStates';
@@ -417,14 +418,19 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                   <select
                     value={current.parentId || ''}
                     onChange={(e) => handleUpdate('parentId', e.target.value || null)}
-                    className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
+                    disabled={PARENT_TYPES[current.type as WorkItemType]?.length === 0}
+                    className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none disabled:opacity-50"
                   >
-                    <option value="">None</option>
+                    <option value="">No Parent (None)</option>
                     {allWorkItems
-                      .filter((w) => w.id !== item.id)
+                      .filter((w) => {
+                        if (w.id === item.id) return false;
+                        const allowedTypes = PARENT_TYPES[current.type as WorkItemType] || [];
+                        return allowedTypes.includes(w.type as WorkItemType);
+                      })
                       .map((w) => (
                         <option key={w.id} value={w.id}>
-                          [{w.key}] {w.title}
+                          [{w.key}] {w.title} ({w.type})
                         </option>
                       ))}
                   </select>
@@ -464,6 +470,15 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                       </span>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdate('parentId', null)}
+                    className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-[var(--radius-button)] bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors shrink-0 font-medium"
+                    title="Unselect / Remove parent item"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Unselect Parent</span>
+                  </button>
                 </div>
               )}
 
@@ -531,7 +546,7 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                           <div className="flex items-center gap-2 min-w-0 flex-1">
                             <WorkItemTypeBadge type={child.type} />
                             <span className="font-mono text-[11px] font-semibold text-[var(--text-secondary)]">{child.key}</span>
-                            <span className="font-medium text-[var(--text-primary)] truncate" title={child.title}>
+                            <span className="font-medium text-[var(--text-primary)] truncate whitespace-pre-wrap break-words" title={child.title}>
                               {child.title}
                             </span>
                           </div>

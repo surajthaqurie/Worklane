@@ -203,12 +203,12 @@ export default function IterationDetailPage() {
                 >
                   Edit
                 </button>
-                {iteration.status === 'ACTIVE' && (
+                {(iteration.status || iteration.state) === 'ACTIVE' && (
                   <span className="text-[11px] bg-[var(--bg-surface-selected)] text-[var(--brand-primary)] px-2.5 py-0.5 rounded-full font-medium">
                     ACTIVE
                   </span>
                 )}
-                {iteration.status === 'COMPLETED' && (
+                {(iteration.status || iteration.state) === 'COMPLETED' && (
                   <span className="text-[11px] bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] border border-[var(--border-subtle)] px-2.5 py-0.5 rounded-full font-medium">
                     COMPLETED
                   </span>
@@ -231,12 +231,12 @@ export default function IterationDetailPage() {
           </div>
 
           <div className="flex gap-2">
-            {iteration.status === 'PLANNED' && (
+            {(iteration.status || iteration.state || 'PLANNED') === 'PLANNED' && (
               <button
                 onClick={handleStartIteration}
-                disabled={activateIteration.isPending || iterations.some((it) => it.status === 'ACTIVE' && it.id !== iterationId)}
+                disabled={activateIteration.isPending || iterations.some((it) => (it.status || it.state) === 'ACTIVE' && it.id !== iterationId)}
                 title={
-                  iterations.some((it) => it.status === 'ACTIVE' && it.id !== iterationId)
+                  iterations.some((it) => (it.status || it.state) === 'ACTIVE' && it.id !== iterationId)
                     ? 'Another sprint is currently active in this project. Complete it first before starting a new sprint.'
                     : undefined
                 }
@@ -245,7 +245,7 @@ export default function IterationDetailPage() {
                 {activateIteration.isPending ? 'Starting...' : 'Start Sprint'}
               </button>
             )}
-            {iteration.status === 'ACTIVE' && (
+            {(iteration.status || iteration.state) === 'ACTIVE' && (
               <button
                 onClick={() => setIsCompleteOpen(true)}
                 className="bg-[var(--iteration-completed)] hover:opacity-90 text-white px-4 py-2 rounded-[var(--radius-button)] text-[13px] font-medium transition-colors"

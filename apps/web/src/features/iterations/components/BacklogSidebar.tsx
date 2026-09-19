@@ -45,7 +45,7 @@ function DraggableBacklogItem({ item }: { item: WorkItem }) {
           </div>
         )}
       </div>
-      <p className="text-[13px] font-medium text-[var(--text-primary)] leading-snug pl-6">{item.title}</p>
+      <p className="text-[13px] font-medium text-[var(--text-primary)] leading-snug pl-6 whitespace-pre-wrap break-words">{item.title}</p>
     </div>
   );
 }

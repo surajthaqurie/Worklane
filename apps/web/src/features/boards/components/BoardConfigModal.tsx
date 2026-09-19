@@ -5,8 +5,9 @@ import { BoardConfig, BoardColumn, CardFields, FilterConfig, BacklogLevel } from
 import { WorkItemState } from '@/shared/types/work-items';
 import { useUpdateBoard, useCreateBoard } from '../hooks/useBoards';
 import { useTeams } from '@/features/teams/hooks/useTeams';
+import { StatesTabContent } from './StatesManager';
 import { Modal } from '@/shared/components/ui/Modal';
-import { Plus, ChevronUp, ChevronDown, Trash2, AlertTriangle, Settings2, Sliders, Layout, Filter } from 'lucide-react';
+import { Plus, ChevronUp, ChevronDown, Trash2, AlertTriangle, Settings2, Sliders, Layout, Filter, Tag } from 'lucide-react';
 import { formatApiError } from '@/shared/utils/error';
 
 export interface BoardConfigModalProps {
@@ -31,7 +32,7 @@ export function BoardConfigModal({
   const createBoard = useCreateBoard(projectId);
   const { data: teams = [] } = useTeams(projectId);
 
-  const [activeTab, setActiveTab] = useState<'columns' | 'cardFields' | 'filters' | 'general'>('columns');
+  const [activeTab, setActiveTab] = useState<'columns' | 'states' | 'cardFields' | 'filters' | 'general'>('columns');
   const [name, setName] = useState(board?.name || 'Custom Board');
   const [description, setDescription] = useState(board?.description || '');
   const [teamId, setTeamId] = useState<string | null>(board?.teamId ?? null);
@@ -223,18 +224,29 @@ export function BoardConfigModal({
         <div className="flex border-b border-[var(--border-subtle)] text-xs font-medium">
           <button
             onClick={() => setActiveTab('columns')}
-            className={`flex items-center gap-1.5 px-4 py-2 border-b-2 transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-colors ${
               activeTab === 'columns'
                 ? 'border-[var(--brand-primary)] text-[var(--brand-primary)]'
                 : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
           >
             <Layout className="w-3.5 h-3.5" />
-            Columns & WIP Limits
+            Columns & WIP
+          </button>
+          <button
+            onClick={() => setActiveTab('states')}
+            className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-colors ${
+              activeTab === 'states'
+                ? 'border-[var(--brand-primary)] text-[var(--brand-primary)]'
+                : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Tag className="w-3.5 h-3.5" />
+            Workflow States
           </button>
           <button
             onClick={() => setActiveTab('cardFields')}
-            className={`flex items-center gap-1.5 px-4 py-2 border-b-2 transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-colors ${
               activeTab === 'cardFields'
                 ? 'border-[var(--brand-primary)] text-[var(--brand-primary)]'
                 : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -376,7 +388,12 @@ export function BoardConfigModal({
           </div>
         )}
 
-        {/* Tab 2: Card Customization */}
+        {/* Tab 2: Workflow States */}
+        {activeTab === 'states' && (
+          <StatesTabContent projectId={projectId} />
+        )}
+
+        {/* Tab 3: Card Customization */}
         {activeTab === 'cardFields' && (
           <div className="flex flex-col gap-3">
             <span className="text-xs text-[var(--text-secondary)]">

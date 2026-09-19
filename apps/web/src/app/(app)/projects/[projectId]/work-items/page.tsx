@@ -181,7 +181,7 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
                             <span>{item.key}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-[13px] text-[var(--text-primary)] font-medium">
+                        <td className="px-4 py-3 text-[13px] text-[var(--text-primary)] font-medium whitespace-pre-wrap break-words">
                           {item.title}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">

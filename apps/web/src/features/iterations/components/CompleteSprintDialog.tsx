@@ -35,7 +35,7 @@ export function CompleteSprintDialog({
   const done = doneWorkItemsCount ?? 0;
 
   const [action, setAction] = useState<'MOVE_TO_NEXT' | 'MOVE_TO_BACKLOG'>('MOVE_TO_BACKLOG');
-  const [targetId, setTargetId] = useState(iterations.find((i) => i.status === 'PLANNED')?.id ?? '');
+  const [targetId, setTargetId] = useState(iterations.find((i) => (i.status || i.state) === 'PLANNED')?.id ?? '');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -103,7 +103,7 @@ export function CompleteSprintDialog({
               </div>
             </label>
 
-            {iterations.some((i) => i.status === 'PLANNED') && (
+            {iterations.some((i) => (i.status || i.state) === 'PLANNED') && (
               <label className="flex items-start gap-3 p-3 border rounded-[var(--radius-card)] cursor-pointer hover:bg-[var(--bg-surface-hover)] transition-colors border-[var(--border-default)]">
                 <input
                   type="radio"
@@ -123,7 +123,7 @@ export function CompleteSprintDialog({
                     >
                       <option value="">Select a sprint…</option>
                       {iterations
-                        .filter((i) => i.status === 'PLANNED')
+                        .filter((i) => (i.status || i.state) === 'PLANNED')
                         .map((i) => (
                           <option key={i.id} value={i.id}>
                             {i.name}

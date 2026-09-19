@@ -1,6 +1,4 @@
-'use client';
-
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   DndContext,
   useSensor,
@@ -12,7 +10,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { BacklogItem } from '@/shared/types/backlogs';
-import { WorkItemState } from '@/shared/types/work-items';
+import { WorkItemState, WorkItem } from '@/shared/types/work-items';
 import { Iteration } from '@/shared/types/iterations';
 import { ProjectMember } from '@/shared/types/projects';
 import { BacklogRow } from './BacklogRow';
@@ -33,6 +31,7 @@ export interface BacklogTableProps {
   states: WorkItemState[];
   iterations: Iteration[];
   members: ProjectMember[];
+  allWorkItems?: WorkItem[];
   onToggleExpand: (id: string) => void;
   onSelectRow: (id: string, e: React.MouseEvent) => void;
   onToggleSelectRow: (id: string) => void;
@@ -46,6 +45,7 @@ export interface BacklogTableProps {
   onSelectAllToggle: (allSelected: boolean) => void;
   onUpdateAssignee: (id: string, userId: string | null) => void;
   onUpdateState: (id: string, state: string) => void;
+  onUpdateParent?: (id: string, parentId: string | null) => void;
 }
 
 export function BacklogTable({
@@ -57,6 +57,7 @@ export function BacklogTable({
   states,
   iterations,
   members,
+  allWorkItems = [],
   onToggleExpand,
   onSelectRow,
   onToggleSelectRow,
@@ -70,7 +71,10 @@ export function BacklogTable({
   onSelectAllToggle,
   onUpdateAssignee,
   onUpdateState,
+  onUpdateParent,
 }: BacklogTableProps) {
+  const headerCheckboxRef = useRef<HTMLInputElement>(null);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -84,6 +88,21 @@ export function BacklogTable({
   };
 
   const allSelected = nodes.length > 0 && nodes.every((n) => selectedIds.has(n.item.id));
+  const hasSelection = selectedIds.size > 0;
+
+  useEffect(() => {
+    if (headerCheckboxRef.current) {
+      headerCheckboxRef.current.indeterminate = hasSelection && !allSelected;
+    }
+  }, [hasSelection, allSelected]);
+
+  const handleHeaderCheckboxChange = () => {
+    if (hasSelection) {
+      onSelectAllToggle(false);
+    } else {
+      onSelectAllToggle(true);
+    }
+  };
 
   return (
     <div className="flex flex-col border border-[var(--border-subtle)] rounded-[var(--radius-card)] bg-[var(--bg-surface)] overflow-hidden">
@@ -92,9 +111,10 @@ export function BacklogTable({
         <div className="flex items-center gap-1.5 px-2 shrink-0">
           <span className="w-5" />
           <input
+            ref={headerCheckboxRef}
             type="checkbox"
             checked={allSelected}
-            onChange={(e) => onSelectAllToggle(e.target.checked)}
+            onChange={handleHeaderCheckboxChange}
             className="w-3.5 h-3.5 rounded border-[var(--border-default)] accent-[var(--brand-primary)] cursor-pointer"
           />
         </div>
@@ -104,6 +124,7 @@ export function BacklogTable({
         <div className="w-24 shrink-0 px-2">Priority</div>
         <div className="w-16 shrink-0 px-2 text-center">Points</div>
         <div className="w-32 shrink-0 px-2">Assignee</div>
+        <div className="w-36 shrink-0 px-2">Parent</div>
         <div className="w-32 shrink-0 px-2">Iteration</div>
       </div>
 
@@ -127,6 +148,7 @@ export function BacklogTable({
                   states={states}
                   iterations={iterations}
                   members={members}
+                  allWorkItems={allWorkItems}
                   onToggleExpand={onToggleExpand}
                   onSelectRow={onSelectRow}
                   onToggleSelectRow={onToggleSelectRow}
@@ -138,6 +160,7 @@ export function BacklogTable({
                   onDraftChange={onDraftChange}
                   onUpdateAssignee={onUpdateAssignee}
                   onUpdateState={onUpdateState}
+                  onUpdateParent={onUpdateParent}
                 />
               ))}
             </div>

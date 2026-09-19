@@ -51,7 +51,7 @@ export function QueryResultsTable({ items, isLoading, onSelectItem }: QueryResul
                 <td className="p-3">
                   <WorkItemTypeBadge type={item.type} />
                 </td>
-                <td className="p-3 font-medium truncate max-w-md">{item.title}</td>
+                <td className="p-3 font-medium max-w-md whitespace-pre-wrap break-words">{item.title}</td>
                 <td className="p-3">
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]">
                     {item.state}

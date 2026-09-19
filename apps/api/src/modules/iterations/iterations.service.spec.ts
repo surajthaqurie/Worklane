@@ -186,11 +186,12 @@ describe('IterationsService', () => {
     );
   });
 
-  it('should be idempotent when already active', async () => {
+  it('should reject activating when already active', async () => {
     repo.findOne.mockResolvedValue({ ...iteration, state: 'ACTIVE' });
-    const result = await service.activate('u1', 'p1', iteration.id);
+    await expect(service.activate('u1', 'p1', iteration.id)).rejects.toThrow(
+      BadRequestException,
+    );
     expect(repo.update).not.toHaveBeenCalled();
-    expect(result.state).toBe('ACTIVE');
   });
 
   it('should reject activating when another sprint is active', async () => {

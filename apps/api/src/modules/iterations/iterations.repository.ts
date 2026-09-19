@@ -19,6 +19,7 @@ export interface IterationRow {
   startDate: Date;
   endDate: Date;
   state: 'PLANNED' | 'ACTIVE' | 'COMPLETED';
+  status: 'PLANNED' | 'ACTIVE' | 'COMPLETED';
   parentId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -671,6 +672,7 @@ export class IterationsRepository {
       startDate: row.start_date,
       endDate: row.end_date,
       state: row.state,
+      status: row.state,
       parentId: row.parent_id ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,

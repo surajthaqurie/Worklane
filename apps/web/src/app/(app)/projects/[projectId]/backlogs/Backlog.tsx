@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { BacklogItem, BacklogFilters } from '@/shared/types/backlogs';
 import { WorkItem } from '@/shared/types/work-items';
 import { useBacklogLevel, useReorderBacklogItem, useBulkAssignIteration } from '@/features/backlogs/hooks/useBacklog';
-import { useUpdateWorkItem } from '@/features/work-items/hooks/useWorkItems';
+import { useUpdateWorkItem, useWorkItems } from '@/features/work-items/hooks/useWorkItems';
 import { useWorkItemStates } from '@/features/work-items/hooks/useWorkItemStates';
 import { useIterations } from '@/features/iterations/hooks/useIterations';
 import { useProjectMembers } from '@/features/projects/hooks/useProjects';
@@ -55,15 +55,66 @@ export function Backlog({ projectId }: { projectId: string }) {
   const { data: states = [] } = useWorkItemStates(projectId);
   const { data: iterations = [] } = useIterations(projectId);
   const { data: members = [] } = useProjectMembers(projectId);
+  const { data: allWorkItems = [] } = useWorkItems(projectId, selectedTeamId, { limit: '500' });
 
   const reorderMutation = useReorderBacklogItem(projectId, selectedTeamId);
   const bulkAssignMutation = useBulkAssignIteration(projectId, selectedTeamId);
   const updateMutation = useUpdateWorkItem(projectId);
 
+  // Keyboard shortcut: Escape clears row selection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedIds.size > 0) {
+        setSelectedIds(new Set());
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedIds.size]);
+
+  // Build tree nodes for top level items and expanded parent items
   const flatNodes: FlatNode[] = useMemo(() => {
     if (!topLevel?.items) return [];
-    return topLevel.items.map((item) => ({ item, depth: 0 }));
-  }, [topLevel]);
+
+    const result: FlatNode[] = [];
+    const visited = new Set<string>();
+
+    const addChildren = (parentId: string, currentDepth: number) => {
+      const children = allWorkItems.filter((w) => w.parentId === parentId);
+      for (const child of children) {
+        if (visited.has(child.id)) continue;
+        visited.add(child.id);
+
+        const backlogItem: BacklogItem = {
+          ...child,
+          assignedToName: child.assignedToName ?? null,
+          assignedToAvatar: child.assignedToAvatar ?? null,
+          completedAt: child.completedAt ?? null,
+          iterationId: child.iterationId ?? null,
+          backlogOrder: child.backlogOrder ?? 0,
+          backlogRank: child.backlogRank ?? 0,
+          childCount: child.childCount ?? 0,
+          hasChildren: allWorkItems.some((w) => w.parentId === child.id),
+          tags: child.tags ?? [],
+        };
+        result.push({ item: backlogItem, depth: currentDepth });
+        if (expanded.has(child.id)) {
+          addChildren(child.id, currentDepth + 1);
+        }
+      }
+    };
+
+    for (const item of topLevel.items) {
+      if (visited.has(item.id)) continue;
+      visited.add(item.id);
+      result.push({ item, depth: 0 });
+      if (expanded.has(item.id)) {
+        addChildren(item.id, 1);
+      }
+    }
+
+    return result;
+  }, [topLevel, allWorkItems, expanded]);
 
   const toggleExpand = useCallback((id: string) => {
     setExpanded((prev) => {
@@ -126,6 +177,20 @@ export function Backlog({ projectId }: { projectId: string }) {
     [selectedIds, updateMutation]
   );
 
+  const handleBulkAssignParent = useCallback(
+    (parentId: string | null) => {
+      const itemIds = Array.from(selectedIds);
+      itemIds.forEach((id) => {
+        updateMutation.mutate({
+          id,
+          data: { parentId },
+        });
+      });
+      setSelectedIds(new Set());
+    },
+    [selectedIds, updateMutation]
+  );
+
   const handleUpdateAssignee = useCallback(
     (id: string, assignedTo: string | null) => {
       updateMutation.mutate({
@@ -141,6 +206,16 @@ export function Backlog({ projectId }: { projectId: string }) {
       updateMutation.mutate({
         id,
         data: { state },
+      });
+    },
+    [updateMutation]
+  );
+
+  const handleUpdateParent = useCallback(
+    (id: string, parentId: string | null) => {
+      updateMutation.mutate({
+        id,
+        data: { parentId },
       });
     },
     [updateMutation]
@@ -168,7 +243,7 @@ export function Backlog({ projectId }: { projectId: string }) {
 
   const handleStartEditing = useCallback((item: BacklogItem) => {
     setEditingId(item.id);
-    setEditDraft({ title: item.title, state: item.state, assignedTo: item.assignedTo });
+    setEditDraft({ title: item.title, state: item.state, assignedTo: item.assignedTo, parentId: item.parentId });
   }, []);
 
   const handleCancelEditing = useCallback(() => {
@@ -189,6 +264,7 @@ export function Backlog({ projectId }: { projectId: string }) {
             title: editDraft.title.trim(),
             state: editDraft.state,
             assignedTo: editDraft.assignedTo,
+            parentId: editDraft.parentId,
           },
         },
         {
@@ -227,6 +303,7 @@ export function Backlog({ projectId }: { projectId: string }) {
         iterations={iterations}
         states={states}
         members={members}
+        allWorkItems={allWorkItems}
         filterType={filterType}
         onFilterTypeChange={setFilterType}
         filterState={filterState}
@@ -245,6 +322,7 @@ export function Backlog({ projectId }: { projectId: string }) {
           setSelectedIds(new Set());
         }}
         onBulkAssignUser={handleBulkAssignUser}
+        onBulkAssignParent={handleBulkAssignParent}
         onCreateNewItem={() => setIsCreateModalOpen(true)}
       />
 
@@ -257,6 +335,7 @@ export function Backlog({ projectId }: { projectId: string }) {
         states={states}
         iterations={iterations}
         members={members}
+        allWorkItems={allWorkItems}
         onToggleExpand={toggleExpand}
         onSelectRow={handleSelectRow}
         onToggleSelectRow={handleToggleSelectRow}
@@ -270,6 +349,7 @@ export function Backlog({ projectId }: { projectId: string }) {
         onSelectAllToggle={handleSelectAllToggle}
         onUpdateAssignee={handleUpdateAssignee}
         onUpdateState={handleUpdateState}
+        onUpdateParent={handleUpdateParent}
       />
 
       {drawerItem && <WorkItemDrawer item={drawerItem} onClose={() => setDrawerItem(null)} />}

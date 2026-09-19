@@ -1,14 +1,13 @@
-'use client';
-
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, ChevronRight, ChevronDown, Plus, Loader2 } from 'lucide-react';
 import { BacklogItem } from '@/shared/types/backlogs';
-import { WorkItemState } from '@/shared/types/work-items';
+import { WorkItemState, WorkItem, WorkItemType } from '@/shared/types/work-items';
 import { Iteration } from '@/shared/types/iterations';
 import { ProjectMember } from '@/shared/types/projects';
 import { WorkItemTypeBadge, WorkItemPriorityBadge } from '@/features/work-items/components/WorkItemBadge';
+import { PARENT_TYPES } from '@/shared/utils/hierarchy';
 import { useToast } from '@/shared/hooks/useToast';
 
 export interface BacklogRowProps {
@@ -22,6 +21,7 @@ export interface BacklogRowProps {
   states: WorkItemState[];
   iterations: Iteration[];
   members: ProjectMember[];
+  allWorkItems?: WorkItem[];
   onToggleExpand: (id: string) => void;
   onSelectRow: (id: string, e: React.MouseEvent) => void;
   onToggleSelectRow: (id: string) => void;
@@ -33,6 +33,7 @@ export interface BacklogRowProps {
   onDraftChange: (field: keyof BacklogItem, value: unknown) => void;
   onUpdateAssignee: (id: string, userId: string | null) => void;
   onUpdateState: (id: string, state: string) => void;
+  onUpdateParent?: (id: string, parentId: string | null) => void;
 }
 
 const INDENT_PX = 20;
@@ -48,6 +49,7 @@ export function BacklogRow({
   states,
   iterations,
   members,
+  allWorkItems = [],
   onToggleExpand,
   onSelectRow,
   onToggleSelectRow,
@@ -59,6 +61,7 @@ export function BacklogRow({
   onDraftChange,
   onUpdateAssignee,
   onUpdateState,
+  onUpdateParent,
 }: BacklogRowProps) {
   const { isItemPending } = useToast();
   const isPending = isItemPending(item.id);
@@ -76,12 +79,17 @@ export function BacklogRow({
   const currentState = states.find((s) => s.key === (isEditing ? editDraft.state : item.state));
   const stateColor = currentState?.color || '#94A3B8';
 
+  const allowedParentTypes = PARENT_TYPES[item.type as WorkItemType] || [];
+  const validParents = allWorkItems.filter(
+    (w) => w.id !== item.id && allowedParentTypes.includes(w.type as WorkItemType)
+  );
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       onClick={(e) => onSelectRow(item.id, e)}
-      className={`group flex items-center h-10 border-b border-[var(--border-subtle)] text-xs transition-colors select-none ${
+      className={`group flex items-center min-h-[40px] py-1 border-b border-[var(--border-subtle)] text-xs transition-colors select-none ${
         isDragging
           ? 'opacity-30 bg-[var(--bg-surface-hover)]'
           : isSelected
@@ -105,11 +113,11 @@ export function BacklogRow({
         <input
           type="checkbox"
           checked={isSelected}
-          onChange={() => {}}
-          onClick={(e) => {
+          onChange={(e) => {
             e.stopPropagation();
             onToggleSelectRow(item.id);
           }}
+          onClick={(e) => e.stopPropagation()}
           className="w-3.5 h-3.5 rounded border-[var(--border-default)] accent-[var(--brand-primary)] cursor-pointer"
         />
       </div>
@@ -155,17 +163,20 @@ export function BacklogRow({
       {/* Title */}
       <div className="flex-1 min-w-0 px-2 flex items-center gap-2">
         {isEditing ? (
-          <input
-            type="text"
+          <textarea
             value={editDraft.title ?? item.title}
             onChange={(e) => onDraftChange('title', e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') onSaveEditing(item);
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                onSaveEditing(item);
+              }
               if (e.key === 'Escape') onCancelEditing();
             }}
             onClick={(e) => e.stopPropagation()}
             autoFocus
-            className="w-full text-xs font-medium bg-[var(--bg-surface)] border border-[var(--border-focus)] rounded px-2 py-0.5 text-[var(--text-primary)] outline-none"
+            rows={Math.min(4, Math.max(1, (editDraft.title ?? item.title).split('\n').length))}
+            className="w-full text-xs font-medium bg-[var(--bg-surface)] border border-[var(--border-focus)] rounded px-2 py-1 text-[var(--text-primary)] outline-none resize-y whitespace-pre-wrap leading-snug"
           />
         ) : (
           <span
@@ -177,7 +188,7 @@ export function BacklogRow({
               e.stopPropagation();
               onOpenDrawer(item);
             }}
-            className="font-medium text-[var(--text-primary)] truncate cursor-pointer hover:text-[var(--brand-primary)]"
+            className="font-medium text-[var(--text-primary)] cursor-pointer hover:text-[var(--brand-primary)] whitespace-pre-wrap break-words line-clamp-2"
           >
             {item.title}
           </span>
@@ -252,6 +263,34 @@ export function BacklogRow({
           {members.map((m) => (
             <option key={m.id} value={m.userId} className="text-[var(--text-primary)] bg-[var(--bg-surface)]">
               {m.userName}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Parent Item */}
+      <div className="w-36 shrink-0 px-2">
+        <select
+          value={isEditing ? (editDraft.parentId ?? item.parentId ?? '') : (item.parentId ?? '')}
+          onChange={(e) => {
+            e.stopPropagation();
+            const val = e.target.value || null;
+            if (isEditing) {
+              onDraftChange('parentId', val);
+            } else if (onUpdateParent) {
+              onUpdateParent(item.id, val);
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+          disabled={allowedParentTypes.length === 0}
+          className="w-full text-[11px] bg-transparent border-none outline-none cursor-pointer text-[var(--text-primary)] truncate disabled:opacity-40"
+        >
+          <option value="" className="text-[var(--text-muted)] bg-[var(--bg-surface)]">
+            {allowedParentTypes.length === 0 ? 'No parent allowed' : 'No Parent'}
+          </option>
+          {validParents.map((p) => (
+            <option key={p.id} value={p.id} className="text-[var(--text-primary)] bg-[var(--bg-surface)]">
+              [{p.key}] {p.title}
             </option>
           ))}
         </select>

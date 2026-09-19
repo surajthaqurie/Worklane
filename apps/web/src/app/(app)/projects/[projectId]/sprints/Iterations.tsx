@@ -166,7 +166,7 @@ export function Iterations({ projectId }: { projectId: string }) {
       {/* Sprint list */}
       <div className="flex flex-col gap-4 overflow-y-auto">
         {iterations.map((iteration) => {
-          const status = iteration.status || 'PLANNED';
+          const status = iteration.status || iteration.state || 'PLANNED';
           const total = iteration.workItemCount ?? 0;
           const daysLeft = iteration.endDate
             ? differenceInCalendarDays(new Date(iteration.endDate), new Date())

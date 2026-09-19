@@ -60,18 +60,22 @@ export const BoardCard = React.memo(function BoardCard({
     <div
       ref={setNodeRef}
       onClick={() => onSelect(item)}
-      className={`group bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] p-2.5 shadow-xs hover:shadow-md hover:border-[var(--border-strong)] cursor-grab active:cursor-grabbing transition-all ${
+      className={`group bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-card)] p-2.5 shadow-xs hover:shadow-md hover:border-[var(--border-strong)] transition-all cursor-pointer ${
         isDragging ? 'opacity-40 rotate-2' : ''
       } ${isPending ? 'opacity-70 border-[var(--brand-primary)]/50 ring-1 ring-[var(--brand-primary)]/30' : ''}`}
-      {...listeners}
-      {...attributes}
     >
       <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
         {isPending ? (
           <Loader2 className="w-3.5 h-3.5 text-[var(--brand-primary)] animate-spin shrink-0" />
         ) : (
-          <span className="inline-flex items-center px-1 py-0.5 rounded-[var(--radius-button)] text-[10px] font-semibold">
-            <GripVertical className="w-3 h-3 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] transition-colors" />
+          <span
+            {...listeners}
+            {...attributes}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center p-0.5 rounded-[var(--radius-button)] text-[10px] font-semibold cursor-grab active:cursor-grabbing hover:bg-[var(--bg-surface-hover)] transition-colors"
+            title="Drag handle — drag to move item"
+          >
+            <GripVertical className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] transition-colors" />
           </span>
         )}
 
@@ -108,13 +112,13 @@ export const BoardCard = React.memo(function BoardCard({
           <span className="shrink-0 font-mono text-[9px] font-bold bg-[var(--brand-primary)]/20 px-1 rounded">
             {story.key}
           </span>
-          <span className="truncate">{story.title}</span>
+          <span className="truncate whitespace-pre-line">{story.title}</span>
         </div>
       )}
 
       {/* Work Item Title */}
       <p
-        className="text-[13px] font-medium text-[var(--text-primary)] leading-snug line-clamp-3 mb-2 break-words"
+        className="text-[13px] font-medium text-[var(--text-primary)] leading-snug line-clamp-3 mb-2 break-words whitespace-pre-wrap"
         title={item.title}
       >
         {item.title}
@@ -131,7 +135,7 @@ export const BoardCard = React.memo(function BoardCard({
               title={`[${child.type}] ${child.key} - ${child.title} (${child.state})`}
             >
               <span className="font-mono font-semibold text-[9px] text-[var(--brand-primary)]">{child.key}</span>
-              <span className="truncate text-[9px]">{child.title}</span>
+              <span className="truncate text-[9px] whitespace-pre-line">{child.title}</span>
             </span>
           ))}
           {childItems.length > 3 && (

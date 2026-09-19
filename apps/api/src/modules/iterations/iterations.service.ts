@@ -172,11 +172,11 @@ export class IterationsService {
     if (!iteration || iteration.projectId !== projectId) {
       throw new NotFoundException('Iteration not found');
     }
+    if (iteration.state === 'ACTIVE') {
+      throw new BadRequestException('Sprint has already been started');
+    }
     if (iteration.state === 'COMPLETED') {
       throw new BadRequestException('Cannot activate a completed iteration');
-    }
-    if (iteration.state === 'ACTIVE') {
-      return iteration; // idempotent
     }
 
     // Only one active sprint per project

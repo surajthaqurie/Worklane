@@ -11,7 +11,6 @@ import { WorkItem } from '@/shared/types/work-items';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { Board } from '@/features/boards/components/Board';
 import { BoardConfigModal } from '@/features/boards/components/BoardConfigModal';
-import { StatesManager } from '@/features/boards/components/StatesManager';
 import { WorkItemDrawer } from '@/features/work-items/components/WorkItemDrawer';
 import { CreateWorkItemModal } from '@/features/work-items/components/CreateWorkItemModal';
 import { SquareKanban, Search, Filter, Settings2, Plus } from 'lucide-react';
@@ -178,7 +177,6 @@ export default function ProjectBoardPage() {
               <Settings2 className="w-4 h-4 text-[var(--brand-primary)]" /> Configure Board
             </button>
           )}
-          <StatesManager projectId={projectId} />
         </div>
       </div>
 

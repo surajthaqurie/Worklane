@@ -1,9 +1,7 @@
-'use client';
-
 import React from 'react';
 import { Search, Plus, Filter, X } from 'lucide-react';
 import { Iteration } from '@/shared/types/iterations';
-import { WorkItemState } from '@/shared/types/work-items';
+import { WorkItemState, WorkItem } from '@/shared/types/work-items';
 import { ProjectMember } from '@/shared/types/projects';
 
 export interface BacklogHeaderProps {
@@ -16,6 +14,7 @@ export interface BacklogHeaderProps {
   iterations: Iteration[];
   states: WorkItemState[];
   members: ProjectMember[];
+  allWorkItems?: WorkItem[];
   filterType: string;
   onFilterTypeChange: (val: string) => void;
   filterState: string;
@@ -28,6 +27,7 @@ export interface BacklogHeaderProps {
   onFilterIterationIdChange: (val: string) => void;
   onBulkAssignIteration: (iterationId: string | null) => void;
   onBulkAssignUser: (userId: string | null) => void;
+  onBulkAssignParent?: (parentId: string | null) => void;
   onCreateNewItem: () => void;
 }
 
@@ -41,6 +41,7 @@ export function BacklogHeader({
   iterations,
   states,
   members,
+  allWorkItems = [],
   filterType,
   onFilterTypeChange,
   filterState,
@@ -53,6 +54,7 @@ export function BacklogHeader({
   onFilterIterationIdChange,
   onBulkAssignIteration,
   onBulkAssignUser,
+  onBulkAssignParent,
   onCreateNewItem,
 }: BacklogHeaderProps) {
   return (
@@ -122,12 +124,34 @@ export function BacklogHeader({
                   </option>
                 ))}
               </select>
+              {onBulkAssignParent && (
+                <select
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val) {
+                      onBulkAssignParent(val === 'none' ? null : val);
+                      e.target.value = '';
+                    }
+                  }}
+                  className="text-xs bg-[var(--bg-surface)] border border-[var(--border-default)] rounded px-2 py-0.5 text-[var(--text-primary)]"
+                >
+                  <option value="">Set Parent...</option>
+                  <option value="none">No Parent (Unselect Parent)</option>
+                  {allWorkItems.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      [{p.key}] {p.title}
+                    </option>
+                  ))}
+                </select>
+              )}
               <button
                 type="button"
                 onClick={onClearSelection}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-0.5"
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-0.5 flex items-center gap-1 font-medium hover:bg-[var(--bg-surface-hover)] rounded"
+                title="Unselect all selected items"
               >
                 <X className="w-3.5 h-3.5" />
+                <span>Unselect all</span>
               </button>
             </div>
           ) : (

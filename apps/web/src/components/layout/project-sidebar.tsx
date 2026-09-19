@@ -50,7 +50,7 @@ export function ProjectSidebar() {
 
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {projectNavigation.map((item) => {
-          const href = `/projects/${projectId}${item.href}`;
+          const href = `/projects/${projectId}${item.href || ''}`;
           const active = isActive(item.match);
           const Icon = item.icon;
 

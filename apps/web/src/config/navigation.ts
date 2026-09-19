@@ -10,6 +10,7 @@ export const projectNavigation = [
   { label: 'Overview', href: '', icon: LayoutDashboard, match: '' },
   { 
     label: 'Boards', 
+    href: '/boards',
     icon: SquareKanban, 
     match: '/boards',
     children: [

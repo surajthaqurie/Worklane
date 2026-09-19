@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ProjectsModule } from './modules/projects/projects.module.js';
 import { WorkItemsModule } from './modules/work-items/work-items.module.js';
 import { IterationsModule } from './modules/iterations/iterations.module.js';
@@ -9,11 +11,17 @@ import { SearchModule } from './modules/search/search.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { BoardsModule } from './modules/boards/boards.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
-import { APP_FILTER } from '@nestjs/core';
+import { AttachmentsModule } from './modules/attachments/attachments.module.js';
 import { AppExceptionFilter } from './common/exceptions/app-exception.filter.js';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([
+      {
+        ttl: parseInt(process.env.RATE_LIMIT_TTL || '60000', 10),
+        limit: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
+      },
+    ]),
     AuthModule,
     ProjectsModule,
     WorkItemsModule,
@@ -24,9 +32,11 @@ import { AppExceptionFilter } from './common/exceptions/app-exception.filter.js'
     SearchModule,
     NotificationsModule,
     BoardsModule,
+    AttachmentsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AppExceptionFilter },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

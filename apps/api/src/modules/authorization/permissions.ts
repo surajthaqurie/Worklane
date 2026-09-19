@@ -56,19 +56,75 @@ export enum Permission {
   TEAM_MANAGE_SETTINGS = 'team:manage_settings',
 }
 
+const MEMBER_PERMISSIONS: ReadonlySet<Permission> = new Set([
+  Permission.PROJECT_VIEW,
+  Permission.WORK_ITEM_VIEW,
+  Permission.WORK_ITEM_CREATE,
+  Permission.WORK_ITEM_EDIT,
+  Permission.WORK_ITEM_ASSIGN,
+  Permission.WORK_ITEM_CHANGE_STATE,
+  Permission.ITERATION_VIEW,
+  Permission.QUERY_VIEW,
+  Permission.QUERY_CREATE,
+  Permission.QUERY_EDIT,
+  Permission.TEAM_VIEW,
+]);
+
+const ADMIN_PERMISSIONS: ReadonlySet<Permission> = new Set([
+  ...MEMBER_PERMISSIONS,
+  Permission.PROJECT_EDIT,
+  Permission.PROJECT_MANAGE_MEMBERS,
+  Permission.PROJECT_MANAGE_TEAMS,
+  Permission.PROJECT_MANAGE_SETTINGS,
+  Permission.WORK_ITEM_DELETE,
+  Permission.ITERATION_CREATE,
+  Permission.ITERATION_EDIT,
+  Permission.ITERATION_COMPLETE,
+  Permission.ITERATION_DELETE,
+  Permission.QUERY_DELETE,
+  Permission.TEAM_CREATE,
+  Permission.TEAM_EDIT,
+  Permission.TEAM_DELETE,
+  Permission.TEAM_MANAGE_MEMBERS,
+  Permission.TEAM_MANAGE_SETTINGS,
+]);
+
+const OWNER_PERMISSIONS: ReadonlySet<Permission> = new Set(Object.values(Permission));
+
+const VALID_PERMISSIONS = new Set(Object.values(Permission));
+
 /**
  * Returns true when `role` grants the given `permission`.
  */
-export function hasPermission(_role: ProjectRole, _permission: Permission): boolean {
-  // For now: all users have all permissions
-  return true;
+export function hasPermission(role: ProjectRole, permission: Permission): boolean {
+  if (!role || !permission || !VALID_PERMISSIONS.has(permission)) {
+    return false;
+  }
+  switch (role) {
+    case 'OWNER':
+      return OWNER_PERMISSIONS.has(permission);
+    case 'ADMIN':
+      return ADMIN_PERMISSIONS.has(permission);
+    case 'MEMBER':
+      return MEMBER_PERMISSIONS.has(permission);
+    default:
+      return false;
+  }
 }
 
 /**
  * Returns the full set of permissions granted to a given role.
  * Useful for serialising the permission set to the frontend.
  */
-export function getPermissionsForRole(_role: ProjectRole): Permission[] {
-  // For now: all users get all permissions
-  return Object.values(Permission) as Permission[];
+export function getPermissionsForRole(role: ProjectRole): Permission[] {
+  switch (role) {
+    case 'OWNER':
+      return Array.from(OWNER_PERMISSIONS);
+    case 'ADMIN':
+      return Array.from(ADMIN_PERMISSIONS);
+    case 'MEMBER':
+      return Array.from(MEMBER_PERMISSIONS);
+    default:
+      return [];
+  }
 }

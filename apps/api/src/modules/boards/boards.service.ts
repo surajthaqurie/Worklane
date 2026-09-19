@@ -24,16 +24,20 @@ const DEFAULT_CARD_FIELDS: CardFields = {
   showTags: true,
 };
 
+import { AuthorizationService } from '../authorization/authorization.service.js';
+import { Permission } from '../authorization/permissions.js';
+
 @Injectable()
 export class BoardsService {
   constructor(
     private readonly repo: BoardsRepository,
     private readonly projectsService: ProjectsService,
     private readonly workItemsService: WorkItemsService,
+    private readonly authz: AuthorizationService,
   ) {}
 
   async listBoards(userId: string, projectId: string, teamId?: string | null): Promise<BoardRow[]> {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
     const boards = await this.repo.listByProject(projectId, teamId);
     if (boards.length === 0) {
       const defaultBoard = await this.seedDefaultBoard(projectId, teamId);
@@ -43,7 +47,7 @@ export class BoardsService {
   }
 
   async getBoard(userId: string, projectId: string, boardId: string): Promise<BoardRow> {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
     if (boardId === 'default') {
       const boards = await this.listBoards(userId, projectId);
       return boards[0];
@@ -56,7 +60,7 @@ export class BoardsService {
   }
 
   async createBoard(userId: string, projectId: string, dto: CreateBoardDto): Promise<BoardRow> {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_MANAGE_SETTINGS);
 
     const parsed = CreateBoardSchema.safeParse(dto);
     if (!parsed.success) {
@@ -91,7 +95,7 @@ export class BoardsService {
     boardId: string,
     dto: UpdateBoardDto,
   ): Promise<BoardRow> {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_MANAGE_SETTINGS);
 
     const parsed = UpdateBoardSchema.safeParse(dto);
     if (!parsed.success) {
@@ -133,7 +137,7 @@ export class BoardsService {
   }
 
   async deleteBoard(userId: string, projectId: string, boardId: string): Promise<{ success: boolean }> {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_MANAGE_SETTINGS);
     const existing = await this.repo.getById(projectId, boardId);
     if (!existing) {
       throw new NotFoundException('Board not found');

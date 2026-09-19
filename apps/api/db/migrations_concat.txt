@@ -1,0 +1,677 @@
+-- db/migrations/001_create_projects.sql
+
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  avatar_url VARCHAR(255),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS projects (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  key VARCHAR(20) NOT NULL,
+  created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  archived BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS project_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(project_id, user_id)
+);
+
+CREATE INDEX idx_projects_key ON projects(key);
+CREATE INDEX idx_projects_created_by ON projects(created_by);
+CREATE INDEX idx_project_members_project_id ON project_members(project_id);
+CREATE INDEX idx_project_members_user_id ON project_members(user_id);
+-- db/migrations/002_create_work_items.sql
+
+ALTER TABLE projects ADD COLUMN next_work_item_seq INTEGER NOT NULL DEFAULT 1;
+
+CREATE TABLE IF NOT EXISTS work_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  seq_no INTEGER NOT NULL,
+  parent_id UUID REFERENCES work_items(id) ON DELETE SET NULL,
+  type VARCHAR(20) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  state VARCHAR(20) NOT NULL DEFAULT 'TODO',
+  priority VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+  assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  completed_at TIMESTAMP WITH TIME ZONE,
+  UNIQUE(project_id, seq_no)
+);
+
+CREATE INDEX idx_work_items_project_id ON work_items(project_id);
+CREATE INDEX idx_work_items_state ON work_items(state);
+CREATE INDEX idx_work_items_priority ON work_items(priority);
+CREATE INDEX idx_work_items_assigned_to ON work_items(assigned_to);
+CREATE TABLE sprints (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    goal TEXT,
+    start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    state VARCHAR(20) NOT NULL DEFAULT 'PLANNED',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Ensure only one ACTIVE sprint per project
+CREATE UNIQUE INDEX only_one_active_sprint_per_project ON sprints (project_id) WHERE state = 'ACTIVE';
+
+ALTER TABLE work_items ADD COLUMN sprint_id UUID REFERENCES sprints(id) ON DELETE SET NULL;
+-- db/migrations/004_create_comments_and_activity.sql
+
+CREATE TABLE IF NOT EXISTS work_item_comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  work_item_id UUID NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_work_item_comments_work_item_id ON work_item_comments(work_item_id);
+CREATE INDEX idx_work_item_comments_user_id ON work_item_comments(user_id);
+
+CREATE TABLE IF NOT EXISTS work_item_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  work_item_id UUID NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action VARCHAR(50) NOT NULL,
+  field VARCHAR(50),
+  old_value TEXT,
+  new_value TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_work_item_history_work_item_id ON work_item_history(work_item_id);
+CREATE INDEX idx_work_item_history_user_id ON work_item_history(user_id);
+-- db/migrations/005_work_items_search.sql
+
+-- Add extension for trigram matching if we want to use ILIKE efficiently, 
+-- but a simple GIN index on tsvector is standard for text search in Postgres without extensions.
+-- We can add a tsvector column for title and description.
+
+ALTER TABLE work_items ADD COLUMN search_vector tsvector GENERATED ALWAYS AS (
+  setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+  setweight(to_tsvector('english', coalesce(description, '')), 'B')
+) STORED;
+
+CREATE INDEX idx_work_items_search_vector ON work_items USING GIN (search_vector);
+CREATE INDEX idx_work_items_sprint_id ON work_items(sprint_id);
+-- db/migrations/006_work_item_states_and_sprint_history.sql
+-- Azure-board style configurable workflow states + sprint audit trail
+
+-- 1. Custom, per-project state workflow (default: To Do -> In Progress -> Done)
+CREATE TABLE IF NOT EXISTS work_item_states (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name VARCHAR(50) NOT NULL,
+  key VARCHAR(50) NOT NULL,
+  color VARCHAR(20) NOT NULL DEFAULT '#94A3B8',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_done BOOLEAN NOT NULL DEFAULT FALSE,
+  is_default BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(project_id, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_work_item_states_project_order
+  ON work_item_states(project_id, sort_order);
+
+-- 2. Widen state column for longer custom keys and drop the static default
+-- (the app chooses the project's first/default state explicitly on insert)
+ALTER TABLE work_items ALTER COLUMN state TYPE VARCHAR(50);
+ALTER TABLE work_items ALTER COLUMN state DROP DEFAULT;
+
+-- 3. Seed the default workflow for every existing project
+INSERT INTO work_item_states (project_id, name, key, color, sort_order, is_done, is_default)
+SELECT p.id, s.name, s.key, s.color, s.sort_order, s.is_done, TRUE
+FROM projects p
+CROSS JOIN (
+  VALUES
+    ('To Do', 'TODO', '#94A3B8', 0, FALSE),
+    ('In Progress', 'IN_PROGRESS', '#3B82F6', 1, FALSE),
+    ('Done', 'DONE', '#22C55E', 2, TRUE)
+) AS s(name, key, color, sort_order, is_done)
+ON CONFLICT (project_id, key) DO NOTHING;
+
+-- Safety: normalise any legacy state value that has no matching workflow entry
+UPDATE work_items w
+SET state = 'TODO'
+WHERE NOT EXISTS (
+  SELECT 1 FROM work_item_states s
+  WHERE s.project_id = w.project_id AND s.key = w.state
+);
+
+-- 4. Enforce every work item state belongs to the project's workflow
+ALTER TABLE work_items
+  ADD CONSTRAINT fk_work_items_state
+  FOREIGN KEY (project_id, state) REFERENCES work_item_states(project_id, key);
+
+-- 5. Sprint audit log (immutable history is preserved even after delete)
+CREATE TABLE IF NOT EXISTS sprint_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sprint_id UUID REFERENCES sprints(id) ON DELETE SET NULL,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action VARCHAR(50) NOT NULL,
+  field VARCHAR(50),
+  old_value TEXT,
+  new_value TEXT,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sprint_history_sprint_id ON sprint_history(sprint_id);
+CREATE INDEX IF NOT EXISTS idx_sprint_history_user_id ON sprint_history(user_id);
+
+-- 6. Keep history of deleted work items (log DELETED before delete)
+ALTER TABLE work_item_history DROP CONSTRAINT work_item_history_work_item_id_fkey;
+ALTER TABLE work_item_history ALTER COLUMN work_item_id DROP NOT NULL;
+ALTER TABLE work_item_history
+  ADD CONSTRAINT work_item_history_work_item_id_fkey
+  FOREIGN KEY (work_item_id) REFERENCES work_items(id) ON DELETE SET NULL;-- db/migrations/007_queries.sql
+-- Azure-Boards-style saved queries: personal + shared, JSONB definition
+
+CREATE TABLE IF NOT EXISTS saved_queries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  is_shared BOOLEAN NOT NULL DEFAULT FALSE,
+  created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  folder VARCHAR(100),
+  definition JSONB NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_saved_queries_project_id ON saved_queries(project_id);
+CREATE INDEX IF NOT EXISTS idx_saved_queries_shared ON saved_queries(project_id, is_shared);
+CREATE INDEX IF NOT EXISTS idx_saved_queries_created_by ON saved_queries(created_by);
+
+-- Seed shared default queries (Azure-style templates) for every project
+INSERT INTO saved_queries (project_id, name, description, is_shared, created_by, definition, sort_order)
+SELECT p.id, q.name, q.description, TRUE, p.created_by, q.definition::jsonb, q.sort_order
+FROM projects p
+CROSS JOIN (
+  VALUES
+    ('Work Items (All)', 'All work items in this project.', '{"filters":[],"sortBy":"key","sortOrder":"asc"}'::text, 1),
+    ('Assigned to Me', 'Work items assigned to the current user.', '{"filters":[{"field":"assignedTo","operator":"equals","value":"@me","logicalOperator":"AND"}],"sortBy":"key","sortOrder":"asc"}'::text, 2),
+    ('Created by Me', 'Work items created by the current user.', '{"filters":[{"field":"createdBy","operator":"equals","value":"@me","logicalOperator":"AND"}],"sortBy":"key","sortOrder":"asc"}'::text, 3),
+    ('Unfinished Backlog', 'Work items not yet in a sprint.', '{"filters":[{"field":"sprintId","operator":"isEmpty","value":"","logicalOperator":"AND"}],"sortBy":"key","sortOrder":"asc"}'::text, 4)
+) AS q(name, description, definition, sort_order)
+ON CONFLICT DO NOTHING;-- db/migrations/008_add_story_points.sql
+
+ALTER TABLE work_items ADD COLUMN points INTEGER;
+-- Create Organizations
+CREATE TABLE organizations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default organization
+INSERT INTO organizations (id, name) VALUES ('00000000-0000-0000-0000-000000000000', 'Default Organization');
+
+-- Add organization_id to projects
+ALTER TABLE projects ADD COLUMN organization_id UUID REFERENCES organizations(id);
+UPDATE projects SET organization_id = '00000000-0000-0000-0000-000000000000';
+ALTER TABLE projects ALTER COLUMN organization_id SET NOT NULL;
+
+-- Create Teams
+CREATE TABLE teams (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create default team for each project
+INSERT INTO teams (project_id, name, description)
+SELECT id, name || ' Team', 'Default team for ' || name FROM projects;
+
+-- Create Areas (Area Paths)
+CREATE TABLE areas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    parent_id UUID REFERENCES areas(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create default area for each project
+INSERT INTO areas (project_id, name)
+SELECT id, name FROM projects;
+
+-- Rename sprints to iterations (or alter table)
+-- We'll rename it to match the domain model
+ALTER TABLE sprints RENAME TO iterations;
+ALTER TABLE iterations ADD COLUMN parent_id UUID REFERENCES iterations(id) ON DELETE CASCADE;
+
+-- Create Tags
+CREATE TABLE tags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_id, name)
+);
+
+CREATE TABLE work_item_tags (
+    work_item_id UUID NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+    tag_id UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (work_item_id, tag_id)
+);
+
+-- Update Work Items
+ALTER TABLE work_items RENAME COLUMN sprint_id TO iteration_id;
+ALTER TABLE work_items DROP CONSTRAINT IF EXISTS work_items_sprint_id_fkey;
+ALTER TABLE work_items ADD CONSTRAINT work_items_iteration_id_fkey FOREIGN KEY (iteration_id) REFERENCES iterations(id) ON DELETE SET NULL;
+
+ALTER TABLE work_items ADD COLUMN area_id UUID REFERENCES areas(id) ON DELETE SET NULL;
+ALTER TABLE work_items ADD COLUMN closed_at TIMESTAMP WITH TIME ZONE;
+
+-- Set default area for existing work items
+UPDATE work_items wi
+SET area_id = (SELECT id FROM areas a WHERE a.project_id = wi.project_id LIMIT 1);
+
+ALTER TABLE work_items ALTER COLUMN area_id SET NOT NULL;
+
+ALTER TABLE sprint_history RENAME TO iteration_history;
+ALTER TABLE iteration_history RENAME COLUMN sprint_id TO iteration_id;
+CREATE TABLE work_item_attachments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    work_item_id UUID NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    file_name VARCHAR(255) NOT NULL,
+    file_size INTEGER NOT NULL,
+    content_type VARCHAR(100) NOT NULL,
+    url TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+-- apps/api/db/migrations/012_add_backlog_order.sql
+ALTER TABLE work_items ADD COLUMN backlog_order DOUBLE PRECISION;
+UPDATE work_items SET backlog_order = seq_no;
+ALTER TABLE work_items ALTER COLUMN backlog_order SET NOT NULL;
+-- Migration 013: Add backlog_rank for fractional ordering within same parent
+-- This enables stable, efficient sibling-level reordering without touching all rows.
+
+ALTER TABLE work_items ADD COLUMN IF NOT EXISTS backlog_rank DOUBLE PRECISION;
+
+-- Seed backlog_rank from backlog_order per parent group
+UPDATE work_items wi
+SET backlog_rank = sub.rn * 1000
+FROM (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY parent_id ORDER BY backlog_order, seq_no) AS rn
+  FROM work_items
+) sub
+WHERE wi.id = sub.id;
+
+-- Fallback for any NULLs
+UPDATE work_items SET backlog_rank = seq_no * 1000 WHERE backlog_rank IS NULL;
+
+ALTER TABLE work_items ALTER COLUMN backlog_rank SET NOT NULL;
+ALTER TABLE work_items ALTER COLUMN backlog_rank SET DEFAULT 0;
+
+-- Index for efficient ordering
+CREATE INDEX IF NOT EXISTS idx_work_items_parent_rank ON work_items (project_id, parent_id, backlog_rank);
+-- Team model: members with roles, team configuration, and iteration/area scoping.
+--
+-- Project membership = access to the project. Team membership = being in a
+-- specific project team. Work items stay project-scoped; teams narrow their
+-- board/backlog/sprint views by their configured areas and iterations.
+
+-- Track team updates
+ALTER TABLE teams ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+-- Team membership with role (ADMIN can manage the team, MEMBER participates)
+CREATE TABLE team_members (
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL DEFAULT 'MEMBER' CHECK (role IN ('ADMIN', 'MEMBER')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (team_id, user_id)
+);
+
+-- Per-team planning configuration
+CREATE TABLE team_configurations (
+    team_id UUID PRIMARY KEY REFERENCES teams(id) ON DELETE CASCADE,
+    board_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    backlog_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    default_iteration_id UUID REFERENCES iterations(id) ON DELETE SET NULL,
+    default_area_id UUID REFERENCES areas(id) ON DELETE SET NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Iterations a team works in (sprint/iteration selection)
+CREATE TABLE team_iterations (
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    iteration_id UUID NOT NULL REFERENCES iterations(id) ON DELETE CASCADE,
+    PRIMARY KEY (team_id, iteration_id)
+);
+
+-- Areas a team owns (area configuration)
+CREATE TABLE team_areas (
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    area_id UUID NOT NULL REFERENCES areas(id) ON DELETE CASCADE,
+    PRIMARY KEY (team_id, area_id)
+);
+
+-- ─── Backfill so existing projects keep working ─────────────────────────────
+-- Every project gets a default team (reusing the one seeded by migration 009
+-- when present), all project members become team members, the team sees all
+-- of the project's areas and iterations, and a config row is created.
+
+INSERT INTO teams (project_id, name, description)
+SELECT id, name || ' Team', 'Default team for ' || name
+FROM projects
+WHERE NOT EXISTS (SELECT 1 FROM teams t WHERE t.project_id = projects.id);
+
+-- Project creators are admins of their default team
+INSERT INTO team_members (team_id, user_id, role)
+SELECT t.id, p.created_by, 'ADMIN'
+FROM projects p
+JOIN teams t ON t.project_id = p.id
+ON CONFLICT (team_id, user_id) DO NOTHING;
+
+-- Every project member is a member of the project's default team
+INSERT INTO team_members (team_id, user_id, role)
+SELECT t.id, pm.user_id, 'MEMBER'
+FROM project_members pm
+JOIN teams t ON t.project_id = pm.project_id
+WHERE NOT EXISTS (
+    SELECT 1 FROM team_members tm
+    WHERE tm.team_id = t.id AND tm.user_id = pm.user_id
+);
+
+-- Default teams see all of the project's areas and iterations by default,
+-- preserving today's project-wide behaviour until a team narrows its scope.
+INSERT INTO team_areas (team_id, area_id)
+SELECT t.id, a.id
+FROM teams t
+JOIN areas a ON a.project_id = t.project_id
+WHERE NOT EXISTS (
+    SELECT 1 FROM team_areas ta
+    WHERE ta.team_id = t.id AND ta.area_id = a.id
+);
+
+INSERT INTO team_iterations (team_id, iteration_id)
+SELECT t.id, i.id
+FROM teams t
+JOIN iterations i ON i.project_id = t.project_id
+WHERE NOT EXISTS (
+    SELECT 1 FROM team_iterations ti
+    WHERE ti.team_id = t.id AND ti.iteration_id = i.id
+);
+
+INSERT INTO team_configurations (team_id, board_config, backlog_config, default_area_id, default_iteration_id)
+SELECT
+    t.id,
+    '{"collapsedCategories": false, "hideEmptyColumns": false}'::jsonb,
+    '{"showInProgressItems": false}'::jsonb,
+    (SELECT a.id FROM areas a
+      WHERE a.project_id = t.project_id AND a.parent_id IS NULL
+      ORDER BY a.created_at ASC, a.name ASC LIMIT 1),
+    (SELECT i.id FROM iterations i
+      WHERE i.project_id = t.project_id AND i.state = 'ACTIVE'
+      ORDER BY i.start_date DESC LIMIT 1)
+FROM teams t
+WHERE NOT EXISTS (SELECT 1 FROM team_configurations tc WHERE tc.team_id = t.id);-- Query execution history: powers "recent queries" and records the definition
+-- each time a query runs (saved or ad-hoc) so it is auditable and reusable.
+
+CREATE TABLE query_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  query_id UUID REFERENCES saved_queries(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  definition JSONB,
+  ran_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_query_runs_project_user_time ON query_runs(project_id, user_id, ran_at DESC);
+CREATE INDEX idx_query_runs_query ON query_runs(query_id);
+
+-- Repair the seeded "Unfinished Backlog" query: it referenced the pre-rename
+-- 'sprintId' field (migration 009 renamed sprints to iterations), so the stored
+-- filter matched items whose title was null instead of unbacklogged items.
+UPDATE saved_queries
+SET definition = jsonb_set(
+    definition,
+    '{filters}',
+    COALESCE(
+      (
+        SELECT jsonb_agg(
+          CASE
+            WHEN filter->>'field' = 'sprintId'
+            THEN jsonb_set(filter, '{field}', '"iterationId"'::jsonb)
+            ELSE filter
+          END
+        )
+        FROM jsonb_array_elements(definition->'filters') AS filter
+      ),
+      '[]'::jsonb
+    )
+)
+WHERE name = 'Unfinished Backlog'
+  AND jsonb_typeof(definition->'filters') = 'array';-- db/migrations/016_work_item_history_immutable.sql
+-- Make work-item history a fully immutable, append-only audit log.
+--
+-- 1. Detach the FK so every record keeps its work_item_id after the work item
+--    is deleted. Migration 006's ON DELETE SET NULL nulled the id on delete,
+--    which orphaned the DELETED record and made the trail unattributable.
+--    Auditable deletion requires the id to survive; history is only ever
+--    queried through it.
+ALTER TABLE work_item_history DROP CONSTRAINT work_item_history_work_item_id_fkey;
+
+-- Clean up rows orphaned by the old SET NULL behaviour (they have no id and
+-- can no longer be attributed to any work item).
+DELETE FROM work_item_history WHERE work_item_id IS NULL;
+
+-- Every record must reference a work item.
+ALTER TABLE work_item_history ALTER COLUMN work_item_id SET NOT NULL;
+
+-- 2. Enforce immutability at the database level. No application code path may
+--    UPDATE or DELETE history rows; this trigger makes that impossible.
+CREATE OR REPLACE FUNCTION prevent_work_item_history_mutation()
+RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'work_item_history is an immutable audit log (%).', TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS work_item_history_immutable ON work_item_history;
+CREATE TRIGGER work_item_history_immutable
+BEFORE UPDATE OR DELETE ON work_item_history
+FOR EACH ROW EXECUTE FUNCTION prevent_work_item_history_mutation();
+
+-- 3. Efficient chronological reads plus future audit/reporting queries.
+CREATE INDEX IF NOT EXISTS idx_work_item_history_work_item_created
+  ON work_item_history(work_item_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_work_item_history_action
+  ON work_item_history(action);-- db/migrations/017_work_item_history_ordering.sql
+-- Give work-item history a statement-accurate insertion timestamp so batch
+-- writes (several records created in one transaction/batch) still surface in
+-- their true insertion order.
+--
+-- created_at (CURRENT_TIMESTAMP / now()) is the transaction timestamp — all
+-- rows written inside one transaction share it, so it cannot order a batch.
+-- inserted_at uses clock_timestamp(), which advances at statement evaluation
+-- time, giving each appended record a monotonic, distinct timestamp.
+ALTER TABLE work_item_history
+  ADD COLUMN inserted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp();
+
+DROP INDEX IF EXISTS idx_work_item_history_work_item_created;
+CREATE INDEX idx_work_item_history_work_item_inserted
+  ON work_item_history(work_item_id, inserted_at);ALTER TABLE work_item_comments
+  ADD COLUMN deleted_at TIMESTAMPTZ,
+  ADD COLUMN version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0);
+
+UPDATE work_item_comments
+SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP),
+    updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP);
+
+ALTER TABLE work_item_comments
+  ALTER COLUMN created_at SET NOT NULL,
+  ALTER COLUMN updated_at SET NOT NULL;
+
+CREATE INDEX idx_work_item_comments_history
+  ON work_item_comments (work_item_id, created_at DESC, id DESC)
+  WHERE deleted_at IS NULL;
+-- Migration 019: Add role to project_members
+--
+-- Adds a role column to project_members to support OWNER / ADMIN / MEMBER
+-- project-level roles, enabling fine-grained permissions per action rather
+-- than just binary membership checks.
+--
+-- OWNER: project creator; can do everything including delete.
+-- ADMIN: elevated member; can manage members, teams, settings, delete work items.
+-- MEMBER: standard access; can view, create, edit work items, change states, etc.
+
+ALTER TABLE project_members
+  ADD COLUMN IF NOT EXISTS role VARCHAR(20)
+    NOT NULL
+    DEFAULT 'MEMBER'
+    CHECK (role IN ('OWNER', 'ADMIN', 'MEMBER'));
+
+-- Promote existing project creators to OWNER in their own project_members row.
+-- If the creator doesn't have a project_members row yet, insert one.
+INSERT INTO project_members (project_id, user_id, role)
+SELECT p.id, p.created_by, 'OWNER'
+FROM projects p
+ON CONFLICT (project_id, user_id)
+DO UPDATE SET role = 'OWNER';
+
+-- Index to speed up role lookups during permission checks.
+CREATE INDEX IF NOT EXISTS idx_project_members_role
+  ON project_members (project_id, user_id, role);
+-- db/migrations/020_create_notifications.sql
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL,
+  work_item_id UUID REFERENCES work_items(id) ON DELETE CASCADE,
+  actor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  read_at TIMESTAMP WITH TIME ZONE NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read_at);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+-- Create Boards table for configurable boards
+CREATE TABLE IF NOT EXISTS boards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    is_default BOOLEAN NOT NULL DEFAULT false,
+    columns JSONB NOT NULL DEFAULT '[]'::jsonb,
+    card_fields JSONB NOT NULL DEFAULT '{"showType": true, "showPriority": true, "showAssignee": true, "showPoints": true, "showParent": true, "showTags": true}'::jsonb,
+    filter_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_boards_project_id ON boards(project_id);
+CREATE INDEX IF NOT EXISTS idx_boards_team_id ON boards(team_id);
+-- db/migrations/022_create_indexes.sql
+-- Indexes for the Azure Boards access patterns on work_items, validated with
+-- EXPLAIN ANALYZE against a ~200k-row seed (see index review).
+--
+-- Summary of changes vs. migrations 001-021:
+--   * work_items: add composite project-prefix indexes for the common board /
+--     backlog filters (project+state, project+type, project+assigned user),
+--     plus area_id and parent_id single-column indexes. The latter two also
+--     make ON DELETE SET NULL FK enforcement seek instead of seq-scanning.
+--   * work_items: replace idx_work_items_sprint_id with a (iteration_id,
+--     backlog_rank, seq_no) index so sprint pages read in rank order without
+--     an explicit sort.
+--   * work_item_history: add (created_at DESC) for the project-overview
+--     "recent activity" query, and drop the single-column work_item_id index
+--     left over from 004 — migration 017's (work_item_id, inserted_at)
+--     composite already covers per-item lookups.
+--   * work_item_attachments / notifications: add work_item_id indexes so the
+--     existing ON DELETE CASCADE from work_items does indexed child lookups.
+
+-- work_items: project-scoped board/backlog filters.
+CREATE INDEX idx_work_items_project_state    ON work_items (project_id, state);
+CREATE INDEX idx_work_items_project_type     ON work_items (project_id, type);
+CREATE INDEX idx_work_items_project_assigned ON work_items (project_id, assigned_to);
+
+-- work_items: ON DELETE SET NULL FK enforcement + area-filtered queries.
+-- Deliberately single-column: area_id is globally unique (see 009), so the
+-- composite would add nothing for queries while a bare area_id is required
+-- for the areas -> work_items FK check.
+CREATE INDEX idx_work_items_area_id ON work_items (area_id);
+
+-- work_items: child-count / has_children lookups and the parent self-FK
+-- (ON DELETE SET NULL). project_id is deliberately NOT included here; the
+-- existing idx_work_items_parent_rank (project_id, parent_id, backlog_rank)
+-- already covers project-scoped traversal.
+CREATE INDEX idx_work_items_parent_id ON work_items (parent_id);
+
+-- work_items: sprint pages ordered by backlog_rank; replaces the plain
+-- iteration index from 003.
+DROP INDEX IF EXISTS idx_work_items_sprint_id;
+CREATE INDEX idx_work_items_iteration_rank ON work_items (iteration_id, backlog_rank, seq_no);
+
+-- work_item_history: newest-first project activity (project overview).
+CREATE INDEX idx_work_item_history_created_at ON work_item_history (created_at DESC);
+
+-- work_item_history: drop the legacy 004 single-column index; migration 017's
+-- (work_item_id, inserted_at) composite already serves per-item history.
+DROP INDEX IF EXISTS idx_work_item_history_work_item_id;
+
+-- Cascades from work_items deletes must not scan the child tables.
+CREATE INDEX idx_work_item_attachments_work_item_id ON work_item_attachments (work_item_id);
+CREATE INDEX idx_notifications_work_item_id         ON notifications (work_item_id);-- db/migrations/023_create_performance_indexes.sql
+-- Performance optimization indexes for comments, sequence lookups, and backlog hierarchy.
+
+-- Index for comment cursor-based history lookup (matching ASC order of getComments)
+CREATE INDEX IF NOT EXISTS idx_work_item_comments_asc_history
+  ON work_item_comments (work_item_id, created_at ASC, id ASC)
+  WHERE deleted_at IS NULL;
+
+-- Composite index for project-scoped sequence number search ("PROJ-123" / "123")
+CREATE INDEX IF NOT EXISTS idx_work_items_project_seq
+  ON work_items (project_id, seq_no);
+
+-- Composite index for project-scoped parent & rank ordering
+CREATE INDEX IF NOT EXISTS idx_work_items_project_parent_rank
+  ON work_items (project_id, parent_id, backlog_rank);
+-- db/migrations/024_create_users_auth_and_refresh_tokens.sql
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash VARCHAR(255) NOT NULL,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  revoked BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  replaced_by_token_id UUID
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);

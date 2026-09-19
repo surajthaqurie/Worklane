@@ -4,9 +4,10 @@ import { WorkItemsRepository } from './work-items.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { TeamsService } from '../teams/teams.service.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
-import { Permission } from '../authorization/permissions.js';
+import { Permission, hasPermission } from '../authorization/permissions.js';
 import { CreateWorkItemDto, UpdateWorkItemDto } from './dto/work-items.dto.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { db } from '../../db/kysely.js';
 
 @Injectable()
 export class WorkItemsService {
@@ -344,6 +345,21 @@ export class WorkItemsService {
       Permission.WORK_ITEM_VIEW,
     );
 
+    const existingComment = await db
+      .selectFrom('work_item_comments')
+      .where('id', '=', commentId)
+      .where('deleted_at', 'is', null)
+      .select(['work_item_id', 'user_id'])
+      .executeTakeFirst();
+
+    if (!existingComment || existingComment.work_item_id !== id) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    if (existingComment.user_id !== userId) {
+      throw new ForbiddenException('You can only edit your own comments');
+    }
+
     const updated = await this.repo.updateComment(
       commentId,
       userId,
@@ -374,7 +390,30 @@ export class WorkItemsService {
   ) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
-    await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_VIEW);
+    const membership = await this.authz.requireProjectPermission(
+      item.project_id,
+      userId,
+      Permission.WORK_ITEM_VIEW,
+    );
+
+    const existingComment = await db
+      .selectFrom('work_item_comments')
+      .where('id', '=', commentId)
+      .where('deleted_at', 'is', null)
+      .select(['work_item_id', 'user_id'])
+      .executeTakeFirst();
+
+    if (!existingComment || existingComment.work_item_id !== id) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    const canDelete =
+      existingComment.user_id === userId ||
+      hasPermission(membership.role, Permission.WORK_ITEM_DELETE);
+
+    if (!canDelete) {
+      throw new ForbiddenException('You can only delete your own comments');
+    }
 
     return await this.repo.deleteComment(commentId, userId, expectedVersion);
   }

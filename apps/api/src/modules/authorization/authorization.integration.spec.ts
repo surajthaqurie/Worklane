@@ -2,6 +2,10 @@ import { ForbiddenException, BadRequestException } from '@nestjs/common';
 import { AuthorizationService } from './authorization.service.js';
 import { Permission } from './permissions.js';
 import { ProjectsService } from '../projects/projects.service.js';
+import { WorkItemsService } from '../work-items/work-items.service.js';
+import { IterationsService } from '../iterations/iterations.service.js';
+import { TeamsService } from '../teams/teams.service.js';
+import { WorkItemTransitionsService } from '../work-items/work-item-transitions.service.js';
 import { db } from '../../db/kysely.js';
 
 // Runs when DATABASE_URL / localhost:5434 is available.
@@ -26,9 +30,17 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
     authzService = new AuthorizationService();
 
     // 1. Fetch seed users or create test users
-    const users = await db.selectFrom('users').select('id').limit(3).execute();
-    if (users.length < 3) {
-      throw new Error('Seeded dev data requires at least 3 users');
+    let users = await db.selectFrom('users').select('id').limit(3).execute();
+    while (users.length < 3) {
+      const newUser = await db
+        .insertInto('users')
+        .values({
+          name: `Authz Test User ${users.length + 1}`,
+          email: `authz-test-${Date.now()}-${users.length}@worklane.dev`,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      users.push(newUser);
     }
     ownerUserId = users[0].id;
     memberUserId = users[1].id;
@@ -49,10 +61,28 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
               key: data.key,
               description: data.description || null,
               created_by: data.created_by,
-              organization_id: data.organization_id,
+              organization_id: data.organization_id || '00000000-0000-0000-0000-000000000000',
             })
             .returningAll()
             .executeTakeFirstOrThrow();
+
+          await db
+            .insertInto('areas')
+            .values({
+              project_id: project.id,
+              name: 'Root Area',
+            })
+            .execute();
+
+          await db
+            .insertInto('work_item_states')
+            .values([
+              { project_id: project.id, name: 'To Do', key: 'TODO', color: '#94A3B8', sort_order: 0 },
+              { project_id: project.id, name: 'New', key: 'New', color: '#94A3B8', sort_order: 1 },
+              { project_id: project.id, name: 'In Progress', key: 'IN_PROGRESS', color: '#3B82F6', sort_order: 2 },
+              { project_id: project.id, name: 'Done', key: 'DONE', color: '#22C55E', sort_order: 3 },
+            ])
+            .execute();
 
           await db
             .insertInto('project_members')
@@ -159,6 +189,7 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
       projectsService,
       {} as any,
       authzService,
+      {} as any,
     );
 
     await expect(
@@ -179,6 +210,7 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
       projectsService,
       {} as any,
       authzService,
+      {} as any,
     );
 
     // memberUserId has MEMBER role in Project A
@@ -202,9 +234,9 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
   it('prevents MEMBER from creating iterations (requires ADMIN or OWNER)', async () => {
     const iterationsService = new IterationsService(
       {} as any,
-      projectsService,
       {} as any,
       authzService,
+      {} as any,
     );
 
     await expect(
@@ -239,6 +271,7 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
         },
       } as any,
       authzService,
+      {} as any,
     );
 
     await expect(
@@ -253,13 +286,17 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
           const item = await db.selectFrom('work_items').where('id', '=', id).selectAll().executeTakeFirst();
           return item ? { ...item, tags: [] } : undefined;
         },
-        updateState: async () => ({ id: itemInProjectA, state: 'Active' }),
+        getProjectStates: async (pid: string) => {
+          return db.selectFrom('work_item_states').where('project_id', '=', pid).selectAll().execute();
+        },
+        updateState: async () => ({ id: itemInProjectA, state: 'IN_PROGRESS' }),
       } as any,
       authzService,
+      { notifyStateChanged: async () => {} } as any,
     );
 
-    const result = await transitionsService.transitionState(memberUserId, itemInProjectA, 'Active');
-    expect(result.state).toBe('Active');
+    const result = await transitionsService.transitionState(memberUserId, itemInProjectA, 'IN_PROGRESS');
+    expect(result.state).toBe('IN_PROGRESS');
   });
 
   // ─── 4. Assignment Authorization ────────────────────────────────────────────

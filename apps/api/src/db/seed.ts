@@ -4,9 +4,13 @@ import { db } from './kysely.js';
 
 async function seed() {
   console.log('Seeding default admin user and project memberships...');
-  const email = 'admin@admin.com';
-  const password = 'admin@admin.com';
-  const name = 'Admin User';
+  const email = process.env.SEED_ADMIN_EMAIL || 'admin@worklane.dev';
+  const password = process.env.SEED_ADMIN_PASSWORD || 'WorklaneAdmin2026!';
+  const name = process.env.SEED_ADMIN_NAME || 'Admin User';
+
+  if (!process.env.SEED_ADMIN_PASSWORD) {
+    console.warn('⚠️ WARNING: SEED_ADMIN_PASSWORD environment variable not set. Using default initial password.');
+  }
 
   const passwordHash = await bcrypt.hash(password, 10);
 

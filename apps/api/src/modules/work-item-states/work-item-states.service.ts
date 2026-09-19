@@ -11,20 +11,24 @@ import {
 } from './dto/work-item-states.dto.js';
 import { db } from '../../db/kysely.js';
 
+import { AuthorizationService } from '../authorization/authorization.service.js';
+import { Permission } from '../authorization/permissions.js';
+
 @Injectable()
 export class WorkItemStatesService {
   constructor(
     private readonly repo: WorkItemStatesRepository,
     private readonly projectsService: ProjectsService,
+    private readonly authz: AuthorizationService,
   ) {}
 
   async findAll(userId: string, projectId: string) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
     return this.repo.findAll(projectId);
   }
 
   async create(userId: string, projectId: string, data: CreateWorkItemStateDto) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_MANAGE_SETTINGS);
 
     if (!data.name || !data.name.trim()) {
       throw new BadRequestException('State name is required');
@@ -52,7 +56,7 @@ export class WorkItemStatesService {
     id: string,
     data: UpdateWorkItemStateDto,
   ) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_MANAGE_SETTINGS);
     const state = await this.repo.findById(id);
     if (!state || state.projectId !== projectId) {
       throw new NotFoundException('State not found');
@@ -66,7 +70,7 @@ export class WorkItemStatesService {
   }
 
   async remove(userId: string, projectId: string, id: string) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_MANAGE_SETTINGS);
     const state = await this.repo.findById(id);
     if (!state || state.projectId !== projectId) {
       throw new NotFoundException('State not found');
@@ -120,7 +124,7 @@ export class WorkItemStatesService {
   }
 
   async reorder(userId: string, projectId: string, orderedIds: string[]) {
-    await this.projectsService.assertProjectMember(projectId, userId);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_MANAGE_SETTINGS);
     const current = await this.repo.findAll(projectId);
     const currentIds = new Set(current.map((s) => s.id));
 

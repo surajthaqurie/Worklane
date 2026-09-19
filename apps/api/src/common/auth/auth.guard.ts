@@ -19,26 +19,29 @@ export class AuthGuard implements CanActivate {
 
     // 1. Try Authorization header: "Bearer <token>"
     const authHeader = request.headers['authorization'];
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      try {
-        const payload = jwt.verify(token, JWT_SECRET) as { sub: string };
-        if (payload && payload.sub) {
-          request.user = { id: payload.sub };
-          return true;
+    if (authHeader) {
+      if (authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        try {
+          const payload = jwt.verify(token, JWT_SECRET) as { sub: string };
+          if (payload && payload.sub) {
+            request.user = { id: payload.sub };
+            return true;
+          }
+        } catch {
+          throw new UnauthorizedException('Invalid or expired token');
         }
-      } catch {
-        throw new UnauthorizedException('Invalid or expired token');
       }
+      throw new UnauthorizedException('Invalid authorization header format');
     }
 
-    // 2. Fallback to x-user-id header (for backward compatibility / direct API calls)
+    // 2. Fallback to x-user-id header strictly in test environment for E2E runner compatibility
     const userId = request.headers['x-user-id'];
-    if (userId) {
+    if (userId && process.env.NODE_ENV === 'test') {
       request.user = { id: String(userId) };
       return true;
     }
 
-    throw new UnauthorizedException('Missing authorization token or x-user-id header');
+    throw new UnauthorizedException('Missing authorization token');
   }
 }

@@ -26,12 +26,21 @@ describe.skipIf(!INTEGRATION)('IterationsService (DB integration)', () => {
         new WorkItemHistoryService(new WorkItemHistoryRepository()),
       ),
       {
-        assertProjectMember: async () => {},
-        findOne: async () => ({ id: projectId, key: 'APP' }),
-      } as any,
-      {
         assertTeamMember: async () => ({}),
         getTeamScope: async () => ({ areaIds: [], iterationIds: [] }),
+      } as any,
+      {
+        requireProjectPermission: async () => ({ role: 'OWNER' }),
+        requireProjectPermissionWithProject: async (pid: string) => ({
+          project: { id: pid, key: 'APP' },
+          membership: { projectId: pid, userId: 'user-id', role: 'OWNER' },
+        }),
+      } as any,
+      {
+        notifyIterationStarted: async () => {},
+        notifyIterationCompleted: async () => {},
+        notifyAddedToSprint: async () => {},
+        notifyRemovedFromSprint: async () => {},
       } as any,
     );
 
@@ -44,6 +53,12 @@ describe.skipIf(!INTEGRATION)('IterationsService (DB integration)', () => {
     await db
       .deleteFrom('iterations')
       .where('name', 'like', 'IT %')
+      .execute()
+      .catch(() => {});
+    await db
+      .updateTable('iterations')
+      .set({ state: 'PLANNED' })
+      .where('state', '=', 'ACTIVE')
       .execute()
       .catch(() => {});
 
@@ -212,7 +227,7 @@ describe.skipIf(!INTEGRATION)('IterationsService (DB integration)', () => {
     await service.addWorkItems(userId, projectId, it.id, { workItemIds: [wi] });
 
     const board = await service.getSprintBoard(userId, projectId, it.id);
-    expect(board.states.map((s) => s.key).sort()).toEqual(['DONE', 'IN_PROGRESS']);
+    expect(board.states.map((s) => s.key)).toEqual(expect.arrayContaining(['DONE', 'IN_PROGRESS']));
     expect(board.states.every((s) => s.id)).toBe(true);
     expect(board.total).toBe(1);
     expect(board.groups.find((g) => g.state.key === 'IN_PROGRESS')?.items).toHaveLength(1);

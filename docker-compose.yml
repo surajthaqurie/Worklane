@@ -2,7 +2,8 @@ version: '3.8'
 
 services:
   db:
-    image: postgres:15
+    image: postgres:15-alpine
+    restart: always
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: root
@@ -11,6 +12,51 @@ services:
       - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d todoapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      NODE_ENV: production
+      DATABASE_URL: postgres://postgres:root@db:5432/todoapp
+      CORS_ORIGIN: http://localhost:3000
+      JWT_SECRET: super-secret-worklane-access-key-change-in-production
+      JWT_REFRESH_SECRET: super-secret-worklane-refresh-key-change-in-production
+      SEED_ADMIN_EMAIL: admin@worklane.dev
+      SEED_ADMIN_PASSWORD: WorklaneAdmin2026!
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4000
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+    depends_on:
+      - api
+    profiles:
+      - full
 
 volumes:
   postgres_data:
+  uploads_data:

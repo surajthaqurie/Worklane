@@ -130,10 +130,11 @@ export class AuthorizationService {
       throw new NotFoundException('Project not found');
     }
 
-    const role: ProjectRole =
-      (row.member_role as ProjectRole | null) ?? 'OWNER';
+    const role: ProjectRole | null =
+      (row.member_role as ProjectRole | null) ??
+      (row.created_by === userId ? 'OWNER' : null);
 
-    if (!hasPermission(role, permission)) {
+    if (!role || !hasPermission(role, permission)) {
       throw new ForbiddenException(
         `You do not have permission to perform this action (required: ${permission})`,
       );
@@ -184,6 +185,58 @@ export class AuthorizationService {
     if (itemProjectId !== expectedProjectId) {
       throw new ForbiddenException('Work item does not belong to this project');
     }
+  }
+
+  /**
+   * Asserts that `userId` has the given `permission` in `projectId`.
+   * Alias matching standard requirement signature.
+   */
+  async requirePermission(
+    userId: string,
+    projectId: string,
+    permission: Permission,
+  ): Promise<ProjectMembership> {
+    return this.requireProjectPermission(projectId, userId, permission);
+  }
+
+  /**
+   * Asserts that `userId` has access to `projectId` AND belongs to `teamId`.
+   * Also verifies `teamId` belongs to `projectId`.
+   */
+  async requireTeamAccess(
+    userId: string,
+    projectId: string,
+    teamId: string,
+  ): Promise<{ teamId: string; userId: string; role: 'ADMIN' | 'MEMBER' }> {
+    await this.requireProjectPermission(projectId, userId, Permission.TEAM_VIEW);
+
+    const team = await db
+      .selectFrom('teams')
+      .where('id', '=', teamId)
+      .where('project_id', '=', projectId)
+      .select(['id', 'project_id'])
+      .executeTakeFirst();
+
+    if (!team) {
+      throw new NotFoundException('Team not found');
+    }
+
+    const member = await db
+      .selectFrom('team_members')
+      .where('team_id', '=', teamId)
+      .where('user_id', '=', userId)
+      .select(['team_id', 'user_id', 'role'])
+      .executeTakeFirst();
+
+    if (!member) {
+      throw new ForbiddenException('You do not belong to this team');
+    }
+
+    return {
+      teamId: member.team_id,
+      userId: member.user_id,
+      role: member.role as 'ADMIN' | 'MEMBER',
+    };
   }
 
   /**

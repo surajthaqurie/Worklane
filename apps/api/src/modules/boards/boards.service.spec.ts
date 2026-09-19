@@ -3,6 +3,7 @@ import { BoardsService } from './boards.service.js';
 import { BoardsRepository } from './boards.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { WorkItemsService } from '../work-items/work-items.service.js';
+import { AuthorizationService } from '../authorization/authorization.service.js';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 describe('BoardsService', () => {
@@ -35,12 +36,21 @@ describe('BoardsService', () => {
       findAll: vi.fn().mockResolvedValue([]),
     };
 
+    const authz = {
+      requireProjectPermission: vi.fn().mockResolvedValue({ role: 'OWNER' }),
+      requireProjectPermissionWithProject: vi.fn().mockResolvedValue({
+        project: { id: 'p1', key: 'P' },
+        membership: { role: 'OWNER' },
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BoardsService,
         { provide: BoardsRepository, useValue: repo },
         { provide: ProjectsService, useValue: projectsService },
         { provide: WorkItemsService, useValue: workItemsService },
+        { provide: AuthorizationService, useValue: authz },
       ],
     }).compile();
 

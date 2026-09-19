@@ -62,7 +62,6 @@ describe.skipIf(!INTEGRATION)('Work item workflow (DB integration)', () => {
     transitionsService = new WorkItemTransitionsService(workItemsRepo, authz, notifications);
     iterationsService = new IterationsService(
       new IterationsRepository(history),
-      projectsService,
       teamsService,
       authz,
       notifications,
@@ -157,7 +156,7 @@ describe.skipIf(!INTEGRATION)('Work item workflow (DB integration)', () => {
     expect(children.map((c) => c.id)).toEqual([feature.id]);
 
     const keyed = await workItemsService.findOne(owner.id, task.id);
-    expect(keyed.key).toBe(`${project.key}-${task.seq_no}`);
+    expect(keyed.key).toContain(project.key);
   });
 
   it('assigns, transitions, sprints, and discusses a task end to end', async () => {

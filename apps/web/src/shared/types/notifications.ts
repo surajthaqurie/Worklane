@@ -14,6 +14,8 @@ export interface Notification {
   type: 'ASSIGNED' | 'MENTIONED' | 'STATE_CHANGED' | 'ADDED_TO_SPRINT' | 'REMOVED_FROM_SPRINT' | 'PARENT_CHANGED' | string;
   workItemId: string | null;
   actorId: string;
+  actor?: { name?: string };
+  actorName?: string;
   metadata: NotificationMetadata;
   readAt: string | null;
   createdAt: string;

@@ -297,11 +297,16 @@ export function Iterations({ projectId }: { projectId: string }) {
                       {status === 'PLANNED' && (
                         <button
                           onClick={() => activateIteration.mutate(iteration.id)}
-                          disabled={activateIteration.isPending}
-                          className="px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--brand-primary)] hover:opacity-90 rounded-[var(--radius-button)] transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                          disabled={activateIteration.isPending || iterations.some((it) => it.status === 'ACTIVE')}
+                          title={
+                            iterations.some((it) => it.status === 'ACTIVE')
+                              ? 'Sprint active. Complete the current active sprint before starting another one.'
+                              : undefined
+                          }
+                          className="px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--brand-primary)] hover:opacity-90 rounded-[var(--radius-button)] transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <PlayCircle className="w-3.5 h-3.5" />
-                          Start Sprint
+                          {activateIteration.isPending && activateIteration.variables === iteration.id ? 'Starting...' : 'Start Sprint'}
                         </button>
                       )}
                       {status === 'ACTIVE' && (

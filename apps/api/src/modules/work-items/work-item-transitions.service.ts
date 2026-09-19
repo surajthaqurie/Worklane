@@ -36,7 +36,17 @@ export class WorkItemTransitionsService {
     // state defined for the project is a valid target (Azure Boards style),
     // and completion is derived from that state's `isDone` flag.
     const projectStates = await this.repo.getProjectStates(item.project_id);
-    const target = projectStates.find((s) => s.key === targetState);
+    let target = projectStates.find((s) => s.key === targetState);
+
+    if (!target && targetState.startsWith('col-')) {
+      const cleanKey = targetState.slice(4);
+      target = projectStates.find(
+        (s) => s.key === cleanKey || s.key.toLowerCase() === cleanKey.toLowerCase()
+      );
+      if (target) {
+        targetState = target.key;
+      }
+    }
 
     if (!target) {
       throw new BadRequestException(

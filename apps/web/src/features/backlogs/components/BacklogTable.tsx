@@ -35,6 +35,7 @@ export interface BacklogTableProps {
   members: ProjectMember[];
   onToggleExpand: (id: string) => void;
   onSelectRow: (id: string, e: React.MouseEvent) => void;
+  onToggleSelectRow: (id: string) => void;
   onOpenDrawer: (item: BacklogItem) => void;
   onAddChild: (parentItem: BacklogItem) => void;
   onStartEditing: (item: BacklogItem) => void;
@@ -43,6 +44,8 @@ export interface BacklogTableProps {
   onDraftChange: (field: keyof BacklogItem, value: unknown) => void;
   onReorder: (activeId: string, overId: string) => void;
   onSelectAllToggle: (allSelected: boolean) => void;
+  onUpdateAssignee: (id: string, userId: string | null) => void;
+  onUpdateState: (id: string, state: string) => void;
 }
 
 export function BacklogTable({
@@ -56,6 +59,7 @@ export function BacklogTable({
   members,
   onToggleExpand,
   onSelectRow,
+  onToggleSelectRow,
   onOpenDrawer,
   onAddChild,
   onStartEditing,
@@ -64,6 +68,8 @@ export function BacklogTable({
   onDraftChange,
   onReorder,
   onSelectAllToggle,
+  onUpdateAssignee,
+  onUpdateState,
 }: BacklogTableProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -123,12 +129,15 @@ export function BacklogTable({
                   members={members}
                   onToggleExpand={onToggleExpand}
                   onSelectRow={onSelectRow}
+                  onToggleSelectRow={onToggleSelectRow}
                   onOpenDrawer={onOpenDrawer}
                   onAddChild={onAddChild}
                   onStartEditing={onStartEditing}
                   onCancelEditing={onCancelEditing}
                   onSaveEditing={onSaveEditing}
                   onDraftChange={onDraftChange}
+                  onUpdateAssignee={onUpdateAssignee}
+                  onUpdateState={onUpdateState}
                 />
               ))}
             </div>

@@ -19,6 +19,7 @@ import { useUpdateWorkItem, useTransitionWorkItemState } from '@/features/work-i
 import { Board } from '@/features/boards/components/Board';
 import { StatesManager } from '@/features/boards/components/StatesManager';
 import { WorkItemDrawer } from '@/features/work-items/components/WorkItemDrawer';
+import { CreateWorkItemModal } from '@/features/work-items/components/CreateWorkItemModal';
 import { CompleteSprintDialog } from '@/features/iterations/components/CompleteSprintDialog';
 import { BacklogSidebar } from '@/features/iterations/components/BacklogSidebar';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
@@ -56,6 +57,13 @@ export default function IterationDetailPage() {
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCompleteOpen, setIsCompleteOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [quickAddState, setQuickAddState] = useState<string | undefined>(undefined);
+
+  const handleQuickAdd = (stateKey: string) => {
+    setQuickAddState(stateKey);
+    setIsCreateModalOpen(true);
+  };
 
   const storyByParentId = useMemo(() => {
     const map: Record<string, { key: string; title: string }> = {};
@@ -119,7 +127,22 @@ export default function IterationDetailPage() {
     const overId = over.id.toString();
     if (!overId.startsWith('col-')) return;
 
-    const stateKey = overId.slice('col-'.length);
+    let targetColId = overId.slice('col-'.length);
+    if (targetColId.startsWith('col-')) {
+      targetColId = targetColId.slice('col-'.length);
+    }
+
+    let stateKey = targetColId;
+    const matchedState = states.find(
+      (s) =>
+        s.key === targetColId ||
+        s.key.toLowerCase() === targetColId.toLowerCase() ||
+        s.key === targetColId.toUpperCase()
+    );
+    if (matchedState) {
+      stateKey = matchedState.key;
+    }
+
     const itemId = active.id.toString();
     const isFromBacklog = active.data.current?.fromBacklog;
 
@@ -211,9 +234,15 @@ export default function IterationDetailPage() {
             {iteration.status === 'PLANNED' && (
               <button
                 onClick={handleStartIteration}
-                className="bg-[var(--brand-primary)] hover:opacity-90 text-white px-4 py-2 rounded-[var(--radius-button)] text-[13px] font-medium transition-colors"
+                disabled={activateIteration.isPending || iterations.some((it) => it.status === 'ACTIVE' && it.id !== iterationId)}
+                title={
+                  iterations.some((it) => it.status === 'ACTIVE' && it.id !== iterationId)
+                    ? 'Another sprint is currently active in this project. Complete it first before starting a new sprint.'
+                    : undefined
+                }
+                className="bg-[var(--brand-primary)] hover:opacity-90 text-white px-4 py-2 rounded-[var(--radius-button)] text-[13px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Start Sprint
+                {activateIteration.isPending ? 'Starting...' : 'Start Sprint'}
               </button>
             )}
             {iteration.status === 'ACTIVE' && (
@@ -289,6 +318,7 @@ export default function IterationDetailPage() {
                   onSelectItem={setSelectedItem}
                   onRemoveItem={handleRemoveWorkItem}
                   storyByParentId={storyByParentId}
+                  onQuickAdd={handleQuickAdd}
                 />
               </>
             )}
@@ -311,6 +341,21 @@ export default function IterationDetailPage() {
       )}
 
       {selectedItem && <WorkItemDrawer item={selectedItem} onClose={() => setSelectedItem(null)} />}
+
+      <CreateWorkItemModal
+        projectId={projectId}
+        teamId={selectedTeamId}
+        initialValues={
+          quickAddState
+            ? { state: quickAddState, iterationId }
+            : { iterationId }
+        }
+        isOpen={isCreateModalOpen}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setQuickAddState(undefined);
+        }}
+      />
     </div>
   );
 }

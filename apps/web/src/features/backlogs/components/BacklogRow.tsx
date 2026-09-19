@@ -24,12 +24,15 @@ export interface BacklogRowProps {
   members: ProjectMember[];
   onToggleExpand: (id: string) => void;
   onSelectRow: (id: string, e: React.MouseEvent) => void;
+  onToggleSelectRow: (id: string) => void;
   onOpenDrawer: (item: BacklogItem) => void;
   onAddChild: (parentItem: BacklogItem) => void;
   onStartEditing: (item: BacklogItem) => void;
   onCancelEditing: () => void;
   onSaveEditing: (item: BacklogItem) => void;
   onDraftChange: (field: keyof BacklogItem, value: unknown) => void;
+  onUpdateAssignee: (id: string, userId: string | null) => void;
+  onUpdateState: (id: string, state: string) => void;
 }
 
 const INDENT_PX = 20;
@@ -44,14 +47,18 @@ export function BacklogRow({
   editDraft,
   states,
   iterations,
+  members,
   onToggleExpand,
   onSelectRow,
+  onToggleSelectRow,
   onOpenDrawer,
   onAddChild,
   onStartEditing,
   onCancelEditing,
   onSaveEditing,
   onDraftChange,
+  onUpdateAssignee,
+  onUpdateState,
 }: BacklogRowProps) {
   const { isItemPending } = useToast();
   const isPending = isItemPending(item.id);
@@ -99,7 +106,10 @@ export function BacklogRow({
           type="checkbox"
           checked={isSelected}
           onChange={() => {}}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelectRow(item.id);
+          }}
           className="w-3.5 h-3.5 rounded border-[var(--border-default)] accent-[var(--brand-primary)] cursor-pointer"
         />
       </div>
@@ -192,7 +202,11 @@ export function BacklogRow({
           value={isEditing ? editDraft.state ?? item.state : item.state}
           onChange={(e) => {
             e.stopPropagation();
-            onDraftChange('state', e.target.value);
+            if (isEditing) {
+              onDraftChange('state', e.target.value);
+            } else {
+              onUpdateState(item.id, e.target.value);
+            }
           }}
           onClick={(e) => e.stopPropagation()}
           className="w-full text-[11px] font-medium bg-transparent border-none outline-none cursor-pointer text-[var(--text-primary)]"
@@ -217,8 +231,30 @@ export function BacklogRow({
       </div>
 
       {/* Assignee */}
-      <div className="w-32 shrink-0 px-2 truncate text-[11px] text-[var(--text-secondary)]">
-        {item.assignedToName || 'Unassigned'}
+      <div className="w-32 shrink-0 px-2">
+        <select
+          value={isEditing ? (editDraft.assignedTo ?? item.assignedTo ?? '') : (item.assignedTo ?? '')}
+          onChange={(e) => {
+            e.stopPropagation();
+            const val = e.target.value || null;
+            if (isEditing) {
+              onDraftChange('assignedTo', val);
+            } else {
+              onUpdateAssignee(item.id, val);
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full text-[11px] bg-transparent border-none outline-none cursor-pointer text-[var(--text-primary)] truncate"
+        >
+          <option value="" className="text-[var(--text-muted)] bg-[var(--bg-surface)]">
+            Unassigned
+          </option>
+          {members.map((m) => (
+            <option key={m.id} value={m.userId} className="text-[var(--text-primary)] bg-[var(--bg-surface)]">
+              {m.userName}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Iteration */}

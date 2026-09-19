@@ -2,9 +2,10 @@
 
 import React, { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { useWorkItems, useTransitionWorkItemState } from '@/features/work-items/hooks/useWorkItems';
+import { useWorkItems, useTransitionWorkItemState, useUpdateWorkItem } from '@/features/work-items/hooks/useWorkItems';
 import { useWorkItemStates } from '@/features/work-items/hooks/useWorkItemStates';
 import { useBoards } from '@/features/boards/hooks/useBoards';
+import { useProjectMembers } from '@/features/projects/hooks/useProjects';
 import { BoardConfig } from '@/shared/types/boards';
 import { WorkItem } from '@/shared/types/work-items';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
@@ -12,7 +13,8 @@ import { Board } from '@/features/boards/components/Board';
 import { BoardConfigModal } from '@/features/boards/components/BoardConfigModal';
 import { StatesManager } from '@/features/boards/components/StatesManager';
 import { WorkItemDrawer } from '@/features/work-items/components/WorkItemDrawer';
-import { SquareKanban, Search, Filter, Settings2 } from 'lucide-react';
+import { CreateWorkItemModal } from '@/features/work-items/components/CreateWorkItemModal';
+import { SquareKanban, Search, Filter, Settings2, Plus } from 'lucide-react';
 import { Spinner, ErrorState } from '@/shared/components/ui';
 
 export default function ProjectBoardPage() {
@@ -22,10 +24,13 @@ export default function ProjectBoardPage() {
 
   const { data: boards = [], isLoading: isLoadingBoards } = useBoards(projectId, selectedTeamId);
   const { data: states = [] } = useWorkItemStates(projectId);
+  const { data: members = [] } = useProjectMembers(projectId);
 
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [boardToEdit, setBoardToEdit] = useState<BoardConfig | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [quickAddState, setQuickAddState] = useState<string | undefined>(undefined);
 
   const activeBoard = useMemo(() => {
     if (!boards || boards.length === 0) return null;
@@ -46,9 +51,6 @@ export default function ProjectBoardPage() {
     return () => clearTimeout(handler);
   }, [search]);
 
-  // Apply the board's persisted filter defaults whenever the active board
-  // changes (render-time adjustment, per React's "state derived from props"
-  // guidance). Live edits by the user are left untouched.
   const [filteredBoardId, setFilteredBoardId] = useState<string | undefined>(activeBoard?.id);
   if (filteredBoardId !== activeBoard?.id) {
     setFilteredBoardId(activeBoard?.id);
@@ -62,12 +64,9 @@ export default function ProjectBoardPage() {
   const selectedTypes = useMemo(() => {
     if (backlogLevel === 'EPIC') return ['EPIC'];
     if (backlogLevel === 'FEATURE') return ['FEATURE'];
-    return ['STORY', 'BUG'];
+    return ['STORY', 'BUG', 'TASK'];
   }, [backlogLevel]);
 
-  // Intersect the board level with the board's persisted type restriction, then
-  // let the API do the filtering (index-backed) instead of filtering the 500-row
-  // client cache. `NONE` is a sentinel that matches nothing.
   const typesFilter = useMemo(() => {
     const allowed = activeBoard?.filterConfig?.types ?? [];
     const set = selectedTypes.filter((t) => allowed.length === 0 || allowed.includes(t));
@@ -88,6 +87,7 @@ export default function ProjectBoardPage() {
   });
 
   const transitionWorkItem = useTransitionWorkItemState(projectId);
+  const updateWorkItem = useUpdateWorkItem(projectId);
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
 
   const storyByParentId = useMemo(() => {
@@ -103,6 +103,15 @@ export default function ProjectBoardPage() {
 
   const handleDragState = (itemId: string, stateKey: string) => {
     transitionWorkItem.mutate({ id: itemId, state: stateKey });
+  };
+
+  const handleAssignItem = (itemId: string, userId: string | null) => {
+    updateWorkItem.mutate({ id: itemId, data: { assignedTo: userId } });
+  };
+
+  const handleQuickAdd = (stateKey: string) => {
+    setQuickAddState(stateKey);
+    setIsCreateModalOpen(true);
   };
 
   const handleOpenConfig = (b: BoardConfig | null) => {
@@ -152,6 +161,15 @@ export default function ProjectBoardPage() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setQuickAddState(undefined);
+              setIsCreateModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-white bg-[var(--brand-primary)] hover:opacity-90 rounded-[var(--radius-button)] transition-colors"
+          >
+            <Plus className="w-4 h-4" /> New Work Item
+          </button>
           {activeBoard && (
             <button
               onClick={() => handleOpenConfig(activeBoard)}
@@ -182,7 +200,7 @@ export default function ProjectBoardPage() {
             >
               <option value="EPIC">Epics</option>
               <option value="FEATURE">Features</option>
-              <option value="STORY">Stories & Bugs</option>
+              <option value="STORY">Stories, Tasks & Bugs</option>
             </select>
 
             <div className="flex items-center gap-2 border border-[var(--border-default)] rounded-[var(--radius-input)] bg-[var(--bg-surface)] px-2 py-1">
@@ -214,6 +232,11 @@ export default function ProjectBoardPage() {
             >
               <option value="">Any Assignee</option>
               <option value="UNASSIGNED">Unassigned</option>
+              {members.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {m.userName} ({m.userEmail || m.role})
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -232,11 +255,25 @@ export default function ProjectBoardPage() {
             onStateChange={handleDragState}
             onSelectItem={setSelectedItem}
             storyByParentId={storyByParentId}
+            members={members}
+            onAssign={handleAssignItem}
+            onQuickAdd={handleQuickAdd}
           />
         )}
       </div>
 
       {selectedItem && <WorkItemDrawer item={selectedItem} onClose={() => setSelectedItem(null)} />}
+
+      <CreateWorkItemModal
+        projectId={projectId}
+        teamId={selectedTeamId}
+        initialValues={quickAddState ? { state: quickAddState } : undefined}
+        isOpen={isCreateModalOpen}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setQuickAddState(undefined);
+        }}
+      />
 
       <BoardConfigModal
         projectId={projectId}

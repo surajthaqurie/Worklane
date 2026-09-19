@@ -103,6 +103,19 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+select {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+  border-radius: var(--radius-input);
+  outline: none;
+}
+
+select option {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   *,
   ::before,

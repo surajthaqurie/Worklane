@@ -7,6 +7,9 @@ import { WorkItem, WorkItemState } from '@/shared/types/work-items';
 import { BoardColumn as BoardColumnConfig, CardFields } from '@/shared/types/boards';
 import { BoardCard } from './BoardCard';
 
+import { Plus } from 'lucide-react';
+import { ProjectMember } from '@/shared/types/projects';
+
 export interface BoardColumnProps {
   column: BoardColumnConfig;
   items: WorkItem[];
@@ -15,6 +18,10 @@ export interface BoardColumnProps {
   onSelectItem: (item: WorkItem) => void;
   onRemoveItem?: (item: WorkItem) => void;
   storyByParentId: Record<string, { key: string; title: string }>;
+  childrenByParentId?: Record<string, WorkItem[]>;
+  members?: ProjectMember[];
+  onAssign?: (itemId: string, userId: string | null) => void;
+  onQuickAdd?: (stateKey: string) => void;
 }
 
 export const BoardColumn = React.memo(function BoardColumn({
@@ -25,13 +32,19 @@ export const BoardColumn = React.memo(function BoardColumn({
   onSelectItem,
   onRemoveItem,
   storyByParentId,
+  childrenByParentId = {},
+  members = [],
+  onAssign,
+  onQuickAdd,
 }: BoardColumnProps) {
+  const droppableId = column.id.startsWith('col-') ? column.id : `col-${column.id}`;
   const { isOver, setNodeRef } = useDroppable({
-    id: `col-${column.id}`,
+    id: droppableId,
     data: { columnId: column.id },
   });
 
   const primaryState = states.find((s) => column.mappedStates.includes(s.key));
+  const primaryStateKey = primaryState?.key || column.mappedStates[0] || 'TODO';
   const headerColor = primaryState?.color || '#3B82F6';
 
   const wipLimit = column.wipLimit;
@@ -98,9 +111,25 @@ export const BoardColumn = React.memo(function BoardColumn({
             onSelect={onSelectItem}
             onRemove={onRemoveItem}
             story={item.parentId ? storyByParentId[item.parentId] : undefined}
+            childItems={childrenByParentId[item.id]}
+            members={members}
+            onAssign={onAssign}
           />
         ))}
       </div>
+
+      {/* Quick Add Item at column footer */}
+      {onQuickAdd && (
+        <div className="p-2 border-t border-[var(--border-subtle)] shrink-0">
+          <button
+            onClick={() => onQuickAdd(primaryStateKey)}
+            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-selected)] rounded-[var(--radius-button)] transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
+            <span>Add Item</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 });

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import { Copy, Check, Pencil } from 'lucide-react';
 import {
   useWorkItemComments,
   useWorkItemActivity,
@@ -21,6 +22,7 @@ import { useWorkItemStates } from '../hooks/useWorkItemStates';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Spinner } from '@/shared/components/ui/Spinner';
 import { WorkItemTypeBadge } from './WorkItemBadge';
+import { CreateWorkItemModal } from './CreateWorkItemModal';
 
 export interface WorkItemDrawerProps {
   item: WorkItem | null;
@@ -33,6 +35,9 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState('');
   const [tagInput, setTagInput] = useState('');
+  const [copiedTitle, setCopiedTitle] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [isCreateChildModalOpen, setIsCreateChildModalOpen] = useState(false);
 
   const itemId = item?.id ?? '';
   const projectId = item?.projectId ?? '';
@@ -53,12 +58,22 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
 
   const { data: members = [] } = useProjectMembers(projectId);
   const { data: iterations = [] } = useIterations(projectId);
-  const { data: allWorkItems = [] } = useWorkItems(projectId, undefined, { limit: '50' });
+  const { data: allWorkItems = [] } = useWorkItems(projectId, undefined, { limit: '300' });
   const { data: states = [] } = useWorkItemStates(projectId);
 
-  if (!item) return null;
-
   const current = detail ?? item;
+
+  const [titleInput, setTitleInput] = useState('');
+  const [descriptionInput, setDescriptionInput] = useState('');
+
+  useEffect(() => {
+    if (current) {
+      setTitleInput(current.title || '');
+      setDescriptionInput(current.description || '');
+    }
+  }, [current?.id, current?.title, current?.description]);
+
+  if (!item || !current) return null;
 
   const handleDeleteWorkItem = () => {
     if (confirm('Are you sure you want to delete this work item?')) {
@@ -127,12 +142,70 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
       isOpen={!!item}
       onClose={onClose}
       title={
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-[var(--text-muted)] font-normal">{current.key}</span>
-          <WorkItemTypeBadge type={current.type} />
+        <div className="flex items-center justify-between gap-3 w-full pr-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] border border-[var(--border-subtle)] shrink-0">
+              {current.key}
+            </span>
+            <WorkItemTypeBadge type={current.type} />
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                if (current?.key) {
+                  navigator.clipboard.writeText(current.key);
+                  setCopiedKey(true);
+                  setTimeout(() => setCopiedKey(false), 2000);
+                }
+              }}
+              title="Copy Item ID"
+              className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              {copiedKey ? (
+                <>
+                  <Check className="w-3 h-3 text-emerald-500" />
+                  <span className="text-emerald-500 font-medium">Copied ID</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3" />
+                  <span>Copy ID</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (current?.title) {
+                  navigator.clipboard.writeText(current.title);
+                  setCopiedTitle(true);
+                  setTimeout(() => setCopiedTitle(false), 2000);
+                }
+              }}
+              title="Copy Title"
+              className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              {copiedTitle ? (
+                <>
+                  <Check className="w-3 h-3 text-emerald-500" />
+                  <span className="text-emerald-500 font-medium">Copied Title</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3" />
+                  <span>Copy Title</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       }
-      subtitle={current.title}
+      subtitle={
+        <div className="text-xs font-medium text-[var(--text-secondary)] line-clamp-2 break-words whitespace-pre-wrap mt-0.5" title={current.title}>
+          {current.title}
+        </div>
+      }
     >
       <div className="flex flex-col h-full">
         {/* Navigation Tabs */}
@@ -174,29 +247,108 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
           {activeTab === 'details' && (
             <div className="flex flex-col gap-6">
               {/* Title & Description */}
-              <div className="flex flex-col gap-3">
-<input
-                    type="text"
-                    defaultValue={current.title}
-                    onBlur={(e) => {
-                      if (e.target.value.trim() && e.target.value !== current.title) {
-                        handleUpdate('title', e.target.value.trim());
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
+                      <Pencil className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
+                      <span>Title</span>
+                      <span className="text-[10px] font-normal text-[var(--text-muted)]">(Click to edit • Press Shift+Enter for new line)</span>
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (current?.key) {
+                            navigator.clipboard.writeText(current.key);
+                            setCopiedKey(true);
+                            setTimeout(() => setCopiedKey(false), 2000);
+                          }
+                        }}
+                        title="Copy Item ID"
+                        className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+                      >
+                        {copiedKey ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+                            <span className="text-emerald-500 font-medium">Copied ID!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy ID</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (current?.title) {
+                            navigator.clipboard.writeText(current.title);
+                            setCopiedTitle(true);
+                            setTimeout(() => setCopiedTitle(false), 2000);
+                          }
+                        }}
+                        title="Copy Work Item Title"
+                        className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-[var(--radius-button)] bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+                      >
+                        {copiedTitle ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+                            <span className="text-emerald-500 font-medium">Copied Title!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy Title</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <textarea
+                      value={titleInput}
+                      onChange={(e) => setTitleInput(e.target.value)}
+                      onBlur={() => {
+                        if (titleInput.trim() && titleInput.trim() !== current.title) {
+                          handleUpdate('title', titleInput.trim());
+                        } else {
+                          setTitleInput(current.title);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                        } else if (e.key === 'Escape') {
+                          setTitleInput(current.title);
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      rows={Math.min(5, Math.max(2, titleInput.split('\n').length))}
+                      placeholder="Title of work item..."
+                      className="w-full text-base font-semibold px-3 py-2 rounded-[var(--radius-input)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] focus:border-[var(--border-focus)] focus:bg-[var(--bg-surface)] outline-none transition-all text-[var(--text-primary)] shadow-xs resize-y min-h-[48px] whitespace-pre-wrap leading-snug"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-medium text-[var(--text-muted)]">Description</label>
+                  <textarea
+                    value={descriptionInput}
+                    onChange={(e) => setDescriptionInput(e.target.value)}
+                    onBlur={() => {
+                      if (descriptionInput !== (current.description || '')) {
+                        handleUpdate('description', descriptionInput);
                       }
                     }}
-                  className="text-lg font-semibold bg-transparent border-b border-transparent hover:border-[var(--border-default)] focus:border-[var(--border-focus)] outline-none transition-colors text-[var(--text-primary)]"
-                />
-
-                <textarea
-                  defaultValue={current.description || ''}
-                  placeholder="Add a detailed description..."
-                  onBlur={(e) => {
-                    if (e.target.value !== (current.description || '')) {
-                      handleUpdate('description', e.target.value);
-                    }
-                  }}
-                  rows={4}
-                  className="w-full text-xs p-3 rounded-[var(--radius-card)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] focus:border-[var(--border-focus)] outline-none transition-colors text-[var(--text-primary)]"
-                />
+                    placeholder="Add a detailed description..."
+                    rows={4}
+                    className="w-full text-xs p-3 rounded-[var(--radius-card)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] focus:border-[var(--border-focus)] focus:bg-[var(--bg-surface)] outline-none transition-colors text-[var(--text-primary)]"
+                  />
+                </div>
               </div>
 
               {/* Attributes Grid */}
@@ -295,6 +447,26 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                 </div>
               </div>
 
+              {/* Parent Item Banner */}
+              {current.parentId && (
+                <div className="p-3 bg-[var(--brand-primary)]/5 border border-[var(--brand-primary)]/20 rounded-[var(--radius-card)] flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-[10px] font-bold text-[var(--brand-primary)] uppercase tracking-wider">Parent Work Item</span>
+                    <div className="flex items-center gap-2 truncate">
+                      {allWorkItems.find((w) => w.id === current.parentId) ? (
+                        <WorkItemTypeBadge type={allWorkItems.find((w) => w.id === current.parentId)!.type} />
+                      ) : null}
+                      <span className="font-mono text-xs font-semibold text-[var(--text-primary)]">
+                        {allWorkItems.find((w) => w.id === current.parentId)?.key || 'Parent'}
+                      </span>
+                      <span className="text-xs font-medium text-[var(--text-secondary)] truncate">
+                        {allWorkItems.find((w) => w.id === current.parentId)?.title || current.parentId}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Tags Section */}
               <div className="border-t border-[var(--border-subtle)] pt-4 flex flex-col gap-2">
                 <label className="text-[11px] font-medium text-[var(--text-muted)]">Tags</label>
@@ -323,6 +495,53 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                     className="text-xs bg-transparent border-b border-transparent focus:border-[var(--border-focus)] outline-none px-1 py-0.5 text-[var(--text-primary)]"
                   />
                 </div>
+              </div>
+
+              {/* Child Tasks & Bugs Section */}
+              <div className="border-t border-[var(--border-subtle)] pt-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-semibold text-[var(--text-primary)]">Child Tasks & Bugs</h3>
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+                      {allWorkItems.filter((w) => w.parentId === current.id).length}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateChildModalOpen(true)}
+                    className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--brand-primary)] hover:underline"
+                  >
+                    + Add Child Item
+                  </button>
+                </div>
+
+                {allWorkItems.filter((w) => w.parentId === current.id).length === 0 ? (
+                  <div className="text-xs text-[var(--text-muted)] italic bg-[var(--bg-surface-subtle)] p-3 rounded-[var(--radius-card)] border border-[var(--border-subtle)] text-center">
+                    No child tasks or bugs added yet. Click "+ Add Child Item" to create one.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
+                    {allWorkItems
+                      .filter((w) => w.parentId === current.id)
+                      .map((child) => (
+                        <div
+                          key={child.id}
+                          className="flex items-center justify-between p-2.5 rounded-[var(--radius-card)] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-xs gap-3 hover:border-[var(--border-strong)] transition-colors"
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <WorkItemTypeBadge type={child.type} />
+                            <span className="font-mono text-[11px] font-semibold text-[var(--text-secondary)]">{child.key}</span>
+                            <span className="font-medium text-[var(--text-primary)] truncate" title={child.title}>
+                              {child.title}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] border border-[var(--border-subtle)] shrink-0">
+                            {child.state}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}
@@ -465,6 +684,15 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
           )}
         </div>
       </div>
+
+      {isCreateChildModalOpen && (
+        <CreateWorkItemModal
+          projectId={projectId}
+          initialValues={{ parentId: current.id, type: 'TASK' }}
+          isOpen={isCreateChildModalOpen}
+          onClose={() => setIsCreateChildModalOpen(false)}
+        />
+      )}
     </Drawer>
   );
 }

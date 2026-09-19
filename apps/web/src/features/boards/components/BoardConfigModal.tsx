@@ -82,7 +82,7 @@ export function BoardConfigModal({
     const newCol: BoardColumn = {
       id: `col-${Date.now()}`,
       name: unmappedState ? unmappedState.name : 'New Column',
-      mappedStates: unmappedState ? [unmappedState.key] : states[0] ? [states[0].key] : [],
+      mappedStates: unmappedState ? [unmappedState.key] : [],
       wipLimit: null,
     };
     setColumns((prev) => [...prev, newCol]);
@@ -117,22 +117,35 @@ export function BoardConfigModal({
 
   const handleToggleMappedState = (colIndex: number, stateKey: string) => {
     setErrorMsg(null);
-    setColumns((prev) =>
-      prev.map((col, i) => {
-        if (i !== colIndex) return col;
-        const exists = col.mappedStates.includes(stateKey);
-        const nextStates = exists
-          ? col.mappedStates.filter((k) => k !== stateKey)
-          : [...col.mappedStates, stateKey];
-        return { ...col, mappedStates: nextStates };
-      })
-    );
+    setColumns((prev) => {
+      const isTargetCurrentlyMapped = prev[colIndex].mappedStates.includes(stateKey);
+      return prev.map((col, i) => {
+        if (i === colIndex) {
+          const nextStates = isTargetCurrentlyMapped
+            ? col.mappedStates.filter((k) => k !== stateKey)
+            : [...col.mappedStates, stateKey];
+          return { ...col, mappedStates: nextStates };
+        } else {
+          // If stateKey is being added to colIndex, remove it from other columns to guarantee 1-to-1 mapping
+          if (!isTargetCurrentlyMapped && col.mappedStates.includes(stateKey)) {
+            return { ...col, mappedStates: col.mappedStates.filter((k) => k !== stateKey) };
+          }
+          return col;
+        }
+      });
+    });
   };
 
   const handleSave = async () => {
     setErrorMsg(null);
     if (!name.trim()) {
       setErrorMsg('Board name is required.');
+      return;
+    }
+
+    const emptyCol = columns.find((c) => !c.mappedStates || c.mappedStates.length === 0);
+    if (emptyCol) {
+      setErrorMsg(`Column "${emptyCol.name}" must map to at least one workflow state.`);
       return;
     }
 
@@ -144,6 +157,23 @@ export function BoardConfigModal({
         `Every state must be mapped to a column. Unmapped: ${unmappedStates
           .map((s) => s.name)
           .join(', ')}`
+      );
+      return;
+    }
+
+    const stateMap = new Map<string, string[]>();
+    for (const col of columns) {
+      for (const sKey of col.mappedStates) {
+        const existing = stateMap.get(sKey) || [];
+        stateMap.set(sKey, [...existing, col.name]);
+      }
+    }
+    const duplicated = [...stateMap.entries()].filter(([, cols]) => cols.length > 1);
+    if (duplicated.length > 0) {
+      const stateObj = states.find((s) => s.key === duplicated[0][0]);
+      const stateName = stateObj ? stateObj.name : duplicated[0][0];
+      setErrorMsg(
+        `Workflow state "${stateName}" is mapped to more than one column (${duplicated[0][1].join(', ')}). Each state must map to exactly one column.`
       );
       return;
     }

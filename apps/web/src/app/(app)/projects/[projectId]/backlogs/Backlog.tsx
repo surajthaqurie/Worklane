@@ -76,7 +76,25 @@ export function Backlog({ projectId }: { projectId: string }) {
 
   const handleSelectRow = useCallback((id: string, e: React.MouseEvent) => {
     setSelectedIds((prev) => {
-      const next = new Set(e.ctrlKey || e.metaKey ? prev : []);
+      const next = new Set(prev);
+      if (e.ctrlKey || e.metaKey) {
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+      } else {
+        if (next.has(id) && next.size === 1) {
+          next.clear();
+        } else {
+          next.clear();
+          next.add(id);
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleSelectRow = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
@@ -92,6 +110,40 @@ export function Backlog({ projectId }: { projectId: string }) {
       }
     },
     [flatNodes]
+  );
+
+  const handleBulkAssignUser = useCallback(
+    (userId: string | null) => {
+      const itemIds = Array.from(selectedIds);
+      itemIds.forEach((id) => {
+        updateMutation.mutate({
+          id,
+          data: { assignedTo: userId },
+        });
+      });
+      setSelectedIds(new Set());
+    },
+    [selectedIds, updateMutation]
+  );
+
+  const handleUpdateAssignee = useCallback(
+    (id: string, assignedTo: string | null) => {
+      updateMutation.mutate({
+        id,
+        data: { assignedTo },
+      });
+    },
+    [updateMutation]
+  );
+
+  const handleUpdateState = useCallback(
+    (id: string, state: string) => {
+      updateMutation.mutate({
+        id,
+        data: { state },
+      });
+    },
+    [updateMutation]
   );
 
   const handleReorder = useCallback(
@@ -116,7 +168,7 @@ export function Backlog({ projectId }: { projectId: string }) {
 
   const handleStartEditing = useCallback((item: BacklogItem) => {
     setEditingId(item.id);
-    setEditDraft({ title: item.title, state: item.state });
+    setEditDraft({ title: item.title, state: item.state, assignedTo: item.assignedTo });
   }, []);
 
   const handleCancelEditing = useCallback(() => {
@@ -136,6 +188,7 @@ export function Backlog({ projectId }: { projectId: string }) {
           data: {
             title: editDraft.title.trim(),
             state: editDraft.state,
+            assignedTo: editDraft.assignedTo,
           },
         },
         {
@@ -191,6 +244,7 @@ export function Backlog({ projectId }: { projectId: string }) {
           });
           setSelectedIds(new Set());
         }}
+        onBulkAssignUser={handleBulkAssignUser}
         onCreateNewItem={() => setIsCreateModalOpen(true)}
       />
 
@@ -205,6 +259,7 @@ export function Backlog({ projectId }: { projectId: string }) {
         members={members}
         onToggleExpand={toggleExpand}
         onSelectRow={handleSelectRow}
+        onToggleSelectRow={handleToggleSelectRow}
         onOpenDrawer={setDrawerItem}
         onAddChild={() => setIsCreateModalOpen(true)}
         onStartEditing={handleStartEditing}
@@ -213,6 +268,8 @@ export function Backlog({ projectId }: { projectId: string }) {
         onDraftChange={handleDraftChange}
         onReorder={handleReorder}
         onSelectAllToggle={handleSelectAllToggle}
+        onUpdateAssignee={handleUpdateAssignee}
+        onUpdateState={handleUpdateState}
       />
 
       {drawerItem && <WorkItemDrawer item={drawerItem} onClose={() => setDrawerItem(null)} />}

@@ -6,6 +6,8 @@ import { WorkItem, WorkItemState } from '@/shared/types/work-items';
 import { BoardConfig, BoardColumn as BoardColumnConfig, CardFields } from '@/shared/types/boards';
 import { BoardColumn } from './BoardColumn';
 
+import { ProjectMember } from '@/shared/types/projects';
+
 export interface BoardProps {
   items: WorkItem[];
   states: WorkItemState[];
@@ -15,6 +17,9 @@ export interface BoardProps {
   onRemoveItem?: (item: WorkItem) => void;
   storyByParentId?: Record<string, { key: string; title: string }>;
   disableInternalDnd?: boolean;
+  members?: ProjectMember[];
+  onAssign?: (itemId: string, userId: string | null) => void;
+  onQuickAdd?: (stateKey: string) => void;
 }
 
 export function Board({
@@ -26,6 +31,9 @@ export function Board({
   onRemoveItem,
   storyByParentId = {},
   disableInternalDnd = false,
+  members = [],
+  onAssign,
+  onQuickAdd,
 }: BoardProps) {
   const columns: BoardColumnConfig[] = useMemo(() => {
     if (board?.columns && board.columns.length > 0) {
@@ -58,8 +66,18 @@ export function Board({
     const overId = over.id.toString();
     if (!overId.startsWith('col-')) return;
 
-    const columnId = overId.slice('col-'.length);
-    const targetColumn = columns.find((c) => c.id === columnId);
+    let columnId = overId.slice('col-'.length);
+    if (columnId.startsWith('col-')) {
+      columnId = columnId.slice('col-'.length);
+    }
+
+    const targetColumn = columns.find(
+      (c) =>
+        c.id === columnId ||
+        c.id === `col-${columnId}` ||
+        c.id.toLowerCase() === columnId.toLowerCase() ||
+        c.id.toLowerCase() === `col-${targetColumnId(columnId)}`
+    );
     if (!targetColumn || targetColumn.mappedStates.length === 0) return;
 
     const targetStateKey = targetColumn.mappedStates[0];
@@ -68,6 +86,10 @@ export function Board({
 
     onStateChange(item.id, targetStateKey);
   };
+
+  function targetColumnId(id: string) {
+    return id.toLowerCase();
+  }
 
   const itemsByColumnId = useMemo(() => {
     const map = new Map<string, WorkItem[]>();
@@ -79,6 +101,17 @@ export function Board({
     }
     return map;
   }, [columns, items]);
+
+  const childrenByParentId = useMemo(() => {
+    const map: Record<string, WorkItem[]> = {};
+    items.forEach((w) => {
+      if (w.parentId) {
+        if (!map[w.parentId]) map[w.parentId] = [];
+        map[w.parentId].push(w);
+      }
+    });
+    return map;
+  }, [items]);
 
   const content = (
     <div className="flex gap-4 overflow-x-auto pb-4 items-stretch h-full w-full min-h-[400px]">
@@ -94,6 +127,10 @@ export function Board({
             onSelectItem={onSelectItem}
             onRemoveItem={onRemoveItem}
             storyByParentId={storyByParentId}
+            childrenByParentId={childrenByParentId}
+            members={members}
+            onAssign={onAssign}
+            onQuickAdd={onQuickAdd}
           />
         );
       })}

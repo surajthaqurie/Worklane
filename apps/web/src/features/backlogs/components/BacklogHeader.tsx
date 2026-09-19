@@ -27,6 +27,7 @@ export interface BacklogHeaderProps {
   filterIterationId: string;
   onFilterIterationIdChange: (val: string) => void;
   onBulkAssignIteration: (iterationId: string | null) => void;
+  onBulkAssignUser: (userId: string | null) => void;
   onCreateNewItem: () => void;
 }
 
@@ -51,6 +52,7 @@ export function BacklogHeader({
   filterIterationId,
   onFilterIterationIdChange,
   onBulkAssignIteration,
+  onBulkAssignUser,
   onCreateNewItem,
 }: BacklogHeaderProps) {
   return (
@@ -88,6 +90,22 @@ export function BacklogHeader({
           {selectedCount > 0 ? (
             <div className="flex items-center gap-2 bg-[var(--bg-surface-selected)] border border-[var(--brand-primary)]/30 px-3 py-1 rounded-[var(--radius-button)] text-xs">
               <span className="font-semibold text-[var(--brand-primary)]">{selectedCount} selected</span>
+              <select
+                onChange={(e) => {
+                  const val = e.target.value;
+                  onBulkAssignUser(val === 'unassigned' ? null : val);
+                  e.target.value = '';
+                }}
+                className="text-xs bg-[var(--bg-surface)] border border-[var(--border-default)] rounded px-2 py-0.5 text-[var(--text-primary)]"
+              >
+                <option value="">Assign to...</option>
+                <option value="unassigned">Unassigned</option>
+                {members.map((m) => (
+                  <option key={m.id} value={m.userId}>
+                    {m.userName}
+                  </option>
+                ))}
+              </select>
               <select
                 onChange={(e) => {
                   const val = e.target.value;

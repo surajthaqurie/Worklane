@@ -4,10 +4,11 @@ import { BoardsService } from './boards.service.js';
 import { BoardsRepository } from './boards.repository.js';
 import { ProjectsModule } from '../projects/projects.module.js';
 import { WorkItemsModule } from '../work-items/work-items.module.js';
+import { TeamsModule } from '../teams/teams.module.js';
 import { AuthorizationModule } from '../authorization/authorization.module.js';
 
 @Module({
-  imports: [ProjectsModule, WorkItemsModule, AuthorizationModule],
+  imports: [ProjectsModule, WorkItemsModule, TeamsModule, AuthorizationModule],
   controllers: [BoardsController],
   providers: [BoardsService, BoardsRepository],
   exports: [BoardsService, BoardsRepository],

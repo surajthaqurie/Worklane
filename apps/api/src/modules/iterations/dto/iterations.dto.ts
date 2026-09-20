@@ -30,4 +30,5 @@ export class BulkMoveWorkItemsDto {
   workItemIds: string[];
   /** null = move to backlog (no iteration) */
   targetIterationId: string | null;
+  idempotencyKey?: string;
 }

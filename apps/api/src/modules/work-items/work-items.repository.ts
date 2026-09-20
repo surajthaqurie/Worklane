@@ -30,14 +30,14 @@ export class WorkItemsRepository {
     return area?.project_id ?? null;
   }
 
-  async getProjectStates(projectId: string): Promise<{ key: string; isDone: boolean }[]> {
+  async getProjectStates(projectId: string): Promise<{ key: string; isDone: boolean; category: string }[]> {
     const rows = await db
       .selectFrom('work_item_states')
       .where('project_id', '=', projectId)
-      .select(['key', 'is_done'])
+      .select(['key', 'is_done', 'category'])
       .orderBy('sort_order', 'asc')
       .execute();
-    return rows.map((r) => ({ key: r.key, isDone: r.is_done }));
+    return rows.map((r) => ({ key: r.key, isDone: r.is_done, category: r.category }));
   }
 
   async createWorkItem(projectId: string, userId: string, data: CreateWorkItemDto) {
@@ -75,7 +75,13 @@ export class WorkItemsRepository {
           description: data.description || null,
           state: initialState.key,
           priority: data.priority || 'MEDIUM',
+          severity: data.severity || 'MEDIUM',
           points: data.points || null,
+          remaining_work: data.remainingWork !== undefined && data.remainingWork !== null ? Number(data.remainingWork) : null,
+          completed_work: data.completedWork !== undefined && data.completedWork !== null ? Number(data.completedWork) : null,
+          start_date: data.startDate ? new Date(data.startDate) : null,
+          target_date: data.targetDate ? new Date(data.targetDate) : null,
+          custom_fields: (data.customFields || {}) as any,
           assigned_to: data.assignedTo || null,
           created_by: userId,
           area_id: data.areaId || (await trx.selectFrom("areas").where("project_id", "=", projectId).select("id").limit(1).executeTakeFirst())?.id || "00000000-0000-0000-0000-000000000000",
@@ -301,13 +307,33 @@ export class WorkItemsRepository {
         .select('tags.name')
         .execute();
 
-      const updateData: any = { updated_at: new Date() };
+      if (data.expectedVersion !== undefined && oldItem.version !== data.expectedVersion) {
+        throw new ConflictException(
+          `Conflict: Work item was updated by another user (expected version ${data.expectedVersion}, actual version ${oldItem.version})`,
+        );
+      }
+
+      const updateData: any = {
+        updated_at: new Date(),
+        version: sql`version + 1`,
+      };
       if (data.type !== undefined) updateData.type = data.type;
       if (data.title !== undefined) updateData.title = data.title;
       if (data.description !== undefined)
         updateData.description = data.description;
       if (data.priority !== undefined) updateData.priority = data.priority;
+      if (data.severity !== undefined) updateData.severity = data.severity;
       if (data.points !== undefined) updateData.points = data.points;
+      if (data.remainingWork !== undefined)
+        updateData.remaining_work = data.remainingWork !== null ? Number(data.remainingWork) : null;
+      if (data.completedWork !== undefined)
+        updateData.completed_work = data.completedWork !== null ? Number(data.completedWork) : null;
+      if (data.startDate !== undefined)
+        updateData.start_date = data.startDate ? new Date(data.startDate) : null;
+      if (data.targetDate !== undefined)
+        updateData.target_date = data.targetDate ? new Date(data.targetDate) : null;
+      if (data.customFields !== undefined)
+        updateData.custom_fields = (data.customFields || {}) as any;
       if (data.backlogOrder !== undefined) updateData.backlog_order = data.backlogOrder;
       if (data.assignedTo !== undefined)
         updateData.assigned_to = data.assignedTo;
@@ -316,12 +342,22 @@ export class WorkItemsRepository {
       if (data.areaId !== undefined) updateData.area_id = data.areaId;
       if (data.closedAt !== undefined) updateData.closed_at = data.closedAt || null;
 
-      const updated = await trx
+      let updateQuery = trx
         .updateTable('work_items')
         .set(updateData)
-        .where('id', '=', id)
+        .where('id', '=', id);
+
+      if (data.expectedVersion !== undefined) {
+        updateQuery = updateQuery.where('version', '=', data.expectedVersion);
+      }
+
+      const updated = await updateQuery
         .returningAll()
-        .executeTakeFirstOrThrow();
+        .executeTakeFirst();
+
+      if (!updated) {
+        throw new ConflictException('Conflict: Work item was updated by another user.');
+      }
 
       const entries: WorkItemHistoryEntryInput[] = [];
 
@@ -635,6 +671,7 @@ export class WorkItemsRepository {
     oldState: string,
     newState: string,
     isDone: boolean,
+    expectedVersion?: number,
   ) {
     return await db.transaction().execute(async (trx) => {
       const now = new Date();
@@ -643,18 +680,23 @@ export class WorkItemsRepository {
         updated_at: now,
         completed_at: isDone ? now : null,
         closed_at: isDone ? now : null,
+        version: sql`version + 1`,
       };
 
-      const updated = await trx
+      let query = trx
         .updateTable('work_items')
         .set(updateData)
         .where('id', '=', id)
-        .where('state', '=', oldState)
-        .returningAll()
-        .executeTakeFirst();
+        .where('state', '=', oldState);
+
+      if (expectedVersion !== undefined) {
+        query = query.where('version', '=', expectedVersion);
+      }
+
+      const updated = await query.returningAll().executeTakeFirst();
 
       if (!updated) {
-        throw new ConflictException('Concurrent update detected: Work item state has changed since it was loaded');
+        throw new ConflictException('Concurrent update detected: Work item state or version has changed since it was loaded');
       }
 
       await this.history.record(trx, {
@@ -672,5 +714,255 @@ export class WorkItemsRepository {
 
   async getActivity(workItemId: string) {
     return await this.history.getActivity(workItemId);
+  }
+
+  async getBatchRollups(projectId: string, itemIds: string[]): Promise<Record<string, {
+    itemId: string;
+    descendantCount: number;
+    completedCount: number;
+    totalPoints: number;
+    completedPoints: number;
+    remainingWork: number;
+    completedWork: number;
+    completionPercentage: number;
+  }>> {
+    if (itemIds.length === 0) return {};
+
+    const query = sql<any>`
+      WITH RECURSIVE tree AS (
+        SELECT 
+          wi.id AS root_id, 
+          wi.id, 
+          wi.project_id, 
+          wi.type, 
+          wi.state, 
+          wi.points,
+          wi.remaining_work, 
+          wi.completed_work, 
+          wis.category AS state_category, 
+          wis.is_done,
+          ARRAY[wi.id] AS path, 
+          0 AS depth
+        FROM work_items wi
+        LEFT JOIN work_item_states wis ON wis.project_id = wi.project_id AND wis.key = wi.state
+        WHERE wi.id = ANY(${itemIds}::uuid[]) AND wi.project_id = ${projectId}
+
+        UNION ALL
+
+        SELECT 
+          t.root_id, 
+          ch.id, 
+          ch.project_id, 
+          ch.type, 
+          ch.state, 
+          ch.points,
+          ch.remaining_work, 
+          ch.completed_work, 
+          wis.category AS state_category, 
+          wis.is_done,
+          t.path || ch.id, 
+          t.depth + 1
+        FROM work_items ch
+        JOIN tree t ON ch.parent_id = t.id AND ch.project_id = t.project_id
+        LEFT JOIN work_item_states wis ON wis.project_id = ch.project_id AND wis.key = ch.state
+        WHERE t.depth < 10 AND NOT (ch.id = ANY(t.path))
+      )
+      SELECT 
+        root_id,
+        (COUNT(*) - 1)::int AS descendant_count,
+        (COUNT(*) FILTER (WHERE depth > 0 AND (state_category = 'COMPLETED' OR is_done = TRUE)))::int AS completed_count,
+        COALESCE(SUM(points), 0)::float AS total_points,
+        COALESCE(SUM(points) FILTER (WHERE state_category = 'COMPLETED' OR is_done = TRUE), 0)::float AS completed_points,
+        COALESCE(SUM(remaining_work), 0)::float AS remaining_work,
+        COALESCE(SUM(completed_work), 0)::float AS completed_work
+      FROM tree
+      GROUP BY root_id;
+    `;
+
+    const result = await query.execute(db);
+
+    const resultMap: Record<string, {
+      itemId: string;
+      descendantCount: number;
+      completedCount: number;
+      totalPoints: number;
+      completedPoints: number;
+      remainingWork: number;
+      completedWork: number;
+      completionPercentage: number;
+    }> = {};
+
+    for (const id of itemIds) {
+      resultMap[id] = {
+        itemId: id,
+        descendantCount: 0,
+        completedCount: 0,
+        totalPoints: 0,
+        completedPoints: 0,
+        remainingWork: 0,
+        completedWork: 0,
+        completionPercentage: 0,
+      };
+    }
+
+    for (const row of result.rows) {
+      const rootId = row.root_id;
+      const descendantCount = Number(row.descendant_count) || 0;
+      const completedCount = Number(row.completed_count) || 0;
+      const totalPoints = Number(row.total_points) || 0;
+      const completedPoints = Number(row.completed_points) || 0;
+      const remainingWork = Number(row.remaining_work) || 0;
+      const completedWork = Number(row.completed_work) || 0;
+
+      let completionPercentage = 0;
+      if (totalPoints > 0) {
+        completionPercentage = Math.round((completedPoints / totalPoints) * 100);
+      } else if (descendantCount > 0) {
+        completionPercentage = Math.round((completedCount / descendantCount) * 100);
+      }
+
+      resultMap[rootId] = {
+        itemId: rootId,
+        descendantCount,
+        completedCount,
+        totalPoints,
+        completedPoints,
+        remainingWork,
+        completedWork,
+        completionPercentage: Math.min(100, Math.max(0, completionPercentage)),
+      };
+    }
+
+    return resultMap;
+  }
+
+  async getHierarchyTree(projectId: string, itemId: string) {
+    const descendantQuery = sql<any>`
+      WITH RECURSIVE tree AS (
+        SELECT 
+          wi.id, 
+          wi.project_id, 
+          wi.parent_id,
+          wi.type, 
+          wi.title,
+          wi.state, 
+          wi.priority,
+          wi.severity,
+          wi.points,
+          wi.remaining_work, 
+          wi.completed_work, 
+          wi.assigned_to,
+          wis.category AS state_category, 
+          wis.is_done,
+          ARRAY[wi.id] AS path, 
+          0 AS depth
+        FROM work_items wi
+        LEFT JOIN work_item_states wis ON wis.project_id = wi.project_id AND wis.key = wi.state
+        WHERE wi.id = ${itemId} AND wi.project_id = ${projectId}
+
+        UNION ALL
+
+        SELECT 
+          ch.id, 
+          ch.project_id, 
+          ch.parent_id,
+          ch.type, 
+          ch.title,
+          ch.state, 
+          ch.priority,
+          ch.severity,
+          ch.points,
+          ch.remaining_work, 
+          ch.completed_work, 
+          ch.assigned_to,
+          wis.category AS state_category, 
+          wis.is_done,
+          t.path || ch.id, 
+          t.depth + 1
+        FROM work_items ch
+        JOIN tree t ON ch.parent_id = t.id AND ch.project_id = t.project_id
+        LEFT JOIN work_item_states wis ON wis.project_id = ch.project_id AND wis.key = ch.state
+        WHERE t.depth < 10 AND NOT (ch.id = ANY(t.path))
+      )
+      SELECT * FROM tree ORDER BY depth ASC, title ASC;
+    `;
+
+    const ancestorQuery = sql<any>`
+      WITH RECURSIVE ancestors AS (
+        SELECT 
+          wi.id, wi.project_id, wi.parent_id, wi.type, wi.title, wi.state, 0 AS depth
+        FROM work_items wi
+        WHERE wi.id = ${itemId} AND wi.project_id = ${projectId}
+
+        UNION ALL
+
+        SELECT 
+          p.id, p.project_id, p.parent_id, p.type, p.title, p.state, a.depth + 1
+        FROM work_items p
+        JOIN ancestors a ON a.parent_id = p.id AND a.project_id = p.project_id
+        WHERE a.depth < 10
+      )
+      SELECT * FROM ancestors WHERE id != ${itemId} ORDER BY depth DESC;
+    `;
+
+    const [descResult, ancResult] = await Promise.all([
+      descendantQuery.execute(db),
+      ancestorQuery.execute(db),
+    ]);
+
+    if (descResult.rows.length === 0) {
+      return null;
+    }
+
+    const allIds = descResult.rows.map((r) => r.id);
+    const rollups = await this.getBatchRollups(projectId, allIds);
+
+    const nodeMap = new Map<string, any>();
+    for (const row of descResult.rows) {
+      nodeMap.set(row.id, {
+        id: row.id,
+        projectId: row.project_id,
+        parentId: row.parent_id,
+        type: row.type,
+        title: row.title,
+        state: row.state,
+        stateCategory: row.state_category || 'PROPOSED',
+        isDone: Boolean(row.is_done),
+        priority: row.priority,
+        severity: row.severity,
+        points: row.points !== null ? Number(row.points) : null,
+        remainingWork: row.remaining_work !== null ? Number(row.remaining_work) : null,
+        completedWork: row.completed_work !== null ? Number(row.completed_work) : null,
+        assignedTo: row.assigned_to,
+        depth: Number(row.depth),
+        children: [],
+        rollup: rollups[row.id],
+      });
+    }
+
+    let rootNode: any = null;
+    for (const node of nodeMap.values()) {
+      if (node.id === itemId) {
+        rootNode = node;
+      }
+      if (node.parentId && nodeMap.has(node.parentId)) {
+        nodeMap.get(node.parentId)!.children.push(node);
+      }
+    }
+
+    const ancestors = ancResult.rows.map((r) => ({
+      id: r.id,
+      projectId: r.project_id,
+      parentId: r.parent_id,
+      type: r.type,
+      title: r.title,
+      state: r.state,
+    }));
+
+    return {
+      item: rootNode,
+      ancestors,
+      rollup: rollups[itemId],
+    };
   }
 }

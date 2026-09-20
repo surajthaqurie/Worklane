@@ -2,7 +2,6 @@ import { ApiError } from '../types/api';
 import { authTokens, User } from './authTokens';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-const DEFAULT_USER_ID = '11111111-1111-1111-1111-111111111111';
 
 let refreshingPromise: Promise<{ accessToken: string; refreshToken: string; user?: User } | null> | null = null;
 
@@ -49,8 +48,8 @@ export async function request<T = unknown>(
   }
 
   const currentUser = authTokens.getUser();
-  if (!headers.has('x-user-id')) {
-    headers.set('x-user-id', currentUser?.id || DEFAULT_USER_ID);
+  if (currentUser?.id && !headers.has('x-user-id')) {
+    headers.set('x-user-id', currentUser.id);
   }
 
   if (!headers.has('Content-Type') && options.body && typeof options.body === 'string') {

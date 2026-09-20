@@ -3,10 +3,14 @@ import { AuthorizationService } from './authorization.service.js';
 import { Permission } from './permissions.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { WorkItemsService } from '../work-items/work-items.service.js';
+import { WorkItemTypeRegistryService } from '../work-items/work-item-types.registry.js';
+import { WorkItemsRepository } from '../work-items/work-items.repository.js';
 import { IterationsService } from '../iterations/iterations.service.js';
 import { TeamsService } from '../teams/teams.service.js';
 import { WorkItemTransitionsService } from '../work-items/work-item-transitions.service.js';
 import { db } from '../../db/kysely.js';
+
+import { AuditLoggerService } from '../audit/audit-logger.service.js';
 
 // Runs when DATABASE_URL / localhost:5434 is available.
 // Run with: INTEGRATION=1 pnpm --filter api test -- --run
@@ -14,6 +18,7 @@ const INTEGRATION = process.env.INTEGRATION === '1';
 
 describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () => {
   let authzService: AuthorizationService;
+  let auditLogger: AuditLoggerService;
   let projectsService: ProjectsService;
 
   let ownerUserId: string;
@@ -27,7 +32,8 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
   let itemInProjectB: string;
 
   beforeAll(async () => {
-    authzService = new AuthorizationService();
+    auditLogger = new AuditLoggerService();
+    authzService = new AuthorizationService(auditLogger);
 
     // 1. Fetch seed users or create test users
     let users = await db.selectFrom('users').select('id').limit(3).execute();
@@ -179,6 +185,7 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
 
   it('prevents setting parent from a different project (cross-project parent assignment)', async () => {
     // Attempt to set itemInProjectB (Project B) as parent for itemInProjectA (Project A)
+    const typeRegistry = new WorkItemTypeRegistryService();
     const workItemsService = new WorkItemsService(
       {
         getWorkItemById: async (id: string) => {
@@ -190,6 +197,7 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
       {} as any,
       authzService,
       {} as any,
+      typeRegistry,
     );
 
     await expect(
@@ -211,6 +219,7 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
       {} as any,
       authzService,
       {} as any,
+      new WorkItemTypeRegistryService(),
     );
 
     // memberUserId has MEMBER role in Project A
@@ -302,6 +311,7 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
   // ─── 4. Assignment Authorization ────────────────────────────────────────────
 
   async function makeWorkItemsService(overrides: Record<string, any> = {}) {
+    const typeRegistry = new WorkItemTypeRegistryService();
     return new WorkItemsService(
       {
         getWorkItemById: async (id: string) => {
@@ -315,6 +325,7 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
       {} as any,
       authzService,
       { notifyAssigned: async () => {} } as any,
+      typeRegistry,
     );
   }
 
@@ -350,5 +361,33 @@ describe.skipIf(!INTEGRATION)('Authorization Boundaries (DB Integration)', () =>
     await expect(
       service.update(ownerUserId, itemInProjectB, { iterationId: 'some-iteration-id' }),
     ).rejects.toThrow(ForbiddenException);
+  });
+
+  // ─── 5. Unknown Roles & Audit Log Verification ──────────────────────────────
+
+  it('enforces Default DENY for unknown roles or invalid permissions', async () => {
+    const { hasPermission } = await import('./permissions.js');
+
+    expect(hasPermission('UNKNOWN_ROLE' as any, Permission.PROJECT_VIEW)).toBe(false);
+    expect(hasPermission('GUEST' as any, Permission.WORK_ITEM_VIEW)).toBe(false);
+    expect(hasPermission('MEMBER', 'INVALID_PERMISSION' as any)).toBe(false);
+  });
+
+  it('records PERMISSION_DENIED events in security_audit_logs table', async () => {
+    try {
+      await authzService.requireProjectPermission(projectAId, nonMemberUserId, Permission.PROJECT_DELETE);
+    } catch {
+      // Expected ForbiddenException
+    }
+
+    const logs = await db
+      .selectFrom('security_audit_logs')
+      .where('event_type', '=', 'PERMISSION_DENIED')
+      .where('user_id', '=', nonMemberUserId)
+      .selectAll()
+      .execute();
+
+    expect(logs.length).toBeGreaterThan(0);
+    expect(logs.some((l) => l.project_id === projectAId)).toBe(true);
   });
 });

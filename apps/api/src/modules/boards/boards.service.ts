@@ -27,17 +27,23 @@ const DEFAULT_CARD_FIELDS: CardFields = {
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { Permission } from '../authorization/permissions.js';
 
+import { TeamsService } from '../teams/teams.service.js';
+
 @Injectable()
 export class BoardsService {
   constructor(
     private readonly repo: BoardsRepository,
     private readonly projectsService: ProjectsService,
     private readonly workItemsService: WorkItemsService,
+    private readonly teamsService: TeamsService,
     private readonly authz: AuthorizationService,
   ) {}
 
   async listBoards(userId: string, projectId: string, teamId?: string | null): Promise<BoardRow[]> {
-    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.BOARD_VIEW);
+    if (teamId && teamId !== 'default' && teamId !== 'undefined') {
+      await this.teamsService.assertTeamMember(projectId, teamId, userId);
+    }
     const boards = await this.repo.listByProject(projectId, teamId);
     if (boards.length === 0) {
       const defaultBoard = await this.seedDefaultBoard(projectId, teamId);
@@ -47,7 +53,7 @@ export class BoardsService {
   }
 
   async getBoard(userId: string, projectId: string, boardId: string): Promise<BoardRow> {
-    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.BOARD_VIEW);
     if (boardId === 'default') {
       const boards = await this.listBoards(userId, projectId);
       return boards[0];
@@ -56,11 +62,18 @@ export class BoardsService {
     if (!board) {
       throw new NotFoundException('Board not found');
     }
+    if (board.teamId) {
+      await this.teamsService.assertTeamMember(projectId, board.teamId, userId);
+    }
     return board;
   }
 
   async createBoard(userId: string, projectId: string, dto: CreateBoardDto): Promise<BoardRow> {
-    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_MANAGE_SETTINGS);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.BOARD_MANAGE);
+
+    if (dto.teamId) {
+      await this.teamsService.assertTeamMember(projectId, dto.teamId, userId);
+    }
 
     const parsed = CreateBoardSchema.safeParse(dto);
     if (!parsed.success) {
@@ -95,7 +108,7 @@ export class BoardsService {
     boardId: string,
     dto: UpdateBoardDto,
   ): Promise<BoardRow> {
-    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_MANAGE_SETTINGS);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.BOARD_MANAGE);
 
     const parsed = UpdateBoardSchema.safeParse(dto);
     if (!parsed.success) {
@@ -106,6 +119,13 @@ export class BoardsService {
     const existing = await this.repo.getById(projectId, boardId);
     if (!existing) {
       throw new NotFoundException('Board not found');
+    }
+
+    if (existing.teamId) {
+      await this.teamsService.assertTeamMember(projectId, existing.teamId, userId);
+    }
+    if (dto.teamId && dto.teamId !== existing.teamId) {
+      await this.teamsService.assertTeamMember(projectId, dto.teamId, userId);
     }
 
     const projectStates = await this.repo.getProjectStates(projectId);
@@ -137,10 +157,14 @@ export class BoardsService {
   }
 
   async deleteBoard(userId: string, projectId: string, boardId: string): Promise<{ success: boolean }> {
-    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_MANAGE_SETTINGS);
+    await this.authz.requireProjectPermission(projectId, userId, Permission.BOARD_MANAGE);
     const existing = await this.repo.getById(projectId, boardId);
     if (!existing) {
       throw new NotFoundException('Board not found');
+    }
+
+    if (existing.teamId) {
+      await this.teamsService.assertTeamMember(projectId, existing.teamId, userId);
     }
 
     const allBoards = await this.repo.listByProject(projectId);
@@ -158,12 +182,19 @@ export class BoardsService {
     boardId: string,
     queryFilters: Record<string, any> = {},
   ) {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.BOARD_VIEW);
+
     let board: BoardRow;
     if (boardId === 'default') {
       const boards = await this.listBoards(userId, projectId, queryFilters.teamId);
       board = boards[0];
     } else {
       board = await this.getBoard(userId, projectId, boardId);
+    }
+
+    const teamId = queryFilters.teamId || board.teamId || undefined;
+    if (teamId && teamId !== 'default' && teamId !== 'undefined') {
+      await this.teamsService.assertTeamMember(projectId, teamId, userId);
     }
 
     const mergedFilters = {
@@ -174,7 +205,7 @@ export class BoardsService {
       tags: queryFilters.tags ?? board.filterConfig?.tags ?? undefined,
       iterationId: queryFilters.iterationId ?? board.filterConfig?.iterationId ?? undefined,
       areaId: queryFilters.areaId ?? board.filterConfig?.areaId ?? undefined,
-      teamId: queryFilters.teamId || board.teamId || undefined,
+      teamId,
     };
 
     return this.workItemsService.findAll(userId, projectId, mergedFilters);

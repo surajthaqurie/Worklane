@@ -139,8 +139,15 @@ export interface Database {
     completed_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
     closed_at: ColumnType<Date | null, string | undefined | null, string | Date | null>;
     search_vector: ColumnType<never, never, never>;
+    severity: ColumnType<'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | null, 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | null | undefined, 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | null | undefined>;
+    remaining_work: number | null;
+    completed_work: number | null;
+    start_date: ColumnType<Date | null, string | Date | null | undefined, string | Date | null | undefined>;
+    target_date: ColumnType<Date | null, string | Date | null | undefined, string | Date | null | undefined>;
+    custom_fields: ColumnType<Record<string, unknown>, Record<string, unknown> | string | undefined, Record<string, unknown> | string | undefined>;
     backlog_order: number;
     backlog_rank: Generated<number>;
+    version: Generated<number>;
   };
   work_item_states: {
     id: Generated<string>;
@@ -149,6 +156,7 @@ export interface Database {
     key: string;
     color: string;
     sort_order: number;
+    category: Generated<'PROPOSED' | 'IN_PROGRESS' | 'RESOLVED' | 'COMPLETED'>;
     is_done: Generated<boolean>;
     is_default: Generated<boolean>;
     created_at: ColumnType<Date, string | undefined, never>;
@@ -248,6 +256,33 @@ export interface Database {
     columns: ColumnType<BoardColumnsJson | string, BoardColumnsJson | string, BoardColumnsJson | string>;
     card_fields: ColumnType<BoardCardFieldsJson | string, BoardCardFieldsJson | string, BoardCardFieldsJson | string>;
     filter_config: ColumnType<BoardFilterConfigJson | string, BoardFilterConfigJson | string, BoardFilterConfigJson | string>;
+    created_at: ColumnType<Date, string | undefined, never>;
+    version: Generated<number>;
+  };
+  security_audit_logs: {
+    id: Generated<string>;
+    event_type: string;
+    user_id: string | null;
+    project_id: string | null;
+    ip_address: string | null;
+    details: ColumnType<
+      Record<string, unknown> | string,
+      Record<string, unknown> | string,
+      Record<string, unknown> | string
+    >;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
+  idempotency_keys: {
+    id: Generated<string>;
+    key: string;
+    user_id: string;
+    path: string;
+    response_status: number;
+    response_body: ColumnType<
+      Record<string, unknown> | string,
+      Record<string, unknown> | string,
+      Record<string, unknown> | string
+    >;
     created_at: ColumnType<Date, string | undefined, never>;
   };
 }

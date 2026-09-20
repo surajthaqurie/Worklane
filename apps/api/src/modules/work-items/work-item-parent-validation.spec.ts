@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { WorkItemsService } from './work-items.service.js';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
+import { WorkItemTypeRegistryService } from './work-item-types.registry.js';
+
 describe('WorkItemsService Parent Validation & Boundary Checks', () => {
   let service: WorkItemsService;
   let mockRepo: any;
@@ -25,12 +27,14 @@ describe('WorkItemsService Parent Validation & Boundary Checks', () => {
       }),
     };
 
+    const typeRegistry = new WorkItemTypeRegistryService();
     service = new WorkItemsService(
       mockRepo,
       {} as any,
       {} as any,
       mockAuthz,
       { notifyAssigned: vi.fn(), notifyParentChanged: vi.fn() } as any,
+      typeRegistry,
     );
   });
 

@@ -10,6 +10,10 @@ const FIELD_COLUMN: Record<string, string> = {
   description: 'description',
   state: 'state',
   priority: 'priority',
+  points: 'points',
+  severity: 'severity',
+  remainingWork: 'remaining_work',
+  completedWork: 'completed_work',
   assignedTo: 'assigned_to',
   iterationId: 'iteration_id',
   areaId: 'area_id',
@@ -18,9 +22,12 @@ const FIELD_COLUMN: Record<string, string> = {
   createdAt: 'created_at',
   updatedAt: 'updated_at',
   completedAt: 'completed_at',
+  startDate: 'start_date',
+  targetDate: 'target_date',
 };
 
-const DATE_FIELDS = new Set(['createdAt', 'updatedAt', 'completedAt']);
+const DATE_FIELDS = new Set(['createdAt', 'updatedAt', 'completedAt', 'startDate', 'targetDate']);
+const NUMERIC_FIELDS = new Set(['points', 'key', 'seqNo', 'remainingWork', 'completedWork']);
 
 @Injectable()
 export class QueriesRepository {
@@ -163,10 +170,12 @@ export class QueriesRepository {
         );
         let expr: any = conditions[0];
         for (let i = 1; i < conditions.length; i++) {
-          expr =
-            clauses[i]?.logicalOperator === 'OR'
-              ? eb.or([expr, conditions[i]])
-              : eb.and([expr, conditions[i]]);
+          const logicalOp = clauses[i]?.logicalOperator;
+          if (logicalOp === 'OR') {
+            expr = eb.or([expr, conditions[i]]);
+          } else {
+            expr = eb.and([expr, conditions[i]]);
+          }
         }
         return expr;
       });
@@ -200,6 +209,7 @@ export class QueriesRepository {
       description: r.description,
       state: r.state,
       priority: r.priority,
+      points: r.points,
       assignedTo: r.assigned_to,
       createdBy: r.created_by,
       createdAt: r.created_at,
@@ -209,58 +219,121 @@ export class QueriesRepository {
     }));
   }
 
-  private buildClause(eb: any, clause: any, userId: string) {
+  private buildClause(eb: any, clause: any, userId: string): any {
+    const logicalOperator = clause?.logicalOperator ?? 'AND';
+
+    // Handle nested group AST
+    const nestedList = Array.isArray(clause?.clauses)
+      ? clause.clauses
+      : Array.isArray(clause?.filters)
+        ? clause.filters
+        : null;
+
+    if (nestedList && nestedList.length > 0) {
+      const childExprs = nestedList.map((c: any) => this.buildClause(eb, c, userId));
+      let groupExpr: any = childExprs[0];
+      for (let i = 1; i < childExprs.length; i++) {
+        const childLogicalOp = nestedList[i]?.logicalOperator;
+        if (childLogicalOp === 'OR') {
+          groupExpr = eb.or([groupExpr, childExprs[i]]);
+        } else {
+          groupExpr = eb.and([groupExpr, childExprs[i]]);
+        }
+      }
+      return logicalOperator === 'NOT' ? eb.not(groupExpr) : groupExpr;
+    }
+
     const field = clause?.field;
     const operator = clause?.operator ?? 'equals';
     let rawValue: string = String(clause?.value ?? '').trim();
     const column = FIELD_COLUMN[field] ?? 'title';
 
+    let expr: any;
+
     if (field === 'tags') {
-      return this.buildTagClause(eb, operator, rawValue);
-    }
+      expr = this.buildTagClause(eb, operator, rawValue);
+    } else if (field === 'stateCategory') {
+      const categorySubquery = db
+        .selectFrom('work_item_states')
+        .where(sql<SqlBool>`work_item_states.key = work_items.state AND work_item_states.project_id = work_items.project_id`);
 
-    if (
-      (field === 'assignedTo' || field === 'createdBy') &&
-      rawValue === '@me'
-    ) {
-      rawValue = userId;
-    }
-
-    if (rawValue === '') {
-      return eb(column, 'is', null);
-    }
-
-    switch (operator) {
-      case 'notEquals':
-        return eb(column, '<>', this.coerce(field, rawValue));
-      case 'contains':
-        return eb(column, 'ilike', `%${rawValue}%`);
-      case 'notContains':
-        return eb(column, 'not ilike', `%${rawValue}%`);
-      case 'in':
-        return eb(column, 'in', this.splitValues(field, rawValue));
-      case 'notIn':
-        return eb(column, 'not in', this.splitValues(field, rawValue));
-      case 'isEmpty':
-        return eb(column, 'is', null);
-      case 'isNotEmpty':
-        return eb(column, 'is not', null);
-      case 'after':
-        return eb(column, '>=', this.coerce(field, rawValue));
-      case 'before':
-        return eb(column, '<=', this.coerce(field, rawValue));
-      case 'between': {
-        const [start, end] = rawValue.split(',').map((v) => v.trim());
-        const conds: any[] = [];
-        if (start) conds.push(eb(column, '>=', this.coerce(field, start)));
-        if (end) conds.push(eb(column, '<=', this.coerce(field, end)));
-        if (conds.length === 0) return sql`true`;
-        return conds.length === 1 ? conds[0] : eb.and(conds);
+      if (operator === 'in' || operator === 'notIn') {
+        const list = this.splitValues(field, rawValue);
+        const sub = categorySubquery.where('work_item_states.category', 'in', list as any);
+        expr = operator === 'in' ? eb.exists(sub) : eb.notExists(sub);
+      } else if (operator === 'notEquals') {
+        expr = eb.notExists(categorySubquery.where('work_item_states.category', '=', rawValue as any));
+      } else {
+        expr = eb.exists(categorySubquery.where('work_item_states.category', '=', rawValue as any));
       }
-      case 'equals':
-      default:
-        return eb(column, '=', this.coerce(field, rawValue));
+    } else {
+      if (
+        (field === 'assignedTo' || field === 'createdBy') &&
+        rawValue === '@me'
+      ) {
+        rawValue = userId;
+      }
+
+      if (rawValue === '' && !['isEmpty', 'isNotEmpty'].includes(operator)) {
+        expr = eb(column, 'is', null);
+      } else {
+        switch (operator) {
+          case 'notEquals':
+            expr = eb(column, '<>', this.coerce(field, rawValue));
+            break;
+          case 'contains':
+            expr = eb(column, 'ilike', `%${rawValue}%`);
+            break;
+          case 'notContains':
+            expr = eb(column, 'not ilike', `%${rawValue}%`);
+            break;
+          case 'in':
+            expr = eb(column, 'in', this.splitValues(field, rawValue));
+            break;
+          case 'notIn':
+            expr = eb(column, 'not in', this.splitValues(field, rawValue));
+            break;
+          case 'greaterThan':
+            expr = eb(column, '>', this.coerce(field, rawValue));
+            break;
+          case 'greaterThanOrEqual':
+            expr = eb(column, '>=', this.coerce(field, rawValue));
+            break;
+          case 'lessThan':
+            expr = eb(column, '<', this.coerce(field, rawValue));
+            break;
+          case 'lessThanOrEqual':
+            expr = eb(column, '<=', this.coerce(field, rawValue));
+            break;
+          case 'isEmpty':
+            expr = eb(column, 'is', null);
+            break;
+          case 'isNotEmpty':
+            expr = eb(column, 'is not', null);
+            break;
+          case 'after':
+            expr = eb(column, '>=', this.coerce(field, rawValue));
+            break;
+          case 'before':
+            expr = eb(column, '<=', this.coerce(field, rawValue));
+            break;
+          case 'between': {
+            const [start, end] = rawValue.split(',').map((v) => v.trim());
+            const conds: any[] = [];
+            if (start) conds.push(eb(column, '>=', this.coerce(field, start)));
+            if (end) conds.push(eb(column, '<=', this.coerce(field, end)));
+            if (conds.length === 0) expr = sql`true`;
+            else expr = conds.length === 1 ? conds[0] : eb.and(conds);
+            break;
+          }
+          case 'equals':
+          default:
+            expr = eb(column, '=', this.coerce(field, rawValue));
+        }
+      }
     }
+
+    return logicalOperator === 'NOT' ? eb.not(expr) : expr;
   }
 
   private buildTagClause(eb: any, operator: string, rawValue: string) {
@@ -319,6 +392,10 @@ export class QueriesRepository {
     if (field === 'key') {
       const match = value.match(/(\d+)$/);
       return match ? parseInt(match[1], 10) : value;
+    }
+    if (field === 'points' || field === 'seqNo') {
+      const num = Number(value);
+      return isNaN(num) ? value : num;
     }
     return value;
   }

@@ -92,3 +92,19 @@ export function useDeleteQuery(projectId: string) {
     },
   });
 }
+
+export function useDuplicateQuery(projectId: string) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  return useMutation({
+    mutationFn: (id: string) => queriesApi.duplicateQuery(projectId, id),
+    onSuccess: (newQuery) => {
+      toast.showSuccess('Query duplicated', `Created "${newQuery.name}"`);
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'queries'] });
+    },
+    onError: (err) => {
+      toast.showError('Failed to duplicate query', formatApiError(err));
+    },
+  });
+}

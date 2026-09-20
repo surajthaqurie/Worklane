@@ -13,7 +13,7 @@ export class WorkItemTransitionsService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async transitionState(userId: string, id: string, targetState: string) {
+  async transitionState(userId: string, id: string, targetState: string, expectedVersion?: number) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) {
       throw new NotFoundException('Work item not found');
@@ -60,6 +60,7 @@ export class WorkItemTransitionsService {
       currentState,
       targetState,
       target.isDone,
+      expectedVersion,
     );
 
     await this.notifications.notifyStateChanged({

@@ -28,11 +28,11 @@ export const backlogsApi = {
 
   reorderItem: (
     projectId: string,
-    payload: { id: string; parentId: string | null; newRank: number; teamId?: string | null }
+    payload: { id: string; parentId: string | null; newRank: number; teamId?: string | null; idempotencyKey?: string }
   ) => apiClient.post<{ success: boolean }>(`/projects/${projectId}/backlog/reorder`, payload),
 
   bulkAssignIteration: (
     projectId: string,
-    payload: { itemIds: string[]; iterationId: string | null; teamId?: string | null }
+    payload: { itemIds: string[]; iterationId: string | null; teamId?: string | null; idempotencyKey?: string }
   ) => apiClient.post<{ success: boolean }>(`/projects/${projectId}/backlog/bulk-assign-iteration`, payload),
 };

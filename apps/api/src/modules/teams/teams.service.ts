@@ -1,13 +1,9 @@
-import {
-  Injectable,
-  ForbiddenException,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { TeamsRepository, TeamRole } from './teams.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { Permission } from '../authorization/permissions.js';
+import { AuditLoggerService } from '../audit/audit-logger.service.js';
 
 export interface TeamScope {
   areaIds: string[];
@@ -20,6 +16,7 @@ export class TeamsService {
     private readonly repo: TeamsRepository,
     private readonly projectsService: ProjectsService,
     private readonly authz: AuthorizationService,
+    @Optional() private readonly auditLogger?: AuditLoggerService,
   ) {}
 
   /** Project membership grants access to the project; team data also requires it. */
@@ -106,6 +103,7 @@ export class TeamsService {
     teamId: string,
     data: { userId: string; role: TeamRole },
   ) {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.TEAM_MANAGE);
     await this.assertTeamAdmin(projectId, teamId, userId);
     const targetIsProjectMember = await this.repo.isProjectMember(projectId, data.userId);
     if (!targetIsProjectMember) {
@@ -115,6 +113,13 @@ export class TeamsService {
     }
     const role = data.role === 'ADMIN' ? 'ADMIN' : 'MEMBER';
     await this.repo.addMember(teamId, data.userId, role);
+    if (this.auditLogger) {
+      void this.auditLogger.logEvent('MEMBER_ADDED', userId, projectId, {
+        teamId,
+        targetUserId: data.userId,
+        role,
+      });
+    }
     return { success: true };
   }
 
@@ -125,6 +130,7 @@ export class TeamsService {
     targetUserId: string,
     role: TeamRole,
   ) {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.TEAM_MANAGE);
     await this.assertTeamAdmin(projectId, teamId, userId);
     const member = await this.repo.getMember(teamId, targetUserId);
     if (!member) throw new NotFoundException('Team member not found');
@@ -134,6 +140,14 @@ export class TeamsService {
     }
     const nextRole = role === 'ADMIN' ? 'ADMIN' : 'MEMBER';
     const updated = await this.repo.updateMemberRole(teamId, targetUserId, nextRole);
+    if (this.auditLogger) {
+      void this.auditLogger.logEvent('ROLE_CHANGED', userId, projectId, {
+        teamId,
+        targetUserId,
+        newRole: nextRole,
+        previousRole: member.role,
+      });
+    }
     return { success: true, role: updated?.role ?? nextRole };
   }
 
@@ -143,6 +157,7 @@ export class TeamsService {
     teamId: string,
     targetUserId: string,
   ) {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.TEAM_MANAGE);
     await this.assertTeamAdmin(projectId, teamId, userId);
     const member = await this.repo.getMember(teamId, targetUserId);
     if (!member) throw new NotFoundException('Team member not found');
@@ -151,6 +166,12 @@ export class TeamsService {
       throw new BadRequestException('Cannot remove the last team administrator');
     }
     await this.repo.removeMember(teamId, targetUserId);
+    if (this.auditLogger) {
+      void this.auditLogger.logEvent('MEMBER_REMOVED', userId, projectId, {
+        teamId,
+        targetUserId,
+      });
+    }
     return { success: true };
   }
 

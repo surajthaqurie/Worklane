@@ -7,8 +7,7 @@ import {
 import type { Observable } from 'rxjs';
 import jwt from 'jsonwebtoken';
 import type { AuthenticatedRequest } from './authenticated-user.js';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-worklane-access-key-2026';
+import { JWT_SECRET } from '../../modules/auth/auth.service.js';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -23,7 +22,9 @@ export class AuthGuard implements CanActivate {
       if (authHeader.startsWith('Bearer ')) {
         const token = authHeader.substring(7);
         try {
-          const payload = jwt.verify(token, JWT_SECRET) as { sub: string };
+          const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as {
+            sub: string;
+          };
           if (payload && payload.sub) {
             request.user = { id: payload.sub };
             return true;

@@ -164,9 +164,25 @@ export const BoardCard = React.memo(function BoardCard({
           </div>
         )}
 
+        {item.severity && item.severity !== 'MEDIUM' && (
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+            item.severity === 'CRITICAL' ? 'bg-red-500/10 text-red-600 border-red-500/30' :
+            item.severity === 'HIGH' ? 'bg-orange-500/10 text-orange-600 border-orange-500/30' :
+            'bg-slate-500/10 text-slate-600 border-slate-500/30'
+          }`}>
+            {item.severity}
+          </span>
+        )}
+
         {showPoints && item.points != null && (
           <span className="text-[11px] font-medium bg-[var(--bg-surface-hover)] text-[var(--text-secondary)] px-1.5 py-0.5 rounded-full border border-[var(--border-subtle)]">
             {item.points} pts
+          </span>
+        )}
+
+        {item.remainingWork != null && (
+          <span className="text-[10px] font-medium text-[var(--text-secondary)] bg-[var(--bg-surface-subtle)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]" title={`Remaining work: ${item.remainingWork}h`}>
+            {item.remainingWork}h rem
           </span>
         )}
 

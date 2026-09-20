@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { WorkItemsService } from './work-items.service.js';
+import { WorkItemTypeRegistryService } from './work-item-types.registry.js';
 import { WorkItemsRepository } from './work-items.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { TeamsService } from '../teams/teams.service.js';
@@ -101,6 +102,7 @@ describe('WorkItemsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkItemsService,
+        WorkItemTypeRegistryService,
         { provide: WorkItemsRepository, useValue: repo },
         { provide: ProjectsService, useValue: projectsService },
         { provide: TeamsService, useValue: teamsService },

@@ -8,11 +8,14 @@ import { CreateProjectDto, UpdateProjectDto } from './dto/projects.dto.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { Permission } from '../authorization/permissions.js';
 
+import { AuditLoggerService } from '../audit/audit-logger.service.js';
+
 @Injectable()
 export class ProjectsService {
   constructor(
     private readonly repo: ProjectsRepository,
     private readonly authz: AuthorizationService,
+    private readonly auditLogger?: AuditLoggerService,
   ) {}
 
   /**
@@ -42,6 +45,12 @@ export class ProjectsService {
       created_by: userId,
     });
     // Creator is added as OWNER in project_members (repo handles this)
+    if (this.auditLogger) {
+      void this.auditLogger.logEvent('PROJECT_CREATED', userId, project.id, {
+        name: project.name,
+        key: project.key,
+      });
+    }
     return this.mapProject(project);
   }
 
@@ -66,12 +75,21 @@ export class ProjectsService {
   async remove(userId: string, projectId: string) {
     await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_DELETE);
     await this.repo.deleteProject(projectId);
+    if (this.auditLogger) {
+      void this.auditLogger.logEvent('PROJECT_DELETED', userId, projectId);
+    }
     return { success: true };
   }
 
   async addMember(userId: string, projectId: string, targetUserId: string, role: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER') {
     await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_MANAGE_MEMBERS);
     await this.repo.addMember(projectId, targetUserId, role);
+    if (this.auditLogger) {
+      void this.auditLogger.logEvent('MEMBER_ADDED', userId, projectId, {
+        targetUserId,
+        role,
+      });
+    }
     return { success: true };
   }
 
@@ -97,6 +115,11 @@ export class ProjectsService {
     }
 
     await this.repo.removeMember(projectId, targetUserId);
+    if (this.auditLogger) {
+      void this.auditLogger.logEvent('MEMBER_REMOVED', userId, projectId, {
+        targetUserId,
+      });
+    }
     return { success: true };
   }
 
@@ -117,6 +140,13 @@ export class ProjectsService {
     }
 
     await this.repo.updateMemberRole(projectId, targetUserId, newRole);
+    if (this.auditLogger) {
+      void this.auditLogger.logEvent('ROLE_CHANGED', userId, projectId, {
+        targetUserId,
+        newRole,
+        previousRole: targetMember?.role,
+      });
+    }
     return { success: true };
   }
 

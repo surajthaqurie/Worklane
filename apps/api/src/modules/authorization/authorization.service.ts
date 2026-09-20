@@ -1,6 +1,7 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException, Optional } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
 import { Permission, ProjectRole, hasPermission, getPermissionsForRole } from './permissions.js';
+import { AuditLoggerService } from '../audit/audit-logger.service.js';
 
 export interface ProjectMembership {
   projectId: string;
@@ -37,6 +38,10 @@ export interface ProjectRow {
  */
 @Injectable()
 export class AuthorizationService {
+  constructor(
+    @Optional() private readonly auditLogger?: AuditLoggerService,
+  ) {}
+
   /**
    * Resolves the authenticated user's project role from the database.
    * Returns null if the user has no membership in the project.
@@ -135,6 +140,12 @@ export class AuthorizationService {
       (row.created_by === userId ? 'OWNER' : null);
 
     if (!role || !hasPermission(role, permission)) {
+      if (this.auditLogger) {
+        await this.auditLogger.logEvent('PERMISSION_DENIED', userId, projectId, {
+          requiredPermission: permission,
+          userRole: role,
+        });
+      }
       throw new ForbiddenException(
         `You do not have permission to perform this action (required: ${permission})`,
       );

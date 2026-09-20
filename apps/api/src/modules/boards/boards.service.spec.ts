@@ -6,11 +6,14 @@ import { WorkItemsService } from '../work-items/work-items.service.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
+import { TeamsService } from '../teams/teams.service.js';
+
 describe('BoardsService', () => {
   let service: BoardsService;
   let repo: any;
   let projectsService: any;
   let workItemsService: any;
+  let teamsService: any;
 
   const mockProjectStates = [
     { id: '1', key: 'TODO', name: 'To Do', color: '#94A3B8', sortOrder: 0, isDone: false },
@@ -36,6 +39,10 @@ describe('BoardsService', () => {
       findAll: vi.fn().mockResolvedValue([]),
     };
 
+    teamsService = {
+      assertTeamMember: vi.fn().mockResolvedValue(true),
+    };
+
     const authz = {
       requireProjectPermission: vi.fn().mockResolvedValue({ role: 'OWNER' }),
       requireProjectPermissionWithProject: vi.fn().mockResolvedValue({
@@ -50,6 +57,7 @@ describe('BoardsService', () => {
         { provide: BoardsRepository, useValue: repo },
         { provide: ProjectsService, useValue: projectsService },
         { provide: WorkItemsService, useValue: workItemsService },
+        { provide: TeamsService, useValue: teamsService },
         { provide: AuthorizationService, useValue: authz },
       ],
     }).compile();

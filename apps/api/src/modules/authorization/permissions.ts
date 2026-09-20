@@ -26,13 +26,25 @@ export enum Permission {
   PROJECT_MANAGE_TEAMS = 'project:manage_teams',
   PROJECT_MANAGE_SETTINGS = 'project:manage_settings',
 
+  // ── Member ─────────────────────────────────────────────────────────────────
+  MEMBER_VIEW = 'member:view',
+  MEMBER_MANAGE = 'member:manage',
+
   // ── Work items ─────────────────────────────────────────────────────────────
   WORK_ITEM_VIEW = 'work_item:view',
   WORK_ITEM_CREATE = 'work_item:create',
   WORK_ITEM_EDIT = 'work_item:edit',
   WORK_ITEM_ASSIGN = 'work_item:assign',
   WORK_ITEM_CHANGE_STATE = 'work_item:change_state',
+  WORK_ITEM_REORDER = 'work_item:reorder',
+  WORK_ITEM_BULK_EDIT = 'work_item:bulk_edit',
   WORK_ITEM_DELETE = 'work_item:delete',
+
+  // ── Boards & Backlogs ──────────────────────────────────────────────────────
+  BOARD_VIEW = 'board:view',
+  BOARD_MANAGE = 'board:manage',
+  BACKLOG_VIEW = 'backlog:view',
+  BACKLOG_MANAGE = 'backlog:manage',
 
   // ── Iterations ─────────────────────────────────────────────────────────────
   ITERATION_VIEW = 'iteration:view',
@@ -49,6 +61,7 @@ export enum Permission {
 
   // ── Teams ──────────────────────────────────────────────────────────────────
   TEAM_VIEW = 'team:view',
+  TEAM_MANAGE = 'team:manage',
   TEAM_CREATE = 'team:create',
   TEAM_EDIT = 'team:edit',
   TEAM_DELETE = 'team:delete',
@@ -58,11 +71,15 @@ export enum Permission {
 
 const MEMBER_PERMISSIONS: ReadonlySet<Permission> = new Set([
   Permission.PROJECT_VIEW,
+  Permission.MEMBER_VIEW,
   Permission.WORK_ITEM_VIEW,
   Permission.WORK_ITEM_CREATE,
   Permission.WORK_ITEM_EDIT,
   Permission.WORK_ITEM_ASSIGN,
   Permission.WORK_ITEM_CHANGE_STATE,
+  Permission.WORK_ITEM_REORDER,
+  Permission.BOARD_VIEW,
+  Permission.BACKLOG_VIEW,
   Permission.ITERATION_VIEW,
   Permission.QUERY_VIEW,
   Permission.QUERY_CREATE,
@@ -76,12 +93,17 @@ const ADMIN_PERMISSIONS: ReadonlySet<Permission> = new Set([
   Permission.PROJECT_MANAGE_MEMBERS,
   Permission.PROJECT_MANAGE_TEAMS,
   Permission.PROJECT_MANAGE_SETTINGS,
+  Permission.MEMBER_MANAGE,
   Permission.WORK_ITEM_DELETE,
+  Permission.WORK_ITEM_BULK_EDIT,
+  Permission.BOARD_MANAGE,
+  Permission.BACKLOG_MANAGE,
   Permission.ITERATION_CREATE,
   Permission.ITERATION_EDIT,
   Permission.ITERATION_COMPLETE,
   Permission.ITERATION_DELETE,
   Permission.QUERY_DELETE,
+  Permission.TEAM_MANAGE,
   Permission.TEAM_CREATE,
   Permission.TEAM_EDIT,
   Permission.TEAM_DELETE,
@@ -95,20 +117,21 @@ const VALID_PERMISSIONS = new Set(Object.values(Permission));
 
 /**
  * Returns true when `role` grants the given `permission`.
+ * Returns FALSE for any unknown role or permission (Default DENY).
  */
-export function hasPermission(role: ProjectRole, permission: Permission): boolean {
-  if (!role || !permission || !VALID_PERMISSIONS.has(permission)) {
+export function hasPermission(role: ProjectRole | string, permission: Permission | string): boolean {
+  if (!role || !permission || !VALID_PERMISSIONS.has(permission as Permission)) {
     return false;
   }
   switch (role) {
     case 'OWNER':
-      return OWNER_PERMISSIONS.has(permission);
+      return OWNER_PERMISSIONS.has(permission as Permission);
     case 'ADMIN':
-      return ADMIN_PERMISSIONS.has(permission);
+      return ADMIN_PERMISSIONS.has(permission as Permission);
     case 'MEMBER':
-      return MEMBER_PERMISSIONS.has(permission);
+      return MEMBER_PERMISSIONS.has(permission as Permission);
     default:
-      return false;
+      return false; // NEVER DEFAULT TO ALLOW
   }
 }
 

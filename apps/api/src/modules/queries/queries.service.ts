@@ -162,4 +162,16 @@ export class QueriesService {
     await this.repo.recordRun(projectId, queryId, userId, parsed.data);
     return rows;
   }
+
+  async duplicate(userId: string, projectId: string, id: string) {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.QUERY_CREATE);
+    const existing = await this.findOne(userId, projectId, id);
+    return this.repo.create(projectId, userId, {
+      name: `Copy of ${existing.name}`,
+      description: existing.description,
+      isShared: false,
+      folder: existing.folder,
+      definition: existing.definition,
+    });
+  }
 }

@@ -12,6 +12,10 @@ export const queryOperatorSchema = z.enum([
   'after',
   'before',
   'between',
+  'greaterThan',
+  'greaterThanOrEqual',
+  'lessThan',
+  'lessThanOrEqual',
 ]);
 
 export const queryFieldSchema = z.enum([
@@ -21,6 +25,7 @@ export const queryFieldSchema = z.enum([
   'description',
   'state',
   'priority',
+  'points',
   'assignedTo',
   'iterationId',
   'areaId',
@@ -29,16 +34,26 @@ export const queryFieldSchema = z.enum([
   'createdAt',
   'updatedAt',
   'completedAt',
+  'severity',
+  'remainingWork',
+  'completedWork',
+  'startDate',
+  'targetDate',
+  'stateCategory',
   'tags',
 ]);
 
-export const queryClauseSchema = z.object({
-  id: z.string().optional(),
-  logicalOperator: z.enum(['AND', 'OR']).default('AND'),
-  field: queryFieldSchema,
-  operator: queryOperatorSchema,
-  value: z.string().optional().default(''),
-});
+export const queryClauseSchema: z.ZodType<any> = z.lazy(() =>
+  z.object({
+    id: z.string().optional(),
+    logicalOperator: z.enum(['AND', 'OR', 'NOT']).default('AND'),
+    field: queryFieldSchema.optional(),
+    operator: queryOperatorSchema.optional(),
+    value: z.string().optional().default(''),
+    clauses: z.array(queryClauseSchema).optional(),
+    filters: z.array(queryClauseSchema).optional(),
+  }),
+);
 
 export const queryDefinitionSchema = z.object({
   filters: z.array(queryClauseSchema).default([]),

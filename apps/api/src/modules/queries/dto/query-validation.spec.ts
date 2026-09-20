@@ -85,7 +85,7 @@ describe('validateQueryDefinition', () => {
       filters: [{ logicalOperator: 'AND', field: 'updatedAt', operator: 'between', value: '2026-01-01' }],
     };
     const messages = rejectMessages(definition);
-    expect(messages.join('\n')).toMatch('"between" on "updatedAt" requires two comma-separated dates');
+    expect(messages.join('\n')).toMatch('"between" on "updatedAt" requires two comma-separated values');
   });
 
   it('allows a between clause with at least one valid bound', () => {
@@ -124,5 +124,32 @@ describe('validateQueryDefinition', () => {
     };
     const messages = rejectMessages(definition);
     expect(messages.length).toBe(2);
+  });
+
+  it('accepts numeric operators on points and priority', () => {
+    const definition = {
+      filters: [
+        { logicalOperator: 'AND', field: 'points', operator: 'greaterThanOrEqual', value: '3' },
+        { logicalOperator: 'AND', field: 'priority', operator: 'lessThanOrEqual', value: 'HIGH' },
+        { logicalOperator: 'AND', field: 'points', operator: 'between', value: '1,8' },
+      ],
+    };
+    expect(() => validateQueryDefinition(definition)).not.toThrow();
+  });
+
+  it('accepts NOT logical operator and nested AST group structures', () => {
+    const definition = {
+      filters: [
+        { logicalOperator: 'AND', field: 'state', operator: 'equals', value: 'IN_PROGRESS' },
+        {
+          logicalOperator: 'NOT',
+          clauses: [
+            { logicalOperator: 'AND', field: 'priority', operator: 'equals', value: 'LOW' },
+            { logicalOperator: 'OR', field: 'points', operator: 'lessThan', value: '1' },
+          ],
+        },
+      ],
+    };
+    expect(() => validateQueryDefinition(definition)).not.toThrow();
   });
 });

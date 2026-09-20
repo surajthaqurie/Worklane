@@ -3,7 +3,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, ChevronRight, ChevronDown, Plus, Loader2 } from 'lucide-react';
 import { BacklogItem } from '@/shared/types/backlogs';
-import { WorkItemState, WorkItem, WorkItemType } from '@/shared/types/work-items';
+import { WorkItemState, WorkItem, WorkItemType, WorkItemRollup } from '@/shared/types/work-items';
 import { Iteration } from '@/shared/types/iterations';
 import { ProjectMember } from '@/shared/types/projects';
 import { WorkItemTypeBadge, WorkItemPriorityBadge } from '@/features/work-items/components/WorkItemBadge';
@@ -22,6 +22,7 @@ export interface BacklogRowProps {
   iterations: Iteration[];
   members: ProjectMember[];
   allWorkItems?: WorkItem[];
+  rollup?: WorkItemRollup;
   onToggleExpand: (id: string) => void;
   onSelectRow: (id: string, e: React.MouseEvent) => void;
   onToggleSelectRow: (id: string) => void;
@@ -50,6 +51,7 @@ export function BacklogRow({
   iterations,
   members,
   allWorkItems = [],
+  rollup,
   onToggleExpand,
   onSelectRow,
   onToggleSelectRow,
@@ -236,9 +238,38 @@ export function BacklogRow({
         <WorkItemPriorityBadge priority={item.priority} />
       </div>
 
-      {/* Points */}
-      <div className="w-16 shrink-0 px-2 text-center text-[11px] text-[var(--text-secondary)]">
-        {item.points != null ? `${item.points} pts` : '—'}
+      {/* Severity */}
+      <div className="w-20 shrink-0 px-2 text-[11px]">
+        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+          item.severity === 'CRITICAL' ? 'bg-red-500/10 text-red-600 border border-red-500/30' :
+          item.severity === 'HIGH' ? 'bg-orange-500/10 text-orange-600 border border-orange-500/30' :
+          'text-[var(--text-secondary)]'
+        }`}>
+          {item.severity || 'MEDIUM'}
+        </span>
+      </div>
+
+      {/* Points & Work */}
+      <div className="w-24 shrink-0 px-2 text-center text-[11px] text-[var(--text-secondary)]">
+        {rollup && rollup.descendantCount > 0 ? (
+          <div className="flex flex-col items-center" title={`${rollup.completedCount}/${rollup.descendantCount} items completed (${rollup.completionPercentage}%)`}>
+            <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+              {rollup.totalPoints > 0 ? `${rollup.completedPoints}/${rollup.totalPoints} pts` : `${rollup.completedCount}/${rollup.descendantCount} done`}
+            </span>
+            <div className="w-14 bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mt-0.5">
+              <div
+                className="bg-indigo-600 dark:bg-indigo-500 h-1.5 rounded-full transition-all duration-300"
+                style={{ width: `${rollup.completionPercentage}%` }}
+              />
+            </div>
+          </div>
+        ) : item.points != null ? (
+          `${item.points} pts`
+        ) : item.remainingWork != null ? (
+          `${item.remainingWork}h`
+        ) : (
+          '—'
+        )}
       </div>
 
       {/* Assignee */}

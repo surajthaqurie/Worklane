@@ -21,8 +21,8 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
 
-    if (password.length < 6) {
-      const msg = 'Password must be at least 6 characters long';
+    if (password.length < 8) {
+      const msg = 'Password must be at least 8 characters long';
       setError(msg);
       showError('Validation Error', msg);
       return;
@@ -57,6 +57,13 @@ export default function RegisterPage() {
             Get started with Worklane project management
           </p>
         </div>
+
+        {error && (
+          <div className="p-3.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
         {/* Form */}
         <form className="mt-6 space-y-5" onSubmit={handleSubmit}>

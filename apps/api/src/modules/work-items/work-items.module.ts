@@ -9,14 +9,15 @@ import { TeamsModule } from '../teams/teams.module.js';
 import { WorkItemHistoryModule } from '../work-item-history/work-item-history.module.js';
 import { AuthorizationModule } from '../authorization/authorization.module.js';
 import { WorkItemTransitionsService } from './work-item-transitions.service.js';
+import { WorkItemTypeRegistryService } from './work-item-types.registry.js';
 
 import { NotificationsModule } from '../notifications/notifications.module.js';
 
 @Module({
   imports: [ProjectsModule, TeamsModule, WorkItemHistoryModule, AuthorizationModule, NotificationsModule],
   controllers: [WorkItemsController, BacklogController],
-  providers: [WorkItemsService, WorkItemsRepository, BacklogRepository, WorkItemTransitionsService],
-  exports: [WorkItemsService, WorkItemTransitionsService],
+  providers: [WorkItemsService, WorkItemsRepository, BacklogRepository, WorkItemTransitionsService, WorkItemTypeRegistryService],
+  exports: [WorkItemsService, WorkItemTransitionsService, WorkItemTypeRegistryService],
 })
 export class WorkItemsModule {}
 

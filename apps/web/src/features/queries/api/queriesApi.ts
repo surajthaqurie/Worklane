@@ -7,12 +7,19 @@ export type QueryField =
   | 'title'
   | 'description'
   | 'state'
+  | 'stateCategory'
   | 'priority'
+  | 'severity'
+  | 'points'
+  | 'remainingWork'
+  | 'completedWork'
   | 'assignedTo'
   | 'iterationId'
   | 'areaId'
   | 'parentId'
   | 'createdBy'
+  | 'startDate'
+  | 'targetDate'
   | 'createdAt'
   | 'updatedAt'
   | 'completedAt'
@@ -29,14 +36,19 @@ export type QueryOperator =
   | 'isNotEmpty'
   | 'after'
   | 'before'
-  | 'between';
+  | 'between'
+  | 'greaterThan'
+  | 'greaterThanOrEqual'
+  | 'lessThan'
+  | 'lessThanOrEqual';
 
 export interface QueryClause {
   id?: string;
-  logicalOperator: 'AND' | 'OR';
-  field: QueryField;
-  operator: QueryOperator;
-  value: string;
+  logicalOperator: 'AND' | 'OR' | 'NOT';
+  field?: QueryField;
+  operator?: QueryOperator;
+  value?: string;
+  clauses?: QueryClause[];
 }
 
 export interface QueryDefinition {
@@ -77,4 +89,6 @@ export const queriesApi = {
     apiClient.patch<SavedQuery>(`/projects/${projectId}/queries/${id}`, data),
   deleteQuery: (projectId: string, id: string) =>
     apiClient.delete<{ success: boolean }>(`/projects/${projectId}/queries/${id}`),
+  duplicateQuery: (projectId: string, id: string) =>
+    apiClient.post<SavedQuery>(`/projects/${projectId}/queries/${id}/duplicate`),
 };

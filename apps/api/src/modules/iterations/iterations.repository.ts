@@ -400,7 +400,7 @@ export class IterationsRepository {
       await trx
         .updateTable('work_items')
         .where('id', 'in', workItemIds)
-        .set({ iteration_id: iterationId, updated_at: new Date() })
+        .set({ iteration_id: iterationId, updated_at: new Date(), version: sql`version + 1` })
         .execute();
 
       if (items.length > 0) {
@@ -436,7 +436,7 @@ export class IterationsRepository {
       await trx
         .updateTable('work_items')
         .where('id', '=', workItemId)
-        .set({ iteration_id: null, updated_at: new Date() })
+        .set({ iteration_id: null, updated_at: new Date(), version: sql`version + 1` })
         .execute();
 
       await this.history.record(trx, {
@@ -471,7 +471,7 @@ export class IterationsRepository {
       await trx
         .updateTable('work_items')
         .where('id', 'in', workItemIds)
-        .set({ iteration_id: targetIterationId, updated_at: new Date() })
+        .set({ iteration_id: targetIterationId, updated_at: new Date(), version: sql`version + 1` })
         .execute();
 
       if (items.length > 0) {

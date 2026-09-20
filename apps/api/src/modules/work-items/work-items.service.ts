@@ -7,6 +7,7 @@ import { AuthorizationService } from '../authorization/authorization.service.js'
 import { Permission, hasPermission } from '../authorization/permissions.js';
 import { CreateWorkItemDto, UpdateWorkItemDto } from './dto/work-items.dto.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { WorkItemTypeRegistryService } from './work-item-types.registry.js';
 import { db } from '../../db/kysely.js';
 
 @Injectable()
@@ -17,9 +18,37 @@ export class WorkItemsService {
     private readonly teamsService: TeamsService,
     private readonly authz: AuthorizationService,
     private readonly notifications: NotificationsService,
+    private readonly typeRegistry: WorkItemTypeRegistryService,
   ) {}
 
+  getTypeDefinitions() {
+    return this.typeRegistry.getAllTypes();
+  }
+
+  private validateFieldInputs(data: CreateWorkItemDto | UpdateWorkItemDto) {
+    if (data.type && !this.typeRegistry.isValidType(data.type)) {
+      throw new BadRequestException(`Invalid work item type: ${data.type}`);
+    }
+    if (data.severity && !['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(data.severity)) {
+      throw new BadRequestException(`Invalid severity level: ${data.severity}`);
+    }
+    if (data.remainingWork !== undefined && data.remainingWork !== null && (isNaN(Number(data.remainingWork)) || Number(data.remainingWork) < 0)) {
+      throw new BadRequestException('remainingWork must be a non-negative number');
+    }
+    if (data.completedWork !== undefined && data.completedWork !== null && (isNaN(Number(data.completedWork)) || Number(data.completedWork) < 0)) {
+      throw new BadRequestException('completedWork must be a non-negative number');
+    }
+    if (data.startDate && data.targetDate) {
+      const start = new Date(data.startDate);
+      const target = new Date(data.targetDate);
+      if (!isNaN(start.getTime()) && !isNaN(target.getTime()) && target < start) {
+        throw new BadRequestException('targetDate cannot be earlier than startDate');
+      }
+    }
+  }
+
   async create(userId: string, projectId: string, data: CreateWorkItemDto) {
+    this.validateFieldInputs(data);
     // Never trust projectId from the client alone — confirm membership via authz
     const { project } = await this.authz.requireProjectPermissionWithProject(
       projectId,
@@ -93,6 +122,7 @@ export class WorkItemsService {
     const item = await this.repo.getWorkItemById(id);
     if (!item) throw new NotFoundException('Work item not found');
 
+    this.validateFieldInputs(data);
     // Determine required permission based on what fields are being changed
     const permission =
       data.assignedTo !== undefined && Object.keys(data).length === 1
@@ -203,6 +233,14 @@ export class WorkItemsService {
     return mapped;
   }
 
+  async validateParentAndCircularity(itemId: string, parentId: string, projectId: string, itemType?: string) {
+    if (parentId === itemId) throw new BadRequestException('Cannot set self as parent');
+    const item = await this.repo.getWorkItemById(itemId);
+    const typeToValidate = itemType || item?.type || 'STORY';
+    await this.validateParent(parentId, typeToValidate, projectId);
+    await this.checkCircularDependency(itemId, parentId);
+  }
+
   private async validateParent(parentId: string, childType: string, projectId: string) {
     const parent = await this.repo.getWorkItemById(parentId);
     if (!parent) throw new BadRequestException('Parent not found');
@@ -211,30 +249,59 @@ export class WorkItemsService {
       throw new ForbiddenException('Cross-project parent assignment is not allowed');
     }
 
-    const allowedParents: Record<string, string[]> = {
-      'EPIC': [],
-      'FEATURE': ['EPIC'],
-      'STORY': ['FEATURE'],
-      'TASK': ['STORY', 'BUG'],
-      'BUG': ['STORY'],
-    };
-
-    const allowed = allowedParents[childType] || [];
-    if (!allowed.includes(parent.type)) {
+    if (!this.typeRegistry.isAllowedParent(parent.type, childType)) {
       throw new BadRequestException(`Work item of type ${parent.type} cannot be parent of ${childType}`);
     }
   }
 
   private async checkCircularDependency(itemId: string, newParentId: string) {
     let currentParentId: string | null = newParentId;
+    let depth = 0;
     while (currentParentId) {
+      depth++;
+      if (depth > 10) {
+        throw new BadRequestException('Hierarchy depth limit exceeded (maximum 10 levels)');
+      }
       if (currentParentId === itemId) {
-         throw new BadRequestException('Circular dependency detected');
+        throw new BadRequestException('Circular dependency detected');
       }
       const parent = await this.repo.getWorkItemById(currentParentId);
       if (!parent) break;
       currentParentId = parent.parent_id;
     }
+  }
+
+  async getWorkItemRollup(userId: string, projectId: string, itemId: string) {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.WORK_ITEM_VIEW);
+    const item = await this.repo.getWorkItemById(itemId);
+    if (!item || item.project_id !== projectId) {
+      throw new NotFoundException('Work item not found in project');
+    }
+    const rollups = await this.repo.getBatchRollups(projectId, [itemId]);
+    return rollups[itemId] || {
+      itemId,
+      descendantCount: 0,
+      completedCount: 0,
+      totalPoints: 0,
+      completedPoints: 0,
+      remainingWork: 0,
+      completedWork: 0,
+      completionPercentage: 0,
+    };
+  }
+
+  async getBatchWorkItemRollups(userId: string, projectId: string, itemIds: string[]) {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.WORK_ITEM_VIEW);
+    return await this.repo.getBatchRollups(projectId, itemIds);
+  }
+
+  async getWorkItemHierarchy(userId: string, projectId: string, itemId: string) {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.WORK_ITEM_VIEW);
+    const hierarchy = await this.repo.getHierarchyTree(projectId, itemId);
+    if (!hierarchy) {
+      throw new NotFoundException('Work item not found in project');
+    }
+    return hierarchy;
   }
 
   async remove(userId: string, id: string) {
@@ -435,6 +502,13 @@ export class WorkItemsService {
       description: item.description,
       state: item.state,
       priority: item.priority,
+      severity: item.severity ?? 'MEDIUM',
+      points: item.points ?? null,
+      remainingWork: item.remaining_work != null ? Number(item.remaining_work) : null,
+      completedWork: item.completed_work != null ? Number(item.completed_work) : null,
+      startDate: item.start_date ?? null,
+      targetDate: item.target_date ?? null,
+      customFields: item.custom_fields ?? {},
       assignedTo: item.assigned_to,
       createdBy: item.created_by,
       createdAt: item.created_at,
@@ -446,6 +520,7 @@ export class WorkItemsService {
       tags: item.tags || [],
       backlogOrder: item.backlog_order,
       hasChildren: item.has_children ?? false,
+      version: item.version ?? 1,
     };
   }
 }

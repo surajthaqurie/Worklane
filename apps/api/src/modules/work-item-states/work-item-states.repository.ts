@@ -34,7 +34,7 @@ export class WorkItemStatesRepository {
     return this.mapToCamelCase(row);
   }
 
-  async create(projectId: string, data: { name: string; key: string; color: string; isDone: boolean }) {
+  async create(projectId: string, data: { name: string; key: string; color: string; isDone: boolean; category?: 'PROPOSED' | 'IN_PROGRESS' | 'RESOLVED' | 'COMPLETED' }) {
     const maxOrder = await db
       .selectFrom('work_item_states')
       .where('project_id', '=', projectId)
@@ -50,6 +50,7 @@ export class WorkItemStatesRepository {
         name: data.name,
         key: data.key,
         color: data.color,
+        category: data.category || (data.isDone ? 'COMPLETED' : 'PROPOSED'),
         is_done: data.isDone,
         sort_order: (maxOrder?.sort_order ?? -1) + 1,
       })
@@ -59,11 +60,12 @@ export class WorkItemStatesRepository {
     return this.mapToCamelCase(row);
   }
 
-  async update(id: string, data: { name?: string; color?: string; isDone?: boolean; sortOrder?: number }) {
+  async update(id: string, data: { name?: string; color?: string; isDone?: boolean; sortOrder?: number; category?: 'PROPOSED' | 'IN_PROGRESS' | 'RESOLVED' | 'COMPLETED' }) {
     const updateData: any = { updated_at: new Date() };
     if (data.name !== undefined) updateData.name = data.name;
     if (data.color !== undefined) updateData.color = data.color;
     if (data.isDone !== undefined) updateData.is_done = data.isDone;
+    if (data.category !== undefined) updateData.category = data.category;
     if (data.sortOrder !== undefined) updateData.sort_order = data.sortOrder;
 
     const row = await db
@@ -139,6 +141,7 @@ export class WorkItemStatesRepository {
       key: row.key,
       color: row.color,
       sortOrder: row.sort_order,
+      category: row.category,
       isDone: row.is_done,
       isDefault: row.is_default,
       createdAt: row.created_at,

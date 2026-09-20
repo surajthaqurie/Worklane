@@ -16,20 +16,29 @@ import { AuthorizationService } from '../authorization/authorization.service.js'
 import { Permission } from '../authorization/permissions.js';
 
 import { WorkItemsRepository } from './work-items.repository.js';
+import { WorkItemsService } from './work-items.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { db } from '../../db/kysely.js';
 
 class ReorderDto {
   id: string;
-  parentId: string | null;
-  newRank: number;
+  parentId?: string | null;
+  previousItemId?: string | null;
+  nextItemId?: string | null;
+  newRank?: number;
   teamId?: string;
+  iterationId?: string | null;
+  state?: string;
+  expectedVersion?: number;
+  idempotencyKey?: string;
 }
 
 class BulkAssignIterationDto {
   itemIds: string[];
   iterationId: string | null;
   teamId?: string;
+  expectedVersions?: Record<string, number>;
+  idempotencyKey?: string;
 }
 
 @Controller()
@@ -38,6 +47,7 @@ export class BacklogController {
   constructor(
     private readonly backlogRepo: BacklogRepository,
     private readonly workItemsRepo: WorkItemsRepository,
+    private readonly workItemsService: WorkItemsService,
     private readonly teamsService: TeamsService,
     private readonly authz: AuthorizationService,
     private readonly notifications: NotificationsService,
@@ -62,7 +72,7 @@ export class BacklogController {
     const { project } = await this.authz.requireProjectPermissionWithProject(
       projectId,
       req.user.id,
-      Permission.WORK_ITEM_VIEW,
+      Permission.BACKLOG_VIEW,
     );
 
     let teamAreaIds: string[] | undefined;
@@ -107,26 +117,28 @@ export class BacklogController {
     @Param('projectId') projectId: string,
     @Body() dto: ReorderDto,
   ) {
-    await this.authz.requireProjectPermission(projectId, req.user.id, Permission.WORK_ITEM_EDIT);
+    await this.authz.requireProjectPermission(projectId, req.user.id, Permission.BACKLOG_MANAGE);
 
     if (!dto.id) throw new BadRequestException('id is required');
-    if (dto.newRank === undefined || dto.newRank === null) {
-      throw new BadRequestException('newRank is required');
-    }
 
     // Verify item belongs to project
     await this.authz.requireWorkItemInProject(dto.id, projectId);
 
     if (dto.parentId) {
       await this.authz.requireWorkItemInProject(dto.parentId, projectId);
+      await this.workItemsService.validateParentAndCircularity(dto.id, dto.parentId, projectId);
     }
 
-    if (dto.teamId && dto.teamId !== 'default') {
+    if (dto.teamId && dto.teamId !== 'default' && dto.teamId !== 'undefined') {
+      await this.teamsService.assertTeamMember(projectId, dto.teamId, req.user.id);
+      const itemsToCheck = [dto.id];
+      if (dto.previousItemId) itemsToCheck.push(dto.previousItemId);
+      if (dto.nextItemId) itemsToCheck.push(dto.nextItemId);
       await this.teamsService.assertItemsInTeamScope(
         req.user.id,
         projectId,
         dto.teamId,
-        [dto.id],
+        itemsToCheck,
       );
     }
 
@@ -134,8 +146,14 @@ export class BacklogController {
 
     await this.backlogRepo.reorderItem(projectId, req.user.id, {
       id: dto.id,
-      parentId: dto.parentId ?? null,
+      parentId: dto.parentId ?? (dto.parentId === null ? null : undefined),
+      previousItemId: dto.previousItemId ?? null,
+      nextItemId: dto.nextItemId ?? null,
       newRank: dto.newRank,
+      expectedVersion: dto.expectedVersion,
+      teamId: dto.teamId ?? null,
+      iterationId: dto.iterationId ?? (dto.iterationId === null ? null : undefined),
+      state: dto.state ?? undefined,
     });
 
     if (oldItem && dto.parentId !== undefined && (dto.parentId ?? null) !== oldItem.parent_id) {
@@ -165,7 +183,7 @@ export class BacklogController {
     @Param('projectId') projectId: string,
     @Body() dto: BulkAssignIterationDto,
   ) {
-    await this.authz.requireProjectPermission(projectId, req.user.id, Permission.WORK_ITEM_EDIT);
+    await this.authz.requireProjectPermission(projectId, req.user.id, Permission.BACKLOG_MANAGE);
 
     if (!Array.isArray(dto.itemIds) || dto.itemIds.length === 0) {
       throw new BadRequestException('itemIds must be a non-empty array');
@@ -198,6 +216,7 @@ export class BacklogController {
       req.user.id,
       dto.itemIds,
       dto.iterationId ?? null,
+      dto.expectedVersions,
     );
 
     let sprintName: string | undefined;

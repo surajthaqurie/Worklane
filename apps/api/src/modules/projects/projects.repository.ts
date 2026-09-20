@@ -3,9 +3,9 @@ import { sql } from 'kysely';
 import { db } from '../../db/kysely.js';
 
 export const DEFAULT_WORK_ITEM_STATES = [
-  { name: 'To Do', key: 'TODO', color: '#94A3B8', sort_order: 0, is_done: false },
-  { name: 'In Progress', key: 'IN_PROGRESS', color: '#3B82F6', sort_order: 1, is_done: false },
-  { name: 'Done', key: 'DONE', color: '#22C55E', sort_order: 2, is_done: true },
+  { name: 'To Do', key: 'TODO', color: '#94A3B8', sort_order: 0, is_done: false, category: 'PROPOSED' as const },
+  { name: 'In Progress', key: 'IN_PROGRESS', color: '#3B82F6', sort_order: 1, is_done: false, category: 'IN_PROGRESS' as const },
+  { name: 'Done', key: 'DONE', color: '#22C55E', sort_order: 2, is_done: true, category: 'COMPLETED' as const },
 ];
 
 @Injectable()
@@ -39,6 +39,7 @@ export class ProjectsRepository {
             key: s.key,
             color: s.color,
             sort_order: s.sort_order,
+            category: s.category,
             is_done: s.is_done,
             is_default: true,
           })),

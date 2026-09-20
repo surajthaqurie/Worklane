@@ -4,12 +4,15 @@ import { db } from '../../db/kysely.js';
 
 const INTEGRATION = process.env.INTEGRATION === '1';
 
-describe.skipIf(!INTEGRATION)('AuthService Integration', () => {
+describe.skipIf(!INTEGRATION)('AuthService Integration & Security Verification', () => {
   let authService: AuthService;
   const testEmail = `test-${Date.now()}@example.com`;
-  const testPassword = 'Password123!';
+  const initialPassword = 'Password123!';
+  const updatedPassword = 'NewSecurePassword456!';
   let createdUserId: string;
-  let refreshToken: string;
+  let activeAccessToken: string;
+  let firstRefreshToken: string;
+  let rotatedRefreshToken: string;
 
   beforeAll(() => {
     authService = new AuthService();
@@ -22,61 +25,119 @@ describe.skipIf(!INTEGRATION)('AuthService Integration', () => {
     }
   });
 
-  it('should register a new user and return tokens', async () => {
+  it('should register a new user with hashed password and return access & refresh tokens', async () => {
     const res = await authService.register({
-      name: 'Test User',
+      name: 'Security Test User',
       email: testEmail,
-      password: testPassword,
+      password: initialPassword,
     });
 
     expect(res.user).toBeDefined();
     expect(res.user.email).toBe(testEmail);
+    expect((res.user as any).password_hash).toBeUndefined(); // Never return password_hash
     expect(res.accessToken).toBeDefined();
     expect(res.refreshToken).toBeDefined();
 
     createdUserId = res.user.id;
   });
 
-  it('should login with valid credentials', async () => {
+  it('should login successfully with correct credentials', async () => {
     const res = await authService.login({
       email: testEmail,
-      password: testPassword,
+      password: initialPassword,
     });
 
     expect(res.user.id).toBe(createdUserId);
     expect(res.accessToken).toBeDefined();
     expect(res.refreshToken).toBeDefined();
 
-    refreshToken = res.refreshToken;
+    activeAccessToken = res.accessToken;
+    firstRefreshToken = res.refreshToken;
   });
 
-  it('should fail login with wrong password', async () => {
+  it('should verify valid access token correctly', () => {
+    const payload = authService.verifyAccessToken(activeAccessToken);
+    expect(payload.sub).toBe(createdUserId);
+  });
+
+  it('should reject login with wrong password', async () => {
     await expect(
       authService.login({
         email: testEmail,
-        password: 'WrongPassword!',
+        password: 'IncorrectPassword!',
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow('Invalid email or password');
   });
 
-  it('should refresh access token and rotate refresh token', async () => {
-    const res = await authService.refresh({ refreshToken });
+  it('should refresh access token and rotate refresh token with lineage', async () => {
+    const res = await authService.refresh({ refreshToken: firstRefreshToken });
 
     expect(res.accessToken).toBeDefined();
     expect(res.refreshToken).toBeDefined();
-    expect(res.refreshToken).not.toEqual(refreshToken);
+    expect(res.refreshToken).not.toEqual(firstRefreshToken);
 
-    // Update refreshToken for subsequent tests
-    refreshToken = res.refreshToken;
+    rotatedRefreshToken = res.refreshToken;
   });
 
-  it('should reject previously rotated refresh token', async () => {
-    await expect(authService.refresh({ refreshToken: 'old-token' })).rejects.toThrow();
+  it('should DETECT REUSE of rotated refresh token and REVOKE ALL user sessions', async () => {
+    // Attempting to reuse firstRefreshToken (which was already rotated/revoked)
+    await expect(
+      authService.refresh({ refreshToken: firstRefreshToken }),
+    ).rejects.toThrow('Security alert: Refresh token reuse detected');
+
+    // Due to reuse detection, rotatedRefreshToken should NOW ALSO be revoked!
+    await expect(
+      authService.refresh({ refreshToken: rotatedRefreshToken }),
+    ).rejects.toThrow();
   });
 
-  it('should logout and revoke refresh token', async () => {
-    await authService.logout(refreshToken);
+  it('should change password, verify old password fails, and revoke sessions', async () => {
+    // Login to get fresh tokens
+    const loginRes = await authService.login({
+      email: testEmail,
+      password: initialPassword,
+    });
+    const currentRefresh = loginRes.refreshToken;
 
-    await expect(authService.refresh({ refreshToken })).rejects.toThrow();
+    // Change password
+    const changeRes = await authService.changePassword(createdUserId, {
+      currentPassword: initialPassword,
+      newPassword: updatedPassword,
+    });
+    expect(changeRes.success).toBe(true);
+
+    // Old refresh token must be invalidated
+    await expect(
+      authService.refresh({ refreshToken: currentRefresh }),
+    ).rejects.toThrow();
+
+    // Old password login must fail
+    await expect(
+      authService.login({
+        email: testEmail,
+        password: initialPassword,
+      }),
+    ).rejects.toThrow('Invalid email or password');
+
+    // New password login must succeed
+    const newLoginRes = await authService.login({
+      email: testEmail,
+      password: updatedPassword,
+    });
+    expect(newLoginRes.user.id).toBe(createdUserId);
+  });
+
+  it('should logout and revoke current refresh token', async () => {
+    const loginRes = await authService.login({
+      email: testEmail,
+      password: updatedPassword,
+    });
+    const tokenToRevoke = loginRes.refreshToken;
+
+    await authService.logout(tokenToRevoke);
+
+    await expect(
+      authService.refresh({ refreshToken: tokenToRevoke }),
+    ).rejects.toThrow();
   });
 });

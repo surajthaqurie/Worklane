@@ -10,7 +10,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { BacklogItem } from '@/shared/types/backlogs';
-import { WorkItemState, WorkItem } from '@/shared/types/work-items';
+import { WorkItemState, WorkItem, WorkItemRollup } from '@/shared/types/work-items';
 import { Iteration } from '@/shared/types/iterations';
 import { ProjectMember } from '@/shared/types/projects';
 import { BacklogRow } from './BacklogRow';
@@ -32,6 +32,7 @@ export interface BacklogTableProps {
   iterations: Iteration[];
   members: ProjectMember[];
   allWorkItems?: WorkItem[];
+  rollupsMap?: Record<string, WorkItemRollup>;
   onToggleExpand: (id: string) => void;
   onSelectRow: (id: string, e: React.MouseEvent) => void;
   onToggleSelectRow: (id: string) => void;
@@ -58,6 +59,7 @@ export function BacklogTable({
   iterations,
   members,
   allWorkItems = [],
+  rollupsMap,
   onToggleExpand,
   onSelectRow,
   onToggleSelectRow,
@@ -149,6 +151,7 @@ export function BacklogTable({
                   iterations={iterations}
                   members={members}
                   allWorkItems={allWorkItems}
+                  rollup={rollupsMap?.[item.id]}
                   onToggleExpand={onToggleExpand}
                   onSelectRow={onSelectRow}
                   onToggleSelectRow={onToggleSelectRow}

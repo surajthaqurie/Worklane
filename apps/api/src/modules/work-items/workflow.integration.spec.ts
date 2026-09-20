@@ -1,6 +1,7 @@
 import { ForbiddenException, BadRequestException } from '@nestjs/common';
 import { WorkItemsRepository } from './work-items.repository.js';
 import { WorkItemsService } from './work-items.service.js';
+import { WorkItemTypeRegistryService } from './work-item-types.registry.js';
 import { WorkItemTransitionsService } from './work-item-transitions.service.js';
 import { WorkItemHistoryRepository } from '../work-item-history/work-item-history.repository.js';
 import { WorkItemHistoryService } from '../work-item-history/work-item-history.service.js';
@@ -52,12 +53,14 @@ describe.skipIf(!INTEGRATION)('Work item workflow (DB integration)', () => {
     projectsService = new ProjectsService(projectsRepo, authz);
     const teamsService = new TeamsService(new TeamsRepository(), projectsService, authz);
 
+    const typeRegistry = new WorkItemTypeRegistryService();
     workItemsService = new WorkItemsService(
       workItemsRepo,
       projectsService,
       teamsService,
       authz,
       notifications,
+      typeRegistry,
     );
     transitionsService = new WorkItemTransitionsService(workItemsRepo, authz, notifications);
     iterationsService = new IterationsService(

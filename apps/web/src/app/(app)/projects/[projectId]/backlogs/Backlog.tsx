@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { BacklogItem, BacklogFilters } from '@/shared/types/backlogs';
 import { WorkItem } from '@/shared/types/work-items';
 import { useBacklogLevel, useReorderBacklogItem, useBulkAssignIteration } from '@/features/backlogs/hooks/useBacklog';
-import { useUpdateWorkItem, useWorkItems } from '@/features/work-items/hooks/useWorkItems';
+import { useUpdateWorkItem, useWorkItems, useBatchWorkItemRollups } from '@/features/work-items/hooks/useWorkItems';
 import { useWorkItemStates } from '@/features/work-items/hooks/useWorkItemStates';
 import { useIterations } from '@/features/iterations/hooks/useIterations';
 import { useProjectMembers } from '@/features/projects/hooks/useProjects';
@@ -115,6 +115,9 @@ export function Backlog({ projectId }: { projectId: string }) {
 
     return result;
   }, [topLevel, allWorkItems, expanded]);
+
+  const flatNodeIds = useMemo(() => flatNodes.map((n) => n.item.id), [flatNodes]);
+  const { data: rollupsMap } = useBatchWorkItemRollups(projectId, flatNodeIds);
 
   const toggleExpand = useCallback((id: string) => {
     setExpanded((prev) => {
@@ -336,6 +339,7 @@ export function Backlog({ projectId }: { projectId: string }) {
         iterations={iterations}
         members={members}
         allWorkItems={allWorkItems}
+        rollupsMap={rollupsMap}
         onToggleExpand={toggleExpand}
         onSelectRow={handleSelectRow}
         onToggleSelectRow={handleToggleSelectRow}

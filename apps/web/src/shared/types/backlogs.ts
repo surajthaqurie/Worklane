@@ -1,4 +1,4 @@
-import { WorkItemType, WorkItemPriority } from './work-items';
+import { WorkItemType, WorkItemPriority, SeverityLevel } from './work-items';
 
 export interface BacklogItem {
   id: string;
@@ -9,7 +9,13 @@ export interface BacklogItem {
   description: string | null;
   state: string;
   priority: WorkItemPriority;
+  severity?: SeverityLevel;
   points: number | null;
+  remainingWork?: number | null;
+  completedWork?: number | null;
+  startDate?: string | null;
+  targetDate?: string | null;
+  customFields?: Record<string, unknown>;
   assignedTo: string | null;
   assignedToName: string | null;
   assignedToAvatar: string | null;

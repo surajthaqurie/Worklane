@@ -1,5 +1,7 @@
 export type WorkItemType = 'EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG';
 export type WorkItemPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type SeverityLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type StateCategory = 'PROPOSED' | 'IN_PROGRESS' | 'RESOLVED' | 'COMPLETED';
 
 export interface WorkItemState {
   id: string;
@@ -8,6 +10,7 @@ export interface WorkItemState {
   name: string;
   color?: string;
   sortOrder: number;
+  category: StateCategory;
   isDone: boolean;
   isDefault: boolean;
   createdAt?: string;
@@ -23,7 +26,13 @@ export interface WorkItem {
   description: string | null;
   state: string;
   priority: WorkItemPriority;
+  severity?: SeverityLevel;
   points: number | null;
+  remainingWork?: number | null;
+  completedWork?: number | null;
+  startDate?: string | null;
+  targetDate?: string | null;
+  customFields?: Record<string, unknown>;
   assignedTo: string | null;
   assignedToName?: string | null;
   assignedToAvatar?: string | null;
@@ -41,6 +50,7 @@ export interface WorkItem {
   areaId: string;
   teamId?: string | null;
   tags?: string[];
+  version?: number;
 }
 
 export interface WorkItemActivity {
@@ -82,8 +92,14 @@ export interface CreateWorkItemDto {
   description?: string;
   type: WorkItemType;
   priority: WorkItemPriority;
-  state: string;
+  severity?: SeverityLevel;
+  state?: string;
   points?: number | null;
+  remainingWork?: number | null;
+  completedWork?: number | null;
+  startDate?: string | null;
+  targetDate?: string | null;
+  customFields?: Record<string, unknown>;
   assignedTo?: string | null;
   parentId?: string | null;
   iterationId?: string | null;
@@ -97,7 +113,13 @@ export interface UpdateWorkItemDto {
   description?: string | null;
   state?: string;
   priority?: WorkItemPriority;
+  severity?: SeverityLevel;
   points?: number | null;
+  remainingWork?: number | null;
+  completedWork?: number | null;
+  startDate?: string | null;
+  targetDate?: string | null;
+  customFields?: Record<string, unknown>;
   assignedTo?: string | null;
   parentId?: string | null;
   iterationId?: string | null;
@@ -105,4 +127,49 @@ export interface UpdateWorkItemDto {
   teamId?: string | null;
   tags?: string[];
   backlogRank?: number;
+  expectedVersion?: number;
+}
+
+export interface WorkItemRollup {
+  itemId: string;
+  descendantCount: number;
+  completedCount: number;
+  totalPoints: number;
+  completedPoints: number;
+  remainingWork: number;
+  completedWork: number;
+  completionPercentage: number;
+}
+
+export interface HierarchyNode {
+  id: string;
+  projectId: string;
+  parentId: string | null;
+  type: WorkItemType;
+  title: string;
+  state: string;
+  stateCategory: StateCategory;
+  isDone: boolean;
+  priority: WorkItemPriority;
+  severity?: SeverityLevel;
+  points: number | null;
+  remainingWork: number | null;
+  completedWork: number | null;
+  assignedTo: string | null;
+  depth: number;
+  children: HierarchyNode[];
+  rollup?: WorkItemRollup;
+}
+
+export interface WorkItemHierarchyResponse {
+  item: HierarchyNode;
+  ancestors: Array<{
+    id: string;
+    projectId: string;
+    parentId: string | null;
+    type: WorkItemType;
+    title: string;
+    state: string;
+  }>;
+  rollup: WorkItemRollup;
 }

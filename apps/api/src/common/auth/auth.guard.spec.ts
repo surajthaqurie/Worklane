@@ -38,7 +38,10 @@ describe('AuthGuard', () => {
   });
 
   it('accepts requests with valid JWT token and attaches user to request', () => {
-    const validToken = jwt.sign({ sub: 'user-123' }, JWT_SECRET, { expiresIn: '1h' });
+    const validToken = jwt.sign({ sub: 'user-123' }, JWT_SECRET, {
+      expiresIn: '1h',
+      algorithm: 'HS256',
+    });
     const { context, request } = createMockContext({
       authorization: `Bearer ${validToken}`,
     });
@@ -46,5 +49,15 @@ describe('AuthGuard', () => {
     const result = guard.canActivate(context);
     expect(result).toBe(true);
     expect(request.user).toEqual({ id: 'user-123' });
+  });
+
+  it('rejects tokens signed with invalid/unsupported algorithm', () => {
+    // Attempting algorithm bypass / mismatch
+    const unsignedToken = jwt.sign({ sub: 'user-123' }, '', { algorithm: 'none' });
+    const { context } = createMockContext({
+      authorization: `Bearer ${unsignedToken}`,
+    });
+
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
   });
 });

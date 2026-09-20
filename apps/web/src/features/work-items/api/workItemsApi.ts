@@ -46,4 +46,22 @@ export const workItemsApi = {
     apiClient.delete<{ success: boolean }>(`/work-items/${id}/comments/${commentId}`, {
       body: JSON.stringify({ version }),
     }),
+
+  // Rollups & Hierarchy (Phase 12)
+  getWorkItemRollup: (projectId: string, itemId: string) =>
+    apiClient.get<import('@/shared/types/work-items').WorkItemRollup>(
+      `/projects/${projectId}/work-items/${itemId}/rollups`,
+    ),
+
+  getBatchWorkItemRollups: (projectId: string, itemIds: string[]) => {
+    const idsQuery = itemIds.length > 0 ? `?ids=${itemIds.join(',')}` : '';
+    return apiClient.get<Record<string, import('@/shared/types/work-items').WorkItemRollup>>(
+      `/projects/${projectId}/work-items/rollups${idsQuery}`,
+    );
+  },
+
+  getWorkItemHierarchy: (projectId: string, itemId: string) =>
+    apiClient.get<import('@/shared/types/work-items').WorkItemHierarchyResponse>(
+      `/projects/${projectId}/work-items/${itemId}/hierarchy`,
+    ),
 };

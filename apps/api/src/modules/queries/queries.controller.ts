@@ -102,4 +102,13 @@ export class QueriesController {
   ) {
     return this.queriesService.runSaved(this.getUserId(req), projectId, id);
   }
+
+  @Post(':id/duplicate')
+  duplicate(
+    @Req() req: any,
+    @Param('projectId') projectId: string,
+    @Param('id') id: string,
+  ) {
+    return this.queriesService.duplicate(this.getUserId(req), projectId, id);
+  }
 }

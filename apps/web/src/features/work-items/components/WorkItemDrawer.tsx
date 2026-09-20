@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { Copy, Check, Pencil, X } from 'lucide-react';
 import {
@@ -14,6 +14,7 @@ import {
   useDeleteWorkItem,
   useWorkItems,
   useTransitionWorkItemState,
+  useWorkItemHierarchy,
 } from '../hooks/useWorkItems';
 import { WorkItem, WorkItemType } from '@/shared/types';
 import { PARENT_TYPES } from '@/shared/utils/hierarchy';
@@ -24,6 +25,7 @@ import { Drawer } from '@/shared/components/ui/Drawer';
 import { Spinner } from '@/shared/components/ui/Spinner';
 import { WorkItemTypeBadge } from './WorkItemBadge';
 import { CreateWorkItemModal } from './CreateWorkItemModal';
+import { HierarchyView } from './HierarchyView';
 
 export interface WorkItemDrawerProps {
   item: WorkItem | null;
@@ -31,7 +33,7 @@ export interface WorkItemDrawerProps {
 }
 
 export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
-  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'activity'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'activity' | 'hierarchy'>('details');
   const [newComment, setNewComment] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState('');
@@ -46,6 +48,7 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
   const { data: commentPages, isLoading: isLoadingComments } = useWorkItemComments(itemId);
   const comments = commentPages?.pages.flatMap((p) => p.items) ?? [];
   const { data: activity = [], isLoading: isLoadingActivity } = useWorkItemActivity(itemId);
+  const { data: hierarchyResponse, isLoading: isLoadingHierarchy } = useWorkItemHierarchy(projectId, itemId);
   // Lean list responses (board, backlog, grid) omit `description`/`points`;
   // fetch the full row so editing never clobbers fields we didn't receive.
   const { data: detail } = useWorkItemDetail(itemId);
@@ -64,15 +67,15 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
 
   const current = detail ?? item;
 
-  const [titleInput, setTitleInput] = useState('');
-  const [descriptionInput, setDescriptionInput] = useState('');
+  const [titleInput, setTitleInput] = useState(current?.title || '');
+  const [descriptionInput, setDescriptionInput] = useState(current?.description || '');
+  const [prevCurrentId, setPrevCurrentId] = useState(current?.id);
 
-  useEffect(() => {
-    if (current) {
-      setTitleInput(current.title || '');
-      setDescriptionInput(current.description || '');
-    }
-  }, [current?.id, current?.title, current?.description]);
+  if (current && current.id !== prevCurrentId) {
+    setPrevCurrentId(current.id);
+    setTitleInput(current.title || '');
+    setDescriptionInput(current.description || '');
+  }
 
   if (!item || !current) return null;
 
@@ -241,6 +244,16 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
           >
             Activity ({activity.length})
           </button>
+          <button
+            onClick={() => setActiveTab('hierarchy')}
+            className={`px-4 py-3 text-xs font-medium border-b-2 transition-colors ${
+              activeTab === 'hierarchy'
+                ? 'border-[var(--brand-primary)] text-[var(--brand-primary)]'
+                : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            Hierarchy & Rollups
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -400,6 +413,20 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                 </div>
 
                 <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium text-[var(--text-muted)]">Severity</label>
+                  <select
+                    value={current.severity || 'MEDIUM'}
+                    onChange={(e) => handleUpdate('severity', e.target.value)}
+                    className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="CRITICAL">Critical</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-medium text-[var(--text-muted)]">Story Points</label>
                   <input
                     type="number"
@@ -408,6 +435,62 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                     onBlur={(e) => {
                       const val = e.target.value ? parseInt(e.target.value, 10) : null;
                       if (val !== current.points) handleUpdate('points', val);
+                    }}
+                    className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium text-[var(--text-muted)]">Remaining Work (h)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    defaultValue={current.remainingWork ?? ''}
+                    onBlur={(e) => {
+                      const val = e.target.value ? parseFloat(e.target.value) : null;
+                      if (val !== current.remainingWork) handleUpdate('remainingWork', val);
+                    }}
+                    className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium text-[var(--text-muted)]">Completed Work (h)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    defaultValue={current.completedWork ?? ''}
+                    onBlur={(e) => {
+                      const val = e.target.value ? parseFloat(e.target.value) : null;
+                      if (val !== current.completedWork) handleUpdate('completedWork', val);
+                    }}
+                    className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium text-[var(--text-muted)]">Start Date</label>
+                  <input
+                    type="date"
+                    defaultValue={current.startDate ? String(current.startDate).slice(0, 10) : ''}
+                    onBlur={(e) => {
+                      const val = e.target.value ? new Date(e.target.value).toISOString() : null;
+                      if (val !== current.startDate) handleUpdate('startDate', val);
+                    }}
+                    className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium text-[var(--text-muted)]">Target Date</label>
+                  <input
+                    type="date"
+                    defaultValue={current.targetDate ? String(current.targetDate).slice(0, 10) : ''}
+                    onBlur={(e) => {
+                      const val = e.target.value ? new Date(e.target.value).toISOString() : null;
+                      if (val !== current.targetDate) handleUpdate('targetDate', val);
                     }}
                     className="border border-[var(--border-default)] rounded-[var(--radius-input)] px-2.5 py-1.5 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
                   />
@@ -532,7 +615,7 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
 
                 {allWorkItems.filter((w) => w.parentId === current.id).length === 0 ? (
                   <div className="text-xs text-[var(--text-muted)] italic bg-[var(--bg-surface-subtle)] p-3 rounded-[var(--radius-card)] border border-[var(--border-subtle)] text-center">
-                    No child tasks or bugs added yet. Click "+ Add Child Item" to create one.
+                    No child tasks or bugs added yet. Click &quot;+ Add Child Item&quot; to create one.
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
@@ -696,6 +779,10 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                 ))
               )}
             </div>
+          )}
+
+          {activeTab === 'hierarchy' && (
+            <HierarchyView hierarchy={hierarchyResponse} isLoading={isLoadingHierarchy} />
           )}
         </div>
       </div>

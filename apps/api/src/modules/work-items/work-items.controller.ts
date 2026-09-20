@@ -32,6 +32,11 @@ export class WorkItemsController {
     private readonly transitionsService: WorkItemTransitionsService
   ) {}
 
+  @Get('projects/:projectId/work-item-types')
+  getTypeDefinitions() {
+    return this.workItemsService.getTypeDefinitions();
+  }
+
   @Post('projects/:projectId/work-items')
   create(
     @Req() req: { user: { id: string } },
@@ -50,19 +55,32 @@ export class WorkItemsController {
     return this.workItemsService.findAll(req.user.id, projectId, query);
   }
 
-  @Get('projects/:projectId/boards/:boardId/work-items')
-  findBoardWorkItems(
+  @Get('projects/:projectId/work-items/rollups')
+  getBatchRollups(
     @Req() req: { user: { id: string } },
     @Param('projectId') projectId: string,
-    @Param('boardId') boardId: string,
-    @Query() query: WorkItemFilterDto,
+    @Query('ids') ids?: string,
   ) {
-    // A proper board API endpoint that conceptually scopes to a board.
-    // We can map boardId to teamId if applicable, and enforce board-level logic here.
-    return this.workItemsService.findAll(req.user.id, projectId, {
-      ...query,
-      teamId: boardId !== 'default' ? boardId : undefined,
-    });
+    const itemIds = ids ? ids.split(',').filter(Boolean) : [];
+    return this.workItemsService.getBatchWorkItemRollups(req.user.id, projectId, itemIds);
+  }
+
+  @Get('projects/:projectId/work-items/:id/rollups')
+  getRollup(
+    @Req() req: { user: { id: string } },
+    @Param('projectId') projectId: string,
+    @Param('id') id: string,
+  ) {
+    return this.workItemsService.getWorkItemRollup(req.user.id, projectId, id);
+  }
+
+  @Get('projects/:projectId/work-items/:id/hierarchy')
+  getHierarchy(
+    @Req() req: { user: { id: string } },
+    @Param('projectId') projectId: string,
+    @Param('id') id: string,
+  ) {
+    return this.workItemsService.getWorkItemHierarchy(req.user.id, projectId, id);
   }
 
   @Get('work-items/:id')
@@ -90,7 +108,12 @@ export class WorkItemsController {
     @Param('id') id: string,
     @Body() transitionDto: StateTransitionDto,
   ) {
-    return this.transitionsService.transitionState(req.user.id, id, transitionDto.state);
+    return this.transitionsService.transitionState(
+      req.user.id,
+      id,
+      transitionDto.state,
+      transitionDto.expectedVersion,
+    );
   }
 
   @Get('work-items/:id/comments')

@@ -303,3 +303,28 @@ export function useDeleteComment(workItemId: string) {
     },
   });
 }
+
+// Phase 12 - Rollup & Hierarchy Hooks
+export function useWorkItemRollup(projectId: string | undefined, itemId: string | undefined) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'work-items', itemId, 'rollup'],
+    queryFn: () => workItemsApi.getWorkItemRollup(projectId!, itemId!),
+    enabled: !!projectId && !!itemId,
+  });
+}
+
+export function useBatchWorkItemRollups(projectId: string | undefined, itemIds: string[]) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'work-items', 'batch-rollups', itemIds.sort().join(',')],
+    queryFn: () => workItemsApi.getBatchWorkItemRollups(projectId!, itemIds),
+    enabled: !!projectId && itemIds.length > 0,
+  });
+}
+
+export function useWorkItemHierarchy(projectId: string | undefined, itemId: string | undefined) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'work-items', itemId, 'hierarchy'],
+    queryFn: () => workItemsApi.getWorkItemHierarchy(projectId!, itemId!),
+    enabled: !!projectId && !!itemId,
+  });
+}

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { Copy, Check, Pencil, X } from 'lucide-react';
+import { Copy, Check, Pencil, X, Eye, EyeOff } from 'lucide-react';
 import {
   useWorkItemComments,
   useWorkItemActivity,
@@ -21,11 +21,17 @@ import { PARENT_TYPES } from '@/shared/utils/hierarchy';
 import { useProjectMembers } from '@/features/projects/hooks/useProjects';
 import { useIterations } from '@/features/iterations/hooks/useIterations';
 import { useWorkItemStates } from '../hooks/useWorkItemStates';
+import {
+  useFollowStatus,
+  useFollowWorkItem,
+  useUnfollowWorkItem,
+} from '@/features/notifications/hooks/useNotifications';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Spinner } from '@/shared/components/ui/Spinner';
 import { WorkItemTypeBadge } from './WorkItemBadge';
 import { CreateWorkItemModal } from './CreateWorkItemModal';
 import { HierarchyView } from './HierarchyView';
+import { AttachmentManager } from '@/features/attachments/components/AttachmentManager';
 
 export interface WorkItemDrawerProps {
   item: WorkItem | null;
@@ -64,6 +70,9 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
   const { data: iterations = [] } = useIterations(projectId);
   const { data: allWorkItems = [] } = useWorkItems(projectId, undefined, { limit: '300' });
   const { data: states = [] } = useWorkItemStates(projectId);
+  const { data: followStatus } = useFollowStatus(projectId, itemId);
+  const followMut = useFollowWorkItem(projectId, itemId);
+  const unfollowMut = useUnfollowWorkItem(projectId, itemId);
 
   const current = detail ?? item;
 
@@ -154,6 +163,34 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
             <WorkItemTypeBadge type={current.type} />
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                if (followStatus?.isFollowing) {
+                  unfollowMut.mutate();
+                } else {
+                  followMut.mutate();
+                }
+              }}
+              title={followStatus?.isFollowing ? 'Unfollow work item' : 'Follow work item'}
+              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-[var(--radius-button)] border transition-colors ${
+                followStatus?.isFollowing
+                  ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300'
+                  : 'bg-[var(--bg-surface-hover)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              {followStatus?.isFollowing ? (
+                <>
+                  <EyeOff className="w-3 h-3 text-blue-500" />
+                  <span className="font-medium">Following ({followStatus.followerCount})</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="w-3 h-3" />
+                  <span>Follow ({followStatus?.followerCount || 0})</span>
+                </>
+              )}
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -640,6 +677,11 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
                       ))}
                   </div>
                 )}
+              </div>
+
+              {/* Secure Attachments & Object Storage Section */}
+              <div className="border-t border-[var(--border-subtle)] pt-4">
+                <AttachmentManager projectId={projectId} workItemId={current.id} />
               </div>
 
               {/* Action Buttons */}

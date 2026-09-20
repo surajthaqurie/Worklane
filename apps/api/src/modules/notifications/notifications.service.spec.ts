@@ -23,6 +23,15 @@ describe('NotificationsService', () => {
   beforeEach(async () => {
     repo = {
       createNotification: vi.fn().mockResolvedValue(mockNotif),
+      findRecentNotification: vi.fn().mockResolvedValue(null),
+      getUserPreferences: vi.fn().mockResolvedValue({
+        userId: 'user-1',
+        channelInApp: true,
+        channelEmail: true,
+        notifyMentions: true,
+        notifyAssigned: true,
+        notifyFollowed: true,
+      }),
       getNotifications: vi.fn().mockResolvedValue({
         notifications: [mockNotif],
         unreadCount: 1,
@@ -31,6 +40,7 @@ describe('NotificationsService', () => {
       getUnreadCount: vi.fn().mockResolvedValue(1),
       markAsRead: vi.fn().mockResolvedValue({ ...mockNotif, readAt: new Date().toISOString() }),
       markAllAsRead: vi.fn().mockResolvedValue(1),
+      getFollowerUserIds: vi.fn().mockResolvedValue([]),
     };
 
     gateway = {
@@ -42,8 +52,19 @@ describe('NotificationsService', () => {
         NotificationsService,
         { provide: NotificationsRepository, useValue: repo },
         { provide: NotificationsGateway, useValue: gateway },
+        {
+          provide: 'AuthorizationService',
+          useValue: { requireProjectPermission: vi.fn().mockResolvedValue(true) },
+        },
+        {
+          provide: Symbol.for('AuthorizationService'),
+          useValue: { requireProjectPermission: vi.fn().mockResolvedValue(true) },
+        },
       ],
-    }).compile();
+    })
+      .overrideProvider(NotificationsService)
+      .useValue(new NotificationsService(repo, gateway, { requireProjectPermission: vi.fn().mockResolvedValue(true) } as any))
+      .compile();
 
     service = module.get<NotificationsService>(NotificationsService);
   });

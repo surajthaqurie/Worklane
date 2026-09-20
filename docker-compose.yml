@@ -18,6 +18,19 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: .
@@ -29,6 +42,8 @@ services:
       PORT: 4000
       NODE_ENV: production
       DATABASE_URL: postgres://postgres:root@db:5432/todoapp
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       CORS_ORIGIN: http://localhost:3000
       JWT_SECRET: super-secret-worklane-access-key-change-in-production
       JWT_REFRESH_SECRET: super-secret-worklane-refresh-key-change-in-production
@@ -36,6 +51,8 @@ services:
       SEED_ADMIN_PASSWORD: WorklaneAdmin2026!
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - uploads_data:/app/uploads
@@ -59,4 +76,5 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
   uploads_data:

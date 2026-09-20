@@ -7,6 +7,9 @@ export enum NotificationType {
   ADDED_TO_SPRINT = 'ADDED_TO_SPRINT',
   REMOVED_FROM_SPRINT = 'REMOVED_FROM_SPRINT',
   PARENT_CHANGED = 'PARENT_CHANGED',
+  WORK_ITEM_UPDATED = 'WORK_ITEM_UPDATED',
+  COMMENT_ADDED = 'COMMENT_ADDED',
+  FOLLOWED = 'FOLLOWED',
 }
 
 export const getNotificationsQuerySchema = z.object({
@@ -19,10 +22,16 @@ export const getNotificationsQuerySchema = z.object({
 
 export type GetNotificationsQuery = z.infer<typeof getNotificationsQuerySchema>;
 
-/**
- * Free-form JSON attached to a notification. Known keys are typed; arbitrary
- * per-type extras are allowed and treated as unknown.
- */
+export const updateNotificationPreferencesSchema = z.object({
+  channelInApp: z.boolean().optional(),
+  channelEmail: z.boolean().optional(),
+  notifyMentions: z.boolean().optional(),
+  notifyAssigned: z.boolean().optional(),
+  notifyFollowed: z.boolean().optional(),
+});
+
+export type UpdateNotificationPreferencesDto = z.infer<typeof updateNotificationPreferencesSchema>;
+
 export interface NotificationMetadata {
   title?: string;
   key?: string;
@@ -48,4 +57,15 @@ export interface NotificationDto {
   metadata: NotificationMetadata;
   readAt: string | null;
   createdAt: string;
+}
+
+export interface NotificationPreferencesDto {
+  userId: string;
+  channelInApp: boolean;
+  channelEmail: boolean;
+  notifyMentions: boolean;
+  notifyAssigned: boolean;
+  notifyFollowed: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

@@ -373,17 +373,28 @@ export class WorkItemsService {
     const lowerContent = content.toLowerCase();
     for (const member of members) {
       if (member.userId === actorId) continue;
+      const firstName = member.name ? member.name.split(' ')[0].toLowerCase() : '';
       const nameMatch = member.name && lowerContent.includes(`@${member.name.toLowerCase()}`);
+      const firstNameMatch = firstName && lowerContent.includes(`@${firstName}`);
+      const noSpaceNameMatch = member.name && lowerContent.includes(`@${member.name.toLowerCase().replace(/\s+/g, '')}`);
       const emailMatch = member.email && lowerContent.includes(`@${member.email.toLowerCase()}`);
       const idMatch = lowerContent.includes(`@${member.userId.toLowerCase()}`);
-      if (nameMatch || emailMatch || idMatch) {
+      if (nameMatch || firstNameMatch || noSpaceNameMatch || emailMatch || idMatch) {
         mentionedUserIds.add(member.userId);
       }
     }
 
+    if (this.notifications?.parseAndValidateMentions) {
+      const validated = await this.notifications.parseAndValidateMentions(projectId, content);
+      for (const id of validated) {
+        if (id !== actorId) mentionedUserIds.add(id);
+      }
+    }
+
     const userIds = Array.from(mentionedUserIds);
-    if (userIds.length > 0) {
-      const snippet = content.length > 100 ? content.slice(0, 100) + '...' : content;
+    const snippet = content.length > 100 ? content.slice(0, 100) + '...' : content;
+
+    if (userIds.length > 0 && this.notifications?.notifyMentioned) {
       await this.notifications.notifyMentioned({
         actorId,
         workItemId,
@@ -392,6 +403,17 @@ export class WorkItemsService {
         commentId,
         snippet,
         mentionedUserIds: userIds,
+      });
+    }
+
+    if (this.notifications?.notifyCommentAdded) {
+      await this.notifications.notifyCommentAdded({
+        actorId,
+        workItemId,
+        title,
+        key,
+        commentId,
+        snippet,
       });
     }
   }

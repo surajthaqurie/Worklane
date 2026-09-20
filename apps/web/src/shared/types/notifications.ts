@@ -11,7 +11,7 @@ export interface NotificationMetadata {
 export interface Notification {
   id: string;
   userId: string;
-  type: 'ASSIGNED' | 'MENTIONED' | 'STATE_CHANGED' | 'ADDED_TO_SPRINT' | 'REMOVED_FROM_SPRINT' | 'PARENT_CHANGED' | string;
+  type: 'ASSIGNED' | 'MENTIONED' | 'STATE_CHANGED' | 'ADDED_TO_SPRINT' | 'REMOVED_FROM_SPRINT' | 'PARENT_CHANGED' | 'WORK_ITEM_UPDATED' | 'COMMENT_ADDED' | 'FOLLOWED' | string;
   workItemId: string | null;
   actorId: string;
   actor?: { name?: string };
@@ -24,4 +24,15 @@ export interface Notification {
 export interface NotificationsResponse {
   notifications: Notification[];
   unreadCount: number;
+}
+
+export interface NotificationPreferences {
+  userId: string;
+  channelInApp: boolean;
+  channelEmail: boolean;
+  notifyMentions: boolean;
+  notifyAssigned: boolean;
+  notifyFollowed: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

@@ -173,3 +173,29 @@ export interface WorkItemHierarchyResponse {
   }>;
   rollup: WorkItemRollup;
 }
+
+export interface WorkItemAttachment {
+  id: string;
+  workItemId: string;
+  userId: string;
+  uploaderName?: string;
+  fileName: string;
+  fileSize: number;
+  contentType: string;
+  url: string;
+  objectKey?: string;
+  createdAt: string;
+}
+
+export interface PresignedUploadResponse {
+  uploadUrl: string;
+  objectKey: string;
+  method: string;
+  headers: Record<string, string>;
+  expiresAt: string;
+}
+
+export interface PresignedDownloadResponse {
+  downloadUrl: string;
+  expiresAt: string;
+}

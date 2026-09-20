@@ -230,6 +230,7 @@ export interface Database {
     file_size: number;
     content_type: string;
     url: string;
+    object_key: string | null;
     created_at: ColumnType<Date, string | undefined, never>;
   };
   notifications: {
@@ -284,6 +285,36 @@ export interface Database {
       Record<string, unknown> | string
     >;
     created_at: ColumnType<Date, string | undefined, never>;
+  };
+  work_item_followers: {
+    work_item_id: string;
+    user_id: string;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
+  user_notification_preferences: {
+    user_id: string;
+    channel_in_app: Generated<boolean>;
+    channel_email: Generated<boolean>;
+    notify_mentions: Generated<boolean>;
+    notify_assigned: Generated<boolean>;
+    notify_followed: Generated<boolean>;
+    created_at: ColumnType<Date, string | undefined, never>;
+    updated_at: ColumnType<Date, string | undefined, string | Date>;
+  };
+  background_jobs: {
+    id: Generated<string>;
+    job_type: string;
+    idempotency_key: string | null;
+    status: Generated<'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'DEAD_LETTER'>;
+    payload: ColumnType<Record<string, unknown>, Record<string, unknown> | string, Record<string, unknown> | string>;
+    result: ColumnType<Record<string, unknown> | null, Record<string, unknown> | string | null, Record<string, unknown> | string | null>;
+    error_message: string | null;
+    attempts: Generated<number>;
+    max_retries: Generated<number>;
+    progress: Generated<number>;
+    created_at: ColumnType<Date, string | undefined, never>;
+    started_at: ColumnType<Date | null, string | Date | null, string | Date | null>;
+    completed_at: ColumnType<Date | null, string | Date | null, string | Date | null>;
   };
 }
 

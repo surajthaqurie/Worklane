@@ -11,7 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { BoardsService } from './boards.service.js';
-import { CreateBoardDto, UpdateBoardDto } from './dto/boards.dto.js';
+import { CreateBoardDto, UpdateBoardDto, MoveWorkItemDto } from './dto/boards.dto.js';
 import { AuthGuard } from '../../common/auth/auth.guard.js';
 
 @Controller('projects/:projectId/boards')
@@ -73,5 +73,16 @@ export class BoardsController {
     @Query() query: Record<string, any>,
   ) {
     return this.boardsService.getBoardWorkItems(req.user.id, projectId, boardId, query);
+  }
+
+  @Post(':boardId/work-items/:workItemId/move')
+  moveWorkItem(
+    @Req() req: { user: { id: string } },
+    @Param('projectId') projectId: string,
+    @Param('boardId') boardId: string,
+    @Param('workItemId') workItemId: string,
+    @Body() dto: MoveWorkItemDto,
+  ) {
+    return this.boardsService.moveWorkItem(req.user.id, projectId, boardId, workItemId, dto);
   }
 }

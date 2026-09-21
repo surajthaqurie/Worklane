@@ -6,14 +6,22 @@ import {
 import { BoardsRepository, BoardRow } from './boards.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { WorkItemsService } from '../work-items/work-items.service.js';
+import { WorkItemTransitionsService } from '../work-items/work-item-transitions.service.js';
+import { WipConstraint } from '../work-items/work-items.repository.js';
 import {
   CreateBoardDto,
   UpdateBoardDto,
+  MoveWorkItemDto,
+  MoveWorkItemSchema,
   BoardColumn,
   CardFields,
+  SwimlaneType,
   CreateBoardSchema,
   UpdateBoardSchema,
 } from './dto/boards.dto.js';
+import { WipLimitExceededException } from '../../common/exceptions/wip-limit.exception.js';
+import { NotificationsGateway } from '../notifications/notifications.gateway.js';
+import type { WorkItemType } from '../work-items/work-item.types.js';
 
 const DEFAULT_CARD_FIELDS: CardFields = {
   showType: true,
@@ -36,6 +44,8 @@ export class BoardsService {
     private readonly projectsService: ProjectsService,
     private readonly workItemsService: WorkItemsService,
     private readonly teamsService: TeamsService,
+    private readonly transitionsService: WorkItemTransitionsService,
+    private readonly gateway: NotificationsGateway,
     private readonly authz: AuthorizationService,
   ) {}
 
@@ -90,16 +100,20 @@ export class BoardsService {
       : DEFAULT_CARD_FIELDS;
     const filterConfig = data.filterConfig || {};
 
-    return this.repo.create({
+    const board = await this.repo.create({
       projectId,
       teamId: data.teamId || null,
       name: data.name,
       description: data.description?.trim() || null,
       isDefault: false,
+      swimlane: (data.swimlane ?? 'none') as SwimlaneType,
       columns,
       cardFields,
       filterConfig,
     });
+
+    await this.broadcastBoardChange(projectId, board.id, userId, 'created');
+    return board;
   }
 
   async updateBoard(
@@ -145,15 +159,19 @@ export class BoardsService {
       filterConfig = { ...existing.filterConfig, ...data.filterConfig };
     }
 
-    return this.repo.update(boardId, {
+    const board = await this.repo.update(boardId, {
       name: data.name,
       description: data.description,
       teamId: data.teamId,
       isDefault: data.isDefault,
+      swimlane: data.swimlane,
       columns,
       cardFields,
       filterConfig,
     });
+
+    await this.broadcastBoardChange(projectId, board.id, userId, 'updated');
+    return board;
   }
 
   async deleteBoard(userId: string, projectId: string, boardId: string): Promise<{ success: boolean }> {
@@ -173,6 +191,7 @@ export class BoardsService {
     }
 
     await this.repo.remove(boardId);
+    await this.broadcastBoardChange(projectId, boardId, userId, 'deleted');
     return { success: true };
   }
 
@@ -209,6 +228,147 @@ export class BoardsService {
     };
 
     return this.workItemsService.findAll(userId, projectId, mergedFilters);
+  }
+
+  /**
+   * WIP-aware board move: resolves the target column for the dragged card,
+   * rejects moves that would push a limited column past its WIP boundary with
+   * structured, actionable feedback, and otherwise delegates to the shared
+   * state-transition pipeline (which enforces the limit atomically under a row
+   * lock so concurrent drags cannot silently overshoot).
+   */
+  async moveWorkItem(
+    userId: string,
+    projectId: string,
+    boardId: string,
+    workItemId: string,
+    dto: MoveWorkItemDto,
+  ) {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.WORK_ITEM_CHANGE_STATE);
+
+    const board =
+      boardId === 'default'
+        ? (await this.listBoards(userId, projectId))[0]
+        : await this.getBoard(userId, projectId, boardId);
+
+    const parsed = MoveWorkItemSchema.safeParse(dto);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid move request');
+    }
+    const { state: rawTargetState, expectedVersion, bypassWip } = parsed.data;
+
+    const targetState = this.normalizeStateKey(rawTargetState);
+    const targetColumn = this.resolveColumnForState(board.columns, targetState);
+    if (!targetColumn) {
+      throw new BadRequestException(
+        `State "${rawTargetState}" is not mapped to any column on board "${board.name}"`,
+      );
+    }
+
+    const item = await this.repo.getWorkItemForMove(projectId, workItemId);
+    if (!item) {
+      throw new NotFoundException('Work item not found');
+    }
+
+    const currentColumn = this.resolveColumnForState(board.columns, item.state);
+    const movingBetweenColumns = currentColumn?.id !== targetColumn.id;
+
+    // Fast, non-locking pre-check for immediate client feedback. The atomic
+    // check inside the transition transaction remains the source of truth.
+    if (movingBetweenColumns && !bypassWip && targetColumn.wipLimit != null) {
+      const typeScope = this.boardTypeScope(board);
+      const currentCount = await this.repo.countItemsInStates(
+        projectId,
+        targetColumn.mappedStates,
+        typeScope,
+      );
+      if (currentCount >= targetColumn.wipLimit) {
+        throw new WipLimitExceededException({
+          columnId: targetColumn.id,
+          columnName: targetColumn.name,
+          currentCount,
+          wipLimit: targetColumn.wipLimit,
+        });
+      }
+    }
+
+    let wipConstraint: WipConstraint | undefined;
+    if (movingBetweenColumns && !bypassWip && targetColumn.wipLimit != null) {
+      wipConstraint = {
+        projectId,
+        columnId: targetColumn.id,
+        columnName: targetColumn.name,
+        targetStates: targetColumn.mappedStates,
+        limit: targetColumn.wipLimit,
+        excludeItemId: workItemId,
+        typeScope: this.boardTypeScope(board),
+      };
+    }
+
+    const updated = await this.transitionsService.transitionState(
+      userId,
+      workItemId,
+      targetState,
+      expectedVersion,
+      wipConstraint,
+    );
+
+    await this.broadcastItemMoved(projectId, board.id, workItemId, targetState, userId);
+    return updated;
+  }
+
+  private normalizeStateKey(raw: string): string {
+    let key = raw;
+    if (key.startsWith('col-')) key = key.slice('col-'.length);
+    return key.toUpperCase();
+  }
+
+  private resolveColumnForState(
+    columns: BoardColumn[],
+    stateKey: string,
+  ): BoardColumn | undefined {
+    const exact = columns.find((c) => c.mappedStates.includes(stateKey));
+    if (exact) return exact;
+    const lower = stateKey.toLowerCase();
+    return columns.find((c) => c.mappedStates.some((s) => s.toLowerCase() === lower));
+  }
+
+  private boardTypeScope(board: BoardRow): WorkItemType[] | undefined {
+    const filter = board.filterConfig;
+    if (filter.types && filter.types.length > 0) return filter.types as WorkItemType[];
+    if (filter.backlogLevel === 'EPIC') return ['EPIC'];
+    if (filter.backlogLevel === 'FEATURE') return ['FEATURE'];
+    if (filter.backlogLevel === 'STORY') return ['STORY', 'BUG', 'TASK'];
+    return undefined;
+  }
+
+  private async broadcastBoardChange(
+    projectId: string,
+    boardId: string,
+    actorId: string,
+    action: 'created' | 'updated' | 'deleted',
+  ) {
+    const memberIds = await this.repo.listProjectMemberIds(projectId);
+    this.gateway?.sendToUsers?.(
+      memberIds.filter((id) => id !== actorId),
+      'board:updated',
+      { projectId, boardId, action, actorId },
+    );
+  }
+
+  private async broadcastItemMoved(
+    projectId: string,
+    boardId: string,
+    workItemId: string,
+    state: string,
+    actorId: string,
+  ) {
+    const memberIds = await this.repo.listProjectMemberIds(projectId);
+    this.gateway?.sendToUsers?.(
+      memberIds.filter((id) => id !== actorId),
+      'board:item-moved',
+      { projectId, boardId, workItemId, state, actorId },
+    );
   }
 
   private validateColumns(columns: BoardColumn[], projectStates: { key: string; name: string }[]) {
@@ -310,6 +470,7 @@ export class BoardsService {
       name: 'Main Board',
       description: 'Default project kanban board',
       isDefault: true,
+      swimlane: 'none',
       columns,
       cardFields: DEFAULT_CARD_FIELDS,
       filterConfig: { backlogLevel: 'STORY' },

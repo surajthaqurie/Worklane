@@ -3,6 +3,16 @@ import { z } from 'zod';
 export type BacklogLevel = 'EPIC' | 'FEATURE' | 'STORY';
 export const BACKLOG_LEVELS = ['EPIC', 'FEATURE', 'STORY'] as const;
 
+/**
+ * Swimlane grouping modes. `none` renders a single flat board.
+ *
+ * Architecture note: the frontend groups cards through a per-mode registry
+ * (`features/boards/swimlanes.ts`), so future custom groupings only register a
+ * new mode + grouper here and select it from the same field.
+ */
+export type SwimlaneType = 'none' | 'assignee' | 'priority' | 'epic';
+export const SWIMLANE_TYPES = ['none', 'assignee', 'priority', 'epic'] as const;
+
 export interface BoardColumn {
   id: string;
   name: string;
@@ -64,6 +74,7 @@ export const CreateBoardSchema = z.object({
   name: z.string().trim().min(1, { message: 'Board name is required' }),
   description: z.string().optional(),
   teamId: z.string().nullable().optional(),
+  swimlane: z.enum(SWIMLANE_TYPES).optional(),
   columns: z.array(BoardColumnSchema).optional(),
   cardFields: CardFieldsSchema.optional(),
   filterConfig: FilterConfigSchema.optional(),
@@ -74,15 +85,24 @@ export const UpdateBoardSchema = z.object({
   description: z.string().nullable().optional(),
   teamId: z.string().nullable().optional(),
   isDefault: z.boolean().optional(),
+  swimlane: z.enum(SWIMLANE_TYPES).optional(),
   columns: z.array(BoardColumnSchema).optional(),
   cardFields: CardFieldsSchema.optional(),
   filterConfig: FilterConfigSchema.optional(),
+});
+
+/** Body for moving a work item across a board (WIP-aware state transition). */
+export const MoveWorkItemSchema = z.object({
+  state: z.string().trim().min(1, { message: 'Target state is required' }),
+  expectedVersion: z.number().int().positive().optional(),
+  bypassWip: z.boolean().optional(),
 });
 
 export class CreateBoardDto {
   name!: string;
   description?: string;
   teamId?: string | null;
+  swimlane?: SwimlaneType;
   columns?: BoardColumn[];
   cardFields?: CardFields;
   filterConfig?: FilterConfig;
@@ -93,8 +113,15 @@ export class UpdateBoardDto {
   description?: string | null;
   teamId?: string | null;
   isDefault?: boolean;
+  swimlane?: SwimlaneType;
   columns?: BoardColumn[];
   cardFields?: CardFields;
   filterConfig?: FilterConfig;
+}
+
+export class MoveWorkItemDto {
+  state!: string;
+  expectedVersion?: number;
+  bypassWip?: boolean;
 }
 

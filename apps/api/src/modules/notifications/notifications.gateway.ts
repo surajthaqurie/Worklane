@@ -86,6 +86,21 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   /**
+   * Emit an arbitrary event to a set of user rooms (used for board real-time
+   * updates). Each user only receives events on their own `user:{id}` room, so
+   * callers must resolve the recipient list (project/team members) server-side.
+   */
+  sendToUsers(userIds: string[], event: string, payload: unknown) {
+    if (!this.server) return;
+    const seen = new Set<string>();
+    for (const userId of userIds) {
+      if (!userId || seen.has(userId)) continue;
+      seen.add(userId);
+      this.server.to(`user:${userId}`).emit(event, payload);
+    }
+  }
+
+  /**
    * Resolve the authenticated user id from the socket handshake.
    * Priority:
    *   1. `auth.token` (socket.io auth payload) / `query.token` — verified JWT

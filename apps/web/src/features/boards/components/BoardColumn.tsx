@@ -12,9 +12,11 @@ import { ProjectMember } from '@/shared/types/projects';
 
 export interface BoardColumnProps {
   column: BoardColumnConfig;
+  groupId?: string;
   items: WorkItem[];
   states: WorkItemState[];
   cardFields: CardFields;
+  wipBlocked?: boolean;
   onSelectItem: (item: WorkItem) => void;
   onRemoveItem?: (item: WorkItem) => void;
   storyByParentId: Record<string, { key: string; title: string }>;
@@ -24,11 +26,25 @@ export interface BoardColumnProps {
   onQuickAdd?: (stateKey: string) => void;
 }
 
+/**
+ * Composes a unique droppable id per swimlane group + column. Without a group
+ * (flat board / sprint view) keeps the legacy `col-{id}` scheme so external
+ * draggables (e.g. the sprint backlog sidebar) keep working unchanged.
+ */
+export function boardColumnDroppableId(groupId: string | null | undefined, columnId: string): string {
+  if (!groupId) {
+    return columnId.startsWith('col-') ? columnId : `col-${columnId}`;
+  }
+  return `swimlane:${encodeURIComponent(groupId)}:col:${columnId}`;
+}
+
 export const BoardColumn = React.memo(function BoardColumn({
   column,
+  groupId,
   items,
   states,
   cardFields,
+  wipBlocked = false,
   onSelectItem,
   onRemoveItem,
   storyByParentId,
@@ -37,10 +53,10 @@ export const BoardColumn = React.memo(function BoardColumn({
   onAssign,
   onQuickAdd,
 }: BoardColumnProps) {
-  const droppableId = column.id.startsWith('col-') ? column.id : `col-${column.id}`;
+  const droppableId = boardColumnDroppableId(groupId, column.id);
   const { isOver, setNodeRef } = useDroppable({
     id: droppableId,
-    data: { columnId: column.id },
+    data: { columnId: column.id, groupId: groupId ?? null },
   });
 
   const primaryState = states.find((s) => column.mappedStates.includes(s.key));
@@ -55,7 +71,9 @@ export const BoardColumn = React.memo(function BoardColumn({
     <div
       ref={setNodeRef}
       className={`flex flex-col w-[290px] min-w-[290px] max-h-full bg-[var(--bg-surface)] border rounded-[var(--radius-card)] transition-all ${
-        isWipExceeded
+        wipBlocked
+          ? 'border-[var(--priority-high)] ring-2 ring-[var(--priority-high)]/40 shadow-lg'
+          : isWipExceeded
           ? 'border-[var(--priority-high)]/60 bg-[var(--priority-high)]/5'
           : isOver
           ? 'border-[var(--brand-primary)] ring-2 ring-[var(--brand-primary)]/20'
@@ -89,10 +107,20 @@ export const BoardColumn = React.memo(function BoardColumn({
       </div>
 
       {/* WIP Limit Exceeded Warning Header */}
-      {isWipExceeded && (
-        <div className="bg-[var(--priority-high)]/10 text-[var(--priority-high)] px-3 py-1 text-[11px] font-medium flex items-center gap-1.5 border-b border-[var(--priority-high)]/20">
+      {(isWipExceeded || wipBlocked) && (
+        <div
+          className={`px-3 py-1 text-[11px] font-medium flex items-center gap-1.5 border-b ${
+            wipBlocked
+              ? 'bg-[var(--priority-high)]/15 text-[var(--priority-high)] border-[var(--priority-high)]/30'
+              : 'bg-[var(--priority-high)]/10 text-[var(--priority-high)] border-[var(--priority-high)]/20'
+          }`}
+        >
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          <span>WIP limit exceeded (Max {wipLimit})</span>
+          <span>
+            {wipBlocked
+              ? `WIP limit reached — move an item out of "${column.name}" first`
+              : `WIP limit exceeded (Max ${wipLimit})`}
+          </span>
         </div>
       )}
 

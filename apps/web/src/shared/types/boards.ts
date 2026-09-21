@@ -2,6 +2,15 @@ import { WorkItem, WorkItemState } from './work-items';
 
 export type BacklogLevel = 'EPIC' | 'FEATURE' | 'STORY';
 
+export type SwimlaneType = 'none' | 'assignee' | 'priority' | 'epic';
+
+export interface WipBlockInfo {
+  columnId: string;
+  columnName: string;
+  currentCount: number;
+  wipLimit: number;
+}
+
 export interface CardFields {
   showType: boolean;
   showPriority: boolean;
@@ -37,6 +46,7 @@ export interface BoardConfig {
   columns: BoardColumn[];
   cardFields: CardFields;
   filterConfig: FilterConfig;
+  swimlane?: SwimlaneType;
   teamId?: string | null;
   createdAt?: string;
   updatedAt?: string;

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
-import { BoardColumn, CardFields, FilterConfig } from './dto/boards.dto.js';
+import { BoardColumn, CardFields, FilterConfig, SwimlaneType } from './dto/boards.dto.js';
 
 export interface BoardRow {
   id: string;
@@ -9,6 +9,7 @@ export interface BoardRow {
   name: string;
   description: string | null;
   isDefault: boolean;
+  swimlane: SwimlaneType;
   columns: BoardColumn[];
   cardFields: CardFields;
   filterConfig: FilterConfig;
@@ -55,6 +56,7 @@ export class BoardsRepository {
     name: string;
     description?: string | null;
     isDefault?: boolean;
+    swimlane?: SwimlaneType;
     columns: BoardColumn[];
     cardFields: CardFields;
     filterConfig: FilterConfig;
@@ -67,6 +69,7 @@ export class BoardsRepository {
         name: data.name,
         description: data.description || null,
         is_default: data.isDefault ?? false,
+        swimlane: data.swimlane ?? 'none',
         columns: JSON.stringify(data.columns),
         card_fields: JSON.stringify(data.cardFields),
         filter_config: JSON.stringify(data.filterConfig),
@@ -84,6 +87,7 @@ export class BoardsRepository {
       description?: string | null;
       teamId?: string | null;
       isDefault?: boolean;
+      swimlane?: SwimlaneType;
       columns?: BoardColumn[];
       cardFields?: CardFields;
       filterConfig?: FilterConfig;
@@ -94,6 +98,7 @@ export class BoardsRepository {
     if (data.description !== undefined) updatePayload.description = data.description;
     if (data.teamId !== undefined) updatePayload.team_id = data.teamId;
     if (data.isDefault !== undefined) updatePayload.is_default = data.isDefault;
+    if (data.swimlane !== undefined) updatePayload.swimlane = data.swimlane;
     if (data.columns !== undefined) updatePayload.columns = JSON.stringify(data.columns);
     if (data.cardFields !== undefined) updatePayload.card_fields = JSON.stringify(data.cardFields);
     if (data.filterConfig !== undefined) updatePayload.filter_config = JSON.stringify(data.filterConfig);
@@ -121,6 +126,42 @@ export class BoardsRepository {
       .execute();
   }
 
+  async getWorkItemForMove(projectId: string, workItemId: string) {
+    return db
+      .selectFrom('work_items')
+      .where('project_id', '=', projectId)
+      .where('id', '=', workItemId)
+      .select(['id', 'project_id', 'state', 'type', 'assigned_to', 'parent_id'])
+      .executeTakeFirst();
+  }
+
+  async countItemsInStates(
+    projectId: string,
+    states: string[],
+    typeScope?: Array<'EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG'>,
+  ): Promise<number> {
+    let query = db
+      .selectFrom('work_items')
+      .where('project_id', '=', projectId)
+      .where('state', 'in', states);
+    if (typeScope && typeScope.length > 0) {
+      query = query.where('type', 'in', typeScope);
+    }
+    const row = await query
+      .select(db.fn.countAll().as('count'))
+      .executeTakeFirst();
+    return Number(row?.count ?? 0);
+  }
+
+  async listProjectMemberIds(projectId: string): Promise<string[]> {
+    const rows = await db
+      .selectFrom('project_members')
+      .where('project_id', '=', projectId)
+      .select('user_id')
+      .execute();
+    return rows.map((r) => r.user_id);
+  }
+
   private mapRow(r: any): BoardRow {
     return {
       id: r.id,
@@ -129,6 +170,7 @@ export class BoardsRepository {
       name: r.name,
       description: r.description,
       isDefault: r.is_default,
+      swimlane: r.swimlane || 'none',
       columns: typeof r.columns === 'string' ? JSON.parse(r.columns) : (r.columns || []),
       cardFields: typeof r.card_fields === 'string' ? JSON.parse(r.card_fields) : (r.card_fields || {}),
       filterConfig: typeof r.filter_config === 'string' ? JSON.parse(r.filter_config) : (r.filter_config || {}),

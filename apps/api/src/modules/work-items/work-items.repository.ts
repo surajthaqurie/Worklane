@@ -8,6 +8,25 @@ import {
   WorkItemHistoryEntryInput,
 } from '../work-item-history/work-item-history.constants.js';
 import { WorkItemHistoryService } from '../work-item-history/work-item-history.service.js';
+import type { WorkItemType } from './work-item.types.js';
+import { WipLimitExceededException } from '../../common/exceptions/wip-limit.exception.js';
+
+/**
+ * WIP (work-in-progress) constraint resolved from a board column and applied
+ * atomically during a state transition so concurrent drag-and-drop moves can
+ * never silently push a column past its limit.
+ */
+export interface WipConstraint {
+  projectId: string;
+  columnId: string;
+  columnName: string;
+  targetStates: string[];
+  limit: number;
+  /** Item being moved; never counted against the column's own total. */
+  excludeItemId?: string;
+  /** Board filter scope — counts only item types the board displays. */
+  typeScope?: WorkItemType[];
+}
 
 @Injectable()
 export class WorkItemsRepository {
@@ -672,8 +691,36 @@ export class WorkItemsRepository {
     newState: string,
     isDone: boolean,
     expectedVersion?: number,
+    wipConstraint?: WipConstraint,
   ) {
     return await db.transaction().execute(async (trx) => {
+      // WIP is enforced inside the same transaction that mutates the item so a
+      // lock on the target column's rows serializes concurrent moves. `FOR
+      // UPDATE` re-reads the latest committed rows under READ COMMITTED, so the
+      // second move in a race sees the first move's result and is rejected.
+      if (wipConstraint) {
+        let scope = trx
+          .selectFrom('work_items')
+          .select('id')
+          .where('project_id', '=', wipConstraint.projectId)
+          .where('state', 'in', wipConstraint.targetStates);
+        if (wipConstraint.excludeItemId) {
+          scope = scope.where('id', '!=', wipConstraint.excludeItemId);
+        }
+        if (wipConstraint.typeScope && wipConstraint.typeScope.length > 0) {
+          scope = scope.where('type', 'in', wipConstraint.typeScope);
+        }
+        const inColumn = await scope.forUpdate().execute();
+        if (inColumn.length >= wipConstraint.limit) {
+          throw new WipLimitExceededException({
+            columnId: wipConstraint.columnId,
+            columnName: wipConstraint.columnName,
+            currentCount: inColumn.length,
+            wipLimit: wipConstraint.limit,
+          });
+        }
+      }
+
       const now = new Date();
       const updateData: any = {
         state: newState,

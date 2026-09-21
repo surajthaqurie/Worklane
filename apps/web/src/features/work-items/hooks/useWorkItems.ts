@@ -12,7 +12,7 @@ import { SprintBoard } from '@/shared/types/boards';
 import { formatApiError } from '@/shared/utils/error';
 import { useToast } from '@/shared/hooks/useToast';
 
-function updateWorkItemInCache(
+export function updateWorkItemInCache(
   queryClient: QueryClient,
   projectId: string,
   id: string,
@@ -70,13 +70,13 @@ function updateWorkItemInCache(
 // iteration board that renders the item. Restricting invalidation to these
 // scopes keeps boards config, members, areas, tags, overview, and other
 // project queries from refetching on every edit.
-function invalidateWorkItemScopes(queryClient: QueryClient, projectId: string) {
+export function invalidateWorkItemScopes(queryClient: QueryClient, projectId: string) {
   queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
   queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'backlog'] });
   queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'iterations'] });
 }
 
-function cancelWorkItemScopes(queryClient: QueryClient, projectId: string) {
+export function cancelWorkItemScopes(queryClient: QueryClient, projectId: string) {
   queryClient.cancelQueries({ queryKey: ['projects', projectId, 'work-items'] });
   queryClient.cancelQueries({ queryKey: ['projects', projectId, 'backlog'] });
   queryClient.cancelQueries({ queryKey: ['projects', projectId, 'iterations'] });
@@ -121,12 +121,17 @@ function buildWorkItemsParams(teamId?: string | null, filters?: WorkItemsQuery):
   return params;
 }
 
-export function useWorkItems(projectId: string, teamId?: string | null, filters?: WorkItemsQuery) {
+export function useWorkItems(
+  projectId: string,
+  teamId?: string | null,
+  filters?: WorkItemsQuery,
+  options?: { enabled?: boolean },
+) {
   const params = buildWorkItemsParams(teamId, filters);
   return useQuery<WorkItem[]>({
     queryKey: ['projects', projectId, 'work-items', params],
     queryFn: () => workItemsApi.getWorkItems(projectId, params),
-    enabled: !!projectId,
+    enabled: !!projectId && (options?.enabled ?? true),
   });
 }
 

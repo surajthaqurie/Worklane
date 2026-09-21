@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { WorkItemsRepository } from './work-items.repository.js';
+import { WorkItemsRepository, WipConstraint } from './work-items.repository.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { Permission } from '../authorization/permissions.js';
 
@@ -13,7 +13,13 @@ export class WorkItemTransitionsService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async transitionState(userId: string, id: string, targetState: string, expectedVersion?: number) {
+  async transitionState(
+    userId: string,
+    id: string,
+    targetState: string,
+    expectedVersion?: number,
+    wipConstraint?: WipConstraint,
+  ) {
     const item = await this.repo.getWorkItemById(id);
     if (!item) {
       throw new NotFoundException('Work item not found');
@@ -61,6 +67,7 @@ export class WorkItemTransitionsService {
       targetState,
       target.isDone,
       expectedVersion,
+      wipConstraint,
     );
 
     await this.notifications.notifyStateChanged({

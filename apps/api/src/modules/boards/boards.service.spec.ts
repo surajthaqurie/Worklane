@@ -4,6 +4,8 @@ import { BoardsRepository } from './boards.repository.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { WorkItemsService } from '../work-items/work-items.service.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
+import { WorkItemTransitionsService } from '../work-items/work-item-transitions.service.js';
+import { NotificationsGateway } from '../notifications/notifications.gateway.js';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { TeamsService } from '../teams/teams.service.js';
@@ -29,6 +31,9 @@ describe('BoardsService', () => {
       update: vi.fn(),
       remove: vi.fn(),
       getProjectStates: vi.fn().mockResolvedValue(mockProjectStates),
+      getWorkItemForMove: vi.fn(),
+      countItemsInStates: vi.fn().mockResolvedValue(0),
+      listProjectMemberIds: vi.fn().mockResolvedValue([]),
     };
 
     projectsService = {
@@ -58,6 +63,8 @@ describe('BoardsService', () => {
         { provide: ProjectsService, useValue: projectsService },
         { provide: WorkItemsService, useValue: workItemsService },
         { provide: TeamsService, useValue: teamsService },
+        { provide: WorkItemTransitionsService, useValue: { transitionState: vi.fn() } },
+        { provide: NotificationsGateway, useValue: { sendToUsers: vi.fn() } },
         { provide: AuthorizationService, useValue: authz },
       ],
     }).compile();

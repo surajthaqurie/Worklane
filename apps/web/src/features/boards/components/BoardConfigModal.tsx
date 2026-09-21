@@ -1,14 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
-import { BoardConfig, BoardColumn, CardFields, FilterConfig, BacklogLevel } from '@/shared/types/boards';
+import { BoardConfig, BoardColumn, CardFields, FilterConfig, BacklogLevel, SwimlaneType } from '@/shared/types/boards';
 import { WorkItemState } from '@/shared/types/work-items';
 import { useUpdateBoard, useCreateBoard } from '../hooks/useBoards';
 import { useTeams } from '@/features/teams/hooks/useTeams';
 import { StatesTabContent } from './StatesManager';
 import { Modal } from '@/shared/components/ui/Modal';
-import { Plus, ChevronUp, ChevronDown, Trash2, AlertTriangle, Settings2, Sliders, Layout, Filter, Tag } from 'lucide-react';
+import { Plus, ChevronUp, ChevronDown, Trash2, AlertTriangle, Settings2, Sliders, Layout, Filter, Tag, Columns3 } from 'lucide-react';
 import { formatApiError } from '@/shared/utils/error';
+import { SWIMLANE_OPTIONS } from '../swimlanes';
 
 export interface BoardConfigModalProps {
   projectId: string;
@@ -36,6 +37,7 @@ export function BoardConfigModal({
   const [name, setName] = useState(board?.name || 'Custom Board');
   const [description, setDescription] = useState(board?.description || '');
   const [teamId, setTeamId] = useState<string | null>(board?.teamId ?? null);
+  const [swimlane, setSwimlane] = useState<SwimlaneType>(board?.swimlane ?? 'none');
 
   const [columns, setColumns] = useState<BoardColumn[]>(() => {
     if (board?.columns && board.columns.length > 0) {
@@ -187,6 +189,7 @@ export function BoardConfigModal({
             name: name.trim(),
             description: description.trim() || null,
             teamId,
+            swimlane,
             columns,
             cardFields,
             filterConfig,
@@ -198,6 +201,7 @@ export function BoardConfigModal({
           name: name.trim(),
           description: description.trim() || undefined,
           teamId,
+          swimlane,
           columns,
           cardFields,
           filterConfig,
@@ -551,6 +555,27 @@ export function BoardConfigModal({
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-[var(--text-secondary)] flex items-center gap-1.5">
+                <Columns3 className="w-3.5 h-3.5 text-[var(--brand-primary)]" />
+                Swimlane Grouping
+              </label>
+              <select
+                value={swimlane}
+                onChange={(e) => setSwimlane(e.target.value as SwimlaneType)}
+                className="w-full border border-[var(--border-default)] rounded-[var(--radius-input)] px-3 py-2 text-xs bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
+              >
+                {SWIMLANE_OPTIONS.map((mode) => (
+                  <option key={mode.type} value={mode.type}>
+                    {mode.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[11px] text-[var(--text-muted)]">
+                {SWIMLANE_OPTIONS.find((m) => m.type === swimlane)?.description}
+              </span>
             </div>
           </div>
         )}

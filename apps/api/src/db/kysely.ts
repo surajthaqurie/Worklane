@@ -254,10 +254,12 @@ export interface Database {
     name: string;
     description: string | null;
     is_default: Generated<boolean>;
+    swimlane: ColumnType<string, string, string>;
     columns: ColumnType<BoardColumnsJson | string, BoardColumnsJson | string, BoardColumnsJson | string>;
     card_fields: ColumnType<BoardCardFieldsJson | string, BoardCardFieldsJson | string, BoardCardFieldsJson | string>;
     filter_config: ColumnType<BoardFilterConfigJson | string, BoardFilterConfigJson | string, BoardFilterConfigJson | string>;
     created_at: ColumnType<Date, string | undefined, never>;
+    updated_at: ColumnType<Date, string | undefined, string | Date>;
     version: Generated<number>;
   };
   security_audit_logs: {

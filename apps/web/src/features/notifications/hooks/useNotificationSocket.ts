@@ -75,6 +75,23 @@ export function useNotificationSocket(): NotificationSocketState {
       queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
     });
 
+    // Real-time board updates. The server only emits these to project members
+    // other than the actor, so invalidating the scoped queries is always safe
+    // and keeps connected boards in sync.
+    socket.on('board:updated', (payload: { projectId?: string }) => {
+      if (payload?.projectId) {
+        queryClient.invalidateQueries({ queryKey: ['projects', payload.projectId, 'boards'] });
+      }
+    });
+
+    socket.on('board:item-moved', (payload: { projectId?: string }) => {
+      if (payload?.projectId) {
+        queryClient.invalidateQueries({ queryKey: ['projects', payload.projectId, 'work-items'] });
+        queryClient.invalidateQueries({ queryKey: ['projects', payload.projectId, 'backlog'] });
+        queryClient.invalidateQueries({ queryKey: ['projects', payload.projectId, 'iterations'] });
+      }
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;

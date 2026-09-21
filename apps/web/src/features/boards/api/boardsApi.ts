@@ -1,7 +1,14 @@
 import { apiClient } from '@/shared/utils/apiClient';
-import { BoardConfig, BoardColumn, CardFields, FilterConfig } from '@/shared/types/boards';
+import { BoardConfig, BoardColumn, CardFields, FilterConfig, SwimlaneType } from '@/shared/types/boards';
+import { WorkItem } from '@/shared/types/work-items';
 
 export type { FilterConfig } from '@/shared/types/boards';
+
+export interface MoveWorkItemPayload {
+  state: string;
+  expectedVersion?: number;
+  bypassWip?: boolean;
+}
 
 export const boardsApi = {
   getBoards: (projectId: string, teamId?: string | null) => {
@@ -20,6 +27,7 @@ export const boardsApi = {
       name: string;
       description?: string;
       teamId?: string | null;
+      swimlane?: SwimlaneType;
       columns?: BoardColumn[];
       cardFields?: CardFields;
       filterConfig?: FilterConfig;
@@ -34,4 +42,16 @@ export const boardsApi = {
 
   deleteBoard: (projectId: string, boardId: string) =>
     apiClient.delete<{ success: boolean }>(`/projects/${projectId}/boards/${boardId}`),
+
+  /** WIP-aware board move. The server enforces per-column WIP limits atomically. */
+  moveWorkItem: (
+    projectId: string,
+    boardId: string,
+    workItemId: string,
+    payload: MoveWorkItemPayload
+  ) =>
+    apiClient.post<WorkItem>(
+      `/projects/${projectId}/boards/${boardId}/work-items/${workItemId}/move`,
+      payload
+    ),
 };

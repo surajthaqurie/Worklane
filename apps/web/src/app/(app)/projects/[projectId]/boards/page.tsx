@@ -2,11 +2,11 @@
 
 import React, { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { useWorkItems, useTransitionWorkItemState, useUpdateWorkItem } from '@/features/work-items/hooks/useWorkItems';
+import { useWorkItems, useUpdateWorkItem } from '@/features/work-items/hooks/useWorkItems';
 import { useWorkItemStates } from '@/features/work-items/hooks/useWorkItemStates';
-import { useBoards } from '@/features/boards/hooks/useBoards';
+import { useBoards, useBoardMoveWorkItem, wipBlockMessage } from '@/features/boards/hooks/useBoards';
 import { useProjectMembers } from '@/features/projects/hooks/useProjects';
-import { BoardConfig } from '@/shared/types/boards';
+import { BoardConfig, WipBlockInfo } from '@/shared/types/boards';
 import { WorkItem } from '@/shared/types/work-items';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { Board } from '@/features/boards/components/Board';
@@ -15,6 +15,7 @@ import { WorkItemDrawer } from '@/features/work-items/components/WorkItemDrawer'
 import { CreateWorkItemModal } from '@/features/work-items/components/CreateWorkItemModal';
 import { SquareKanban, Search, Filter, Settings2, Plus } from 'lucide-react';
 import { Spinner, ErrorState } from '@/shared/components/ui';
+import { useToast } from '@/shared/hooks/useToast';
 
 export default function ProjectBoardPage() {
   const params = useParams();
@@ -85,9 +86,19 @@ export default function ProjectBoardPage() {
     fields: 'points',
   });
 
-  const transitionWorkItem = useTransitionWorkItemState(projectId);
+  const moveWorkItem = useBoardMoveWorkItem(projectId, activeBoard?.id ?? null);
   const updateWorkItem = useUpdateWorkItem(projectId);
+  const toast = useToast();
   const [selectedItem, setSelectedItem] = useState<WorkItem | null>(null);
+
+  // Epic work items are needed to label epic swimlanes (the board query itself
+  // is filtered to story-level items, so epics are fetched on demand).
+  const { data: epics = [] } = useWorkItems(
+    projectId,
+    selectedTeamId,
+    { types: 'EPIC', limit: '500', fields: 'points' },
+    { enabled: activeBoard?.swimlane === 'epic' }
+  );
 
   const storyByParentId = useMemo(() => {
     const map: Record<string, { key: string; title: string }> = {};
@@ -100,8 +111,21 @@ export default function ProjectBoardPage() {
     return map;
   }, [workItems]);
 
-  const handleDragState = (itemId: string, stateKey: string) => {
-    transitionWorkItem.mutate({ id: itemId, state: stateKey });
+  const handleMoveWorkItem = (
+    itemId: string,
+    stateKey: string,
+    options?: { expectedVersion?: number; previousState?: string }
+  ) => {
+    moveWorkItem.mutate({
+      workItemId: itemId,
+      state: stateKey,
+      previousState: options?.previousState ?? '',
+      expectedVersion: options?.expectedVersion,
+    });
+  };
+
+  const handleWipBlocked = (info: WipBlockInfo) => {
+    toast.showError('Move blocked — WIP limit reached', wipBlockMessage(info));
   };
 
   const handleAssignItem = (itemId: string, userId: string | null) => {
@@ -250,10 +274,12 @@ export default function ProjectBoardPage() {
             items={workItems}
             states={states}
             board={activeBoard}
-            onStateChange={handleDragState}
+            onMoveWorkItem={handleMoveWorkItem}
+            onWipBlocked={handleWipBlocked}
             onSelectItem={setSelectedItem}
             storyByParentId={storyByParentId}
             members={members}
+            epics={epics}
             onAssign={handleAssignItem}
             onQuickAdd={handleQuickAdd}
           />

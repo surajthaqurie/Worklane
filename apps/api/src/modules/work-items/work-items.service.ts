@@ -364,8 +364,10 @@ export class WorkItemsService {
     commentId: string,
     content: string,
   ) {
-    const uuidRegex = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g;
-    const foundUuids = content.match(uuidRegex) || [];
+    // Only @-prefixed UUIDs count as mentions — a bare UUID floating in the
+    // comment (e.g. a pasted link/id) must never become a notification target.
+    const uuidMentionRegex = /@([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/g;
+    const foundUuids = (content.match(uuidMentionRegex) || []).map((m) => m.slice(1));
 
     const members = await this.projectsService.getMembers(actorId, projectId);
     const mentionedUserIds = new Set<string>(foundUuids);

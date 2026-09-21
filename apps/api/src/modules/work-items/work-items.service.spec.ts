@@ -442,6 +442,44 @@ describe('WorkItemsService', () => {
 
       expect(notifications.notifyMentioned).not.toHaveBeenCalled();
     });
+
+    it('does not mention a member from a bare UUID without the @ prefix', async () => {
+      // Regression: a raw UUID pasted in a comment (link/id reference) must
+      // NEVER become an arbitrary notification target.
+      const memberUuid = '00000000-0000-4000-8000-000000000002';
+      await givenItems([mockItem({ id: 'wi-1', title: 'Bug' })]);
+      projectsService.getMembers.mockResolvedValue([
+        { userId: memberUuid, name: 'Bob', email: 'bob@example.com' },
+      ]);
+      repo.createComment.mockResolvedValue({
+        id: 'c1',
+        content: `See ${memberUuid} for context`,
+      });
+
+      await service.addComment('u1', 'wi-1', `See ${memberUuid} for context`);
+
+      expect(notifications.notifyMentioned).not.toHaveBeenCalled();
+    });
+
+    it('mentions a member referenced by @uuid', async () => {
+      const memberUuid = '00000000-0000-4000-8000-000000000002';
+      await givenItems([mockItem({ id: 'wi-1', title: 'Bug' })]);
+      projectsService.getMembers.mockResolvedValue([
+        { userId: memberUuid, name: 'Bob', email: 'bob@example.com' },
+      ]);
+      repo.createComment.mockResolvedValue({
+        id: 'c1',
+        content: `Hey @${memberUuid} please review`,
+      });
+
+      await service.addComment('u1', 'wi-1', `Hey @${memberUuid} please review`);
+
+      expect(notifications.notifyMentioned).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mentionedUserIds: expect.arrayContaining([memberUuid]),
+        }),
+      );
+    });
   });
 
   describe('findOne / getActivity', () => {

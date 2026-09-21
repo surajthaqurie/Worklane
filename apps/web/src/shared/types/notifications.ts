@@ -15,7 +15,14 @@ export interface Notification {
   workItemId: string | null;
   actorId: string;
   actor?: { name?: string };
+  /** Display name of the user who triggered the event (enriched at query time). */
   actorName?: string;
+  /** Project owning the notification resource — enables navigation to the work item. */
+  projectId?: string | null;
+  /** Work item key, e.g. "PROJ-42" (enriched at query time). */
+  workItemKey?: string | null;
+  /** Work item title (enriched at query time). */
+  workItemTitle?: string | null;
   metadata: NotificationMetadata;
   readAt: string | null;
   createdAt: string;
@@ -23,6 +30,12 @@ export interface Notification {
 
 export interface NotificationsResponse {
   notifications: Notification[];
+  unreadCount: number;
+  /** Cursor for the next page of notifications, or null when there are no more. */
+  nextCursor: string | null;
+}
+
+export interface UnreadCountResponse {
   unreadCount: number;
 }
 

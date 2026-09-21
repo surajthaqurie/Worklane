@@ -54,6 +54,14 @@ export interface NotificationDto {
   type: NotificationType | string;
   workItemId: string | null;
   actorId: string;
+  /** Display name of the user who triggered the event (joined at query time). */
+  actorName?: string;
+  /** Project owning the resource, when known — enables notification navigation. */
+  projectId?: string | null;
+  /** Work item key, e.g. "PROJ-42" (joined at query time). */
+  workItemKey?: string | null;
+  /** Work item title (joined at query time). */
+  workItemTitle?: string | null;
   metadata: NotificationMetadata;
   readAt: string | null;
   createdAt: string;

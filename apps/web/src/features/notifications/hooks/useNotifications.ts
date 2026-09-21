@@ -1,14 +1,64 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { notificationsApi, FollowStatusDto, FollowerDto } from '../api/notificationsApi';
-import { NotificationsResponse, NotificationPreferences } from '@/shared/types/notifications';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
+import { notificationsApi, FollowStatusDto, FollowerDto, GetNotificationsParams } from '../api/notificationsApi';
+import { NotificationsResponse, NotificationPreferences, UnreadCountResponse } from '@/shared/types/notifications';
 import { useToast } from '@/shared/hooks/useToast';
 import { formatApiError } from '@/shared/utils/error';
 
-export function useNotifications(limit = 20) {
+export function useNotifications(options: GetNotificationsParams = {}) {
+  const { limit = 20, unreadOnly = false, cursor = null } = options;
   return useQuery<NotificationsResponse>({
-    queryKey: ['notifications', { limit }],
-    queryFn: () => notificationsApi.getNotifications(limit),
+    queryKey: ['notifications', { limit, unreadOnly, cursor }],
+    queryFn: () => notificationsApi.getNotifications({ limit, unreadOnly, cursor }),
   });
+}
+
+/** Cursor-paginated feed for the notification center (accumulates pages). */
+export function useNotificationsInfinite(unreadOnly = false, limit = 25) {
+  return useInfiniteQuery<NotificationsResponse>({
+    queryKey: ['notifications', 'infinite', { unreadOnly, limit }],
+    queryFn: ({ pageParam }) =>
+      notificationsApi.getNotifications({
+        limit,
+        unreadOnly,
+        cursor: (pageParam as string | null) ?? null,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+}
+
+export function useUnreadCount() {
+  return useQuery<UnreadCountResponse>({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: () => notificationsApi.getUnreadCount(),
+  });
+}
+
+/**
+ * Update every cached notifications shape (plain NotificationsResponse and
+ * React Query InfiniteData pages) after a read/mark-all mutation.
+ */
+function patchNotificationsCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  updater: (res: NotificationsResponse) => NotificationsResponse,
+) {
+  queryClient.setQueriesData({ queryKey: ['notifications'] }, (old: unknown) => {
+    if (!old || typeof old !== 'object') return old;
+    if (Array.isArray((old as NotificationsResponse).notifications)) {
+      return updater(old as NotificationsResponse);
+    }
+    const infinite = old as { pages?: NotificationsResponse[]; pageParams?: unknown[] };
+    if (Array.isArray(infinite.pages) && Array.isArray(infinite.pageParams)) {
+      return {
+        ...infinite,
+        pages: infinite.pages.map((page) =>
+          page && Array.isArray(page.notifications) ? updater(page) : page,
+        ),
+      };
+    }
+    return old;
+  });
+  queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
 }
 
 export function useMarkNotificationAsRead() {
@@ -18,17 +68,16 @@ export function useMarkNotificationAsRead() {
   return useMutation({
     mutationFn: (id: string) => notificationsApi.markAsRead(id),
     onSuccess: (updated) => {
-      queryClient.setQueriesData({ queryKey: ['notifications'] }, (old: unknown) => {
-        if (!old || typeof old !== 'object') return old;
-        const res = old as NotificationsResponse;
-        return {
-          ...res,
-          unreadCount: Math.max(0, res.unreadCount - 1),
-          notifications: res.notifications.map((n) =>
-            n.id === updated.id ? { ...n, readAt: updated.readAt || new Date().toISOString() } : n
-          ),
-        };
-      });
+      patchNotificationsCache(queryClient, (res) => ({
+        ...res,
+        unreadCount: Math.max(
+          0,
+          res.unreadCount - (res.notifications.some((n) => n.id === updated.id && !n.readAt) ? 1 : 0),
+        ),
+        notifications: res.notifications.map((n) =>
+          n.id === updated.id ? { ...n, readAt: updated.readAt || new Date().toISOString() } : n
+        ),
+      }));
     },
     onError: (err) => {
       toast.showError('Failed to mark notification read', formatApiError(err));
@@ -43,15 +92,11 @@ export function useMarkAllNotificationsAsRead() {
   return useMutation({
     mutationFn: () => notificationsApi.markAllAsRead(),
     onSuccess: () => {
-      queryClient.setQueriesData({ queryKey: ['notifications'] }, (old: unknown) => {
-        if (!old || typeof old !== 'object') return old;
-        const res = old as NotificationsResponse;
-        return {
-          ...res,
-          unreadCount: 0,
-          notifications: res.notifications.map((n) => ({ ...n, readAt: n.readAt || new Date().toISOString() })),
-        };
-      });
+      patchNotificationsCache(queryClient, (res) => ({
+        ...res,
+        unreadCount: 0,
+        notifications: res.notifications.map((n) => ({ ...n, readAt: n.readAt || new Date().toISOString() })),
+      }));
     },
     onError: (err) => {
       toast.showError('Failed to mark all notifications read', formatApiError(err));

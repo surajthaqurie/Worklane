@@ -1,59 +1,29 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Bell, CheckCheck, X, Settings } from 'lucide-react';
-import { io, Socket } from 'socket.io-client';
-import { useQueryClient } from '@tanstack/react-query';
+import React, { useState, useRef, useEffect } from 'react';
+import { Bell, CheckCheck, X, Settings, WifiOff, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 import {
   useNotifications,
   useMarkNotificationAsRead,
   useMarkAllNotificationsAsRead,
 } from '../hooks/useNotifications';
+import { useNotificationSocket } from '../hooks/useNotificationSocket';
 import { NotificationItem } from './NotificationItem';
 import { NotificationPreferencesModal } from './NotificationPreferencesModal';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-const DEFAULT_USER_ID = '11111111-1111-1111-1111-111111111111';
 
 export function NotificationsPopover() {
   const [isOpen, setIsOpen] = useState(false);
   const [isPrefsOpen, setIsPrefsOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const socketRef = useRef<Socket | null>(null);
-  const queryClient = useQueryClient();
+  const socketState = useNotificationSocket();
 
-  const { data, isLoading } = useNotifications(20);
+  const { data, isLoading, isError } = useNotifications({ limit: 20 });
   const markAsReadMut = useMarkNotificationAsRead();
   const markAllAsReadMut = useMarkAllNotificationsAsRead();
 
   const notifications = data?.notifications || [];
   const unreadCount = data?.unreadCount || 0;
-
-  // Real-time WebSocket connection
-  useEffect(() => {
-    try {
-      const socket = io(`${API_URL}/notifications`, {
-        transports: ['websocket', 'polling'],
-        query: { userId: DEFAULT_USER_ID },
-      });
-
-      socket.on('connect', () => {
-        socket.emit('subscribe', { userId: DEFAULT_USER_ID });
-      });
-
-      socket.on('notification', () => {
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      });
-
-      socketRef.current = socket;
-
-      return () => {
-        socket.disconnect();
-      };
-    } catch (err) {
-      console.error('Failed to initialize notification WebSocket', err);
-    }
-  }, [queryClient]);
 
   // Close popover when clicking outside
   useEffect(() => {
@@ -125,7 +95,17 @@ export function NotificationsPopover() {
             </div>
 
             <div className="max-h-96 overflow-y-auto divide-y divide-[var(--border-subtle)]">
-              {isLoading && notifications.length === 0 ? (
+              {socketState.error && (
+                <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40">
+                  <WifiOff className="w-3 h-3 shrink-0" />
+                  <span>Real-time updates unavailable — {socketState.error}.</span>
+                </div>
+              )}
+              {isError && notifications.length === 0 ? (
+                <div className="p-4 text-center text-xs text-red-600 dark:text-red-400">
+                  Failed to load notifications.
+                </div>
+              ) : isLoading && notifications.length === 0 ? (
                 <div className="p-4 text-center text-xs text-[var(--text-secondary)]">Loading notifications...</div>
               ) : notifications.length === 0 ? (
                 <div className="p-8 text-center text-xs text-[var(--text-secondary)]">No notifications yet.</div>
@@ -134,6 +114,17 @@ export function NotificationsPopover() {
                   <NotificationItem key={n.id} notification={n} onMarkAsRead={(id) => markAsReadMut.mutate(id)} />
                 ))
               )}
+            </div>
+
+            <div className="border-t border-[var(--border-subtle)]">
+              <Link
+                href="/notifications"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center justify-center gap-1 px-4 py-2.5 text-xs font-medium text-[var(--brand-primary)] hover:bg-[var(--bg-surface-hover)] transition-colors"
+              >
+                View all notifications
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
           </div>
         )}

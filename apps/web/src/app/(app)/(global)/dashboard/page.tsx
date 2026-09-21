@@ -25,7 +25,7 @@ export default function DashboardPage() {
 function DashboardContent() {
   const { user } = useAuth();
   const { data: projects, isLoading: projectsLoading, error: projectsError } = useProjects();
-  const { data: notificationsData } = useNotifications(10);
+  const { data: notificationsData } = useNotifications({ limit: 10 });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const firstProjectId = projects && projects.length > 0 ? projects[0].id : '';
@@ -186,7 +186,7 @@ function DashboardContent() {
                       <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] text-[var(--text-primary)] font-medium">
-                          {n.actor?.name || 'System'}
+                          {n.actorName || n.actor?.name || 'System'}
                         </p>
                         <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
                           {n.type === 'ASSIGNED' ? 'assigned a work item to you' : n.type === 'COMMENT' ? 'commented on a work item' : 'updated a work item'}

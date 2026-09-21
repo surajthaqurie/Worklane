@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { ForbiddenException } from '@nestjs/common';
 import { NotificationsService } from './notifications.service.js';
 import { NotificationsRepository } from './notifications.repository.js';
 import { NotificationsGateway } from './notifications.gateway.js';
+import { NotificationType } from './dto/notifications.dto.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { db } from '../../db/kysely.js';
 
@@ -111,5 +113,88 @@ describe.skipIf(!INTEGRATION)('Notifications, Followers & Mentions DB Integratio
     });
 
     expect(updated.notifyFollowed).toBe(false);
+  });
+
+  it('should enforce project access on follow/unfollow (reject outsiders)', async () => {
+    await expect(
+      service.followWorkItem(outsiderId, projectId, workItemId),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('should deduplicate identical events within the window (single row)', async () => {
+    const first = await service.createNotification({
+      userId: memberId,
+      type: NotificationType.MENTIONED,
+      workItemId,
+      actorId: ownerId,
+      metadata: { title: 'Dedup target', key: 'NOTIF-1' },
+    });
+
+    const second = await service.createNotification({
+      userId: memberId,
+      type: NotificationType.MENTIONED,
+      workItemId,
+      actorId: ownerId,
+      metadata: { title: 'Dedup target', key: 'NOTIF-1' },
+    });
+
+    expect(first).not.toBeNull();
+    // Second call returns the existing (deduplicated) notification.
+    expect(second?.id).toBe(first?.id);
+
+    const rows = await db
+      .selectFrom('notifications')
+      .where('user_id', '=', memberId)
+      .where('type', '=', NotificationType.MENTIONED)
+      .where('work_item_id', '=', workItemId)
+      .selectAll()
+      .execute();
+
+    expect(rows).toHaveLength(1);
+
+    await db.deleteFrom('notifications').where('id', '=', first!.id).execute();
+  });
+
+  it('should expose navigation data (projectId, workItemKey, actorName) on listed notifications', async () => {
+    const created = await service.createNotification({
+      userId: memberId,
+      type: NotificationType.ASSIGNED,
+      workItemId,
+      actorId: ownerId,
+      metadata: { title: 'Navigation target', key: 'NOTIF-NAV' },
+    });
+    expect(created).not.toBeNull();
+
+    const { notifications } = await service.getNotifications(memberId, {
+      limit: 20,
+    });
+
+    const nav = notifications.find((n) => n.id === created!.id);
+    expect(nav).toBeTruthy();
+    expect(nav?.projectId).toBe(projectId);
+    expect(nav?.workItemKey).toBeTruthy();
+    expect(nav?.actorName).toBeTruthy();
+
+    await db.deleteFrom('notifications').where('id', '=', created!.id).execute();
+  });
+
+  it('should only allow the recipient to mark a notification as read', async () => {
+    const created = await service.createNotification({
+      userId: memberId,
+      type: NotificationType.ASSIGNED,
+      workItemId,
+      actorId: ownerId,
+      metadata: { title: 'Read guard', key: 'NOTIF-READ' },
+    });
+    expect(created).not.toBeNull();
+
+    // Another user cannot mark it read.
+    const foreignAttempt = await repo.markAsRead(created!.id, ownerId);
+    expect(foreignAttempt).toBeNull();
+
+    const ownRead = await repo.markAsRead(created!.id, memberId);
+    expect(ownRead?.readAt).toBeTruthy();
+
+    await db.deleteFrom('notifications').where('id', '=', created!.id).execute();
   });
 });

@@ -68,11 +68,29 @@ export class NotificationsRepository {
 
   async getNotifications(userId: string, query: GetNotificationsQuery) {
     let q = db
-      .selectFrom('notifications')
-      .where('user_id', '=', userId);
+      .selectFrom('notifications as n')
+      .innerJoin('users as actor', 'actor.id', 'n.actor_id')
+      .leftJoin('work_items as wi', 'wi.id', 'n.work_item_id')
+      .leftJoin('projects as p', 'p.id', 'wi.project_id')
+      .where('n.user_id', '=', userId)
+      .select([
+        'n.id',
+        'n.user_id',
+        'n.type',
+        'n.work_item_id',
+        'n.actor_id',
+        'n.metadata',
+        'n.read_at',
+        'n.created_at',
+        'actor.name as actor_name',
+        'p.key as project_key',
+        'wi.seq_no as work_item_seq',
+        'wi.title as work_item_title',
+        'wi.project_id',
+      ]);
 
     if (query.unreadOnly) {
-      q = q.where('read_at', 'is', null);
+      q = q.where('n.read_at', 'is', null);
     }
 
     if (query.cursor) {
@@ -85,10 +103,10 @@ export class NotificationsRepository {
       if (cursorRow) {
         q = q.where((eb) =>
           eb.or([
-            eb('notifications.created_at', '<', cursorRow.created_at),
+            eb('n.created_at', '<', cursorRow.created_at),
             eb.and([
-              eb('notifications.created_at', '=', cursorRow.created_at),
-              eb('notifications.id', '<', cursorRow.id),
+              eb('n.created_at', '=', cursorRow.created_at),
+              eb('n.id', '<', cursorRow.id),
             ]),
           ]),
         );
@@ -97,10 +115,9 @@ export class NotificationsRepository {
 
     const limit = query.limit ?? 20;
     const items = await q
-      .orderBy('created_at', 'desc')
-      .orderBy('id', 'desc')
+      .orderBy('n.created_at', 'desc')
+      .orderBy('n.id', 'desc')
       .limit(limit + 1)
-      .selectAll()
       .execute();
 
     const hasMore = items.length > limit;
@@ -307,6 +324,13 @@ export class NotificationsRepository {
       type: row.type,
       workItemId: row.work_item_id,
       actorId: row.actor_id,
+      actorName: row.actor_name ?? undefined,
+      projectId: row.project_id ?? null,
+      workItemKey:
+        row.project_key != null && row.work_item_seq != null
+          ? `${row.project_key}-${row.work_item_seq}`
+          : undefined,
+      workItemTitle: row.work_item_title ?? undefined,
       metadata,
       readAt: row.read_at ? new Date(row.read_at).toISOString() : null,
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),

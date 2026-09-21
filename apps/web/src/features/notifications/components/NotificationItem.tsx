@@ -2,15 +2,27 @@
 
 import React from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { UserCheck, MessageSquare, RefreshCw, CalendarPlus, CalendarMinus, GitFork, Bell } from 'lucide-react';
+import {
+  UserCheck,
+  MessageSquare,
+  RefreshCw,
+  CalendarPlus,
+  CalendarMinus,
+  GitFork,
+  Bell,
+  PenLine,
+  Eye,
+} from 'lucide-react';
 import { Notification } from '@/shared/types/notifications';
 
 export interface NotificationItemProps {
   notification: Notification;
-  onMarkAsRead: (id: string) => void;
+  onMarkAsRead?: (id: string) => void;
+  /** When provided, clicking the item also navigates (e.g. to the work item). */
+  onNavigate?: (notification: Notification) => void;
 }
 
-export function NotificationItem({ notification: n, onMarkAsRead }: NotificationItemProps) {
+export function NotificationItem({ notification: n, onMarkAsRead, onNavigate }: NotificationItemProps) {
   const isUnread = !n.readAt;
 
   const getTypeIcon = (type: string) => {
@@ -27,6 +39,12 @@ export function NotificationItem({ notification: n, onMarkAsRead }: Notification
         return <CalendarMinus className="w-4 h-4 text-rose-500" />;
       case 'PARENT_CHANGED':
         return <GitFork className="w-4 h-4 text-indigo-500" />;
+      case 'WORK_ITEM_UPDATED':
+        return <PenLine className="w-4 h-4 text-sky-500" />;
+      case 'COMMENT_ADDED':
+        return <MessageSquare className="w-4 h-4 text-violet-500" />;
+      case 'FOLLOWED':
+        return <Eye className="w-4 h-4 text-teal-500" />;
       default:
         return <Bell className="w-4 h-4 text-gray-500" />;
     }
@@ -34,30 +52,55 @@ export function NotificationItem({ notification: n, onMarkAsRead }: Notification
 
   const formatText = (notif: Notification) => {
     const meta = notif.metadata || {};
-    const keyStr = meta.key ? `[${meta.key}] ` : '';
-    const titleStr = meta.title || 'Work Item';
+    const who = notif.actorName || notif.actor?.name || 'Someone';
+
+    // Prefer the project-enriched key/title; fall back to event metadata.
+    const keyStr = notif.workItemKey || (meta.key ? `[${meta.key}]` : null);
+    const titleStr = notif.workItemTitle || meta.title || 'work item';
+    const label = keyStr ? `${keyStr} ${titleStr}` : titleStr;
 
     switch (notif.type) {
       case 'ASSIGNED':
-        return `Assigned to you: ${keyStr}${titleStr}`;
+        return `${who} assigned you to ${label}`;
       case 'MENTIONED':
-        return `Mentioned you in comment on ${keyStr}${titleStr}`;
+        return `${who} mentioned you in a comment on ${label}`;
       case 'STATE_CHANGED':
-        return `State changed from ${meta.oldState || 'unknown'} to ${meta.newState || 'unknown'} on ${keyStr}${titleStr}`;
+        return `${who} changed the state of ${label} from ${meta.oldState || 'unknown'} to ${meta.newState || 'unknown'}`;
       case 'ADDED_TO_SPRINT':
-        return `Added ${keyStr}${titleStr} to sprint ${meta.sprintName ? `"${meta.sprintName}"` : ''}`;
+        return `${who} added ${label} to sprint ${meta.sprintName ? `"${meta.sprintName}"` : ''}`;
       case 'REMOVED_FROM_SPRINT':
-        return `Removed ${keyStr}${titleStr} from sprint ${meta.sprintName ? `"${meta.sprintName}"` : ''}`;
+        return `${who} removed ${label} from sprint ${meta.sprintName ? `"${meta.sprintName}"` : ''}`;
       case 'PARENT_CHANGED':
-        return `Parent relationship changed for ${keyStr}${titleStr}`;
+        return `${who} changed the parent of ${label}`;
+      case 'WORK_ITEM_UPDATED':
+        return `${who} updated ${label}`;
+      case 'COMMENT_ADDED':
+        return `${who} commented on ${label}`;
+      case 'FOLLOWED':
+        return `${who} started following ${label}`;
       default:
-        return `Notification for ${keyStr}${titleStr}`;
+        return `${who} • ${notif.type.replace(/_/g, ' ').toLowerCase()} on ${label}`;
     }
+  };
+
+  const handleClick = () => {
+    if (isUnread && onMarkAsRead) {
+      onMarkAsRead(n.id);
+    }
+    onNavigate?.(n);
   };
 
   return (
     <div
-      onClick={() => isUnread && onMarkAsRead(n.id)}
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
       className={`p-3 flex items-start gap-3 transition-colors cursor-pointer hover:bg-[var(--bg-surface-hover)] ${
         isUnread ? 'bg-blue-500/5' : ''
       }`}

@@ -76,6 +76,18 @@ describe.skipIf(!INTEGRATION)('IterationsService (DB integration)', () => {
     projectId = project.id;
     userId = user.id;
     areaId = area.id;
+
+    // Ensure the project has the default workflow states used by makeWorkItem
+    // (fk_work_items_state requires the state to exist for the project).
+    await db
+      .insertInto('work_item_states')
+      .values([
+        { project_id: projectId, key: 'TODO', name: 'To Do', color: '#94A3B8', sort_order: 0, is_done: false, is_default: true },
+        { project_id: projectId, key: 'IN_PROGRESS', name: 'In Progress', color: '#3B82F6', sort_order: 1, is_done: false },
+        { project_id: projectId, key: 'DONE', name: 'Done', color: '#22C55E', sort_order: 2, is_done: true },
+      ])
+      .onConflict((oc) => oc.columns(['project_id', 'key']).doNothing())
+      .execute();
   });
 
   afterAll(async () => {

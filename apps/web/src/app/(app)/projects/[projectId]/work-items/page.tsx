@@ -2,7 +2,7 @@
 
 import { Suspense, use, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useWorkItems } from '@/features/work-items/hooks/useWorkItems';
+import { useWorkItems, useWorkItemDetail } from '@/features/work-items/hooks/useWorkItems';
 import { useWorkItemStates } from '@/features/work-items/hooks/useWorkItemStates';
 import { WorkItem } from '@/shared/types/work-items';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
@@ -52,6 +52,20 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
       offset: String(page * PAGE_SIZE),
     },
   );
+
+  // Depth-first: local row selection, then an item already loaded in the list,
+  // then a detail fetch for ids deep-linked via ?item= (notification center).
+  const itemParam = searchParams.get('item');
+  const itemFromList = itemParam && workItems.length > 0
+    ? workItems.find((w) => w.id === itemParam) ?? null
+    : null;
+  const { data: itemFromDetail } = useWorkItemDetail(itemParam ?? '');
+  const drawerItem = selectedItem ?? itemFromList ?? (itemParam ? itemFromDetail ?? null : null);
+
+  const closeDrawer = () => {
+    setSelectedItem(null);
+    router.replace(pathname, { scroll: false });
+  };
 
   const hasNextPage = workItems.length === PAGE_SIZE;
 
@@ -214,7 +228,7 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
         </div>
       </div>
 
-      {selectedItem && <WorkItemDrawer item={selectedItem} onClose={() => setSelectedItem(null)} />}
+      {drawerItem && <WorkItemDrawer item={drawerItem} onClose={closeDrawer} />}
 
       <CreateWorkItemModal
         projectId={resolvedParams.projectId}

@@ -4,6 +4,8 @@ import { NotificationsGateway } from './notifications.gateway.js';
 import { GetNotificationsQuery, NotificationDto, NotificationType, UpdateNotificationPreferencesDto } from './dto/notifications.dto.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { Permission } from '../authorization/permissions.js';
+import { BackgroundJobsService } from '../background-jobs/background-jobs.service.js';
+import { JobType } from '../background-jobs/dto/background-job.dto.js';
 import { db } from '../../db/kysely.js';
 
 export interface BaseNotificationInput {
@@ -22,6 +24,7 @@ export class NotificationsService {
     private readonly repo: NotificationsRepository,
     private readonly gateway: NotificationsGateway,
     private readonly authz: AuthorizationService,
+    private readonly backgroundJobs: BackgroundJobsService,
   ) {}
 
   async getNotifications(userId: string, query: GetNotificationsQuery) {
@@ -118,10 +121,26 @@ export class NotificationsService {
   }
 
   /**
-   * Email-ready architecture dispatch hook
+   * Phase 15 — Email notifications are produced asynchronously through the
+   * BullMQ background job queue instead of blocking the request.
    */
   private queueEmailNotification(userId: string, notification: NotificationDto) {
-    this.logger.debug(`[Email Service Hook] Queued email notification for user ${userId} (type: ${notification.type})`);
+    this.backgroundJobs
+      .dispatchJob({
+        jobType: JobType.EMAIL_NOTIFICATION,
+        payload: {
+          recipientUserId: userId,
+          notificationId: notification.id,
+          notificationType: notification.type,
+          workItemId: notification.workItemId,
+          subject: `[Worklane] ${notification.metadata.title ?? notification.type}`,
+        },
+        idempotencyKey: `email:${userId}:${notification.id}`,
+        maxRetries: 3,
+      })
+      .catch((err) => {
+        this.logger.error(`Failed to enqueue email notification job: ${err?.message || err}`);
+      });
   }
 
   // ─── Mentions Parser & Validation (Phase 14) ─────────────────────────────

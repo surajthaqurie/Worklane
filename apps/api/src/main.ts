@@ -29,6 +29,7 @@ async function bootstrap() {
   });
 
   app.useGlobalFilters(new AppExceptionFilter());
+  app.enableShutdownHooks(); // gracefully close queues/workers on SIGTERM/SIGINT
 
   const port = parseInt(process.env.PORT || '4000', 10);
   await app.listen(port);

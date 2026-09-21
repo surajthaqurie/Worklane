@@ -48,6 +48,7 @@ describe.skipIf(!INTEGRATION)('Work item workflow (DB integration)', () => {
       new NotificationsRepository(),
       { sendNotificationToUser: () => {} } as any,
       authz,
+      { dispatchJob: async () => ({ job: {}, isDuplicate: false }) } as any,
     );
 
     const projectsRepo = new ProjectsRepository();

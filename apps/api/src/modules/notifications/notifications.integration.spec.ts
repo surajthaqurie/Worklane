@@ -27,7 +27,9 @@ describe.skipIf(!INTEGRATION)('Notifications, Followers & Mentions DB Integratio
     } as any;
     const authz = new AuthorizationService();
 
-    service = new NotificationsService(repo, gateway, authz);
+    service = new NotificationsService(repo, gateway, authz, {
+      dispatchJob: vi.fn().mockResolvedValue({ job: {}, isDuplicate: false }),
+    } as any);
 
     const users = await db.selectFrom('users').select(['id', 'email', 'name']).limit(3).execute();
     ownerId = users[0].id;

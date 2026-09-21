@@ -29,7 +29,9 @@ describe.skipIf(!INTEGRATION)('Attachments & Object Storage DB Integration (Phas
   beforeAll(async () => {
     objectStorage = new ObjectStorageService();
     const authz = new AuthorizationService();
-    attachmentsService = new AttachmentsService(authz, objectStorage);
+    attachmentsService = new AttachmentsService(authz, objectStorage, {
+      dispatchJob: vi.fn().mockResolvedValue({ job: {}, isDuplicate: false }),
+    } as any);
 
     const history = new WorkItemHistoryService(new WorkItemHistoryRepository());
     const workItemsRepo = new WorkItemsRepository(history);

@@ -45,7 +45,9 @@ describe('Followers, Mentions & Deduplication unit tests (Phase 14)', () => {
       requireProjectPermission: vi.fn().mockResolvedValue(true),
     };
 
-    service = new NotificationsService(repo, gateway, authz);
+    service = new NotificationsService(repo, gateway, authz, {
+      dispatchJob: vi.fn().mockResolvedValue({ job: {}, isDuplicate: false }),
+    } as any);
   });
 
   describe('Notification Creation & Deduplication', () => {

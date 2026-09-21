@@ -63,7 +63,7 @@ describe('NotificationsService', () => {
       ],
     })
       .overrideProvider(NotificationsService)
-      .useValue(new NotificationsService(repo, gateway, { requireProjectPermission: vi.fn().mockResolvedValue(true) } as any))
+      .useValue(new NotificationsService(repo, gateway, { requireProjectPermission: vi.fn().mockResolvedValue(true) } as any, { dispatchJob: vi.fn().mockResolvedValue({ job: {}, isDuplicate: false }) } as any))
       .compile();
 
     service = module.get<NotificationsService>(NotificationsService);

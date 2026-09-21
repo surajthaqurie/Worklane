@@ -13,7 +13,9 @@ describe('AttachmentsService unit tests (Phase 13)', () => {
       requireProjectPermission: vi.fn().mockResolvedValue(true),
     };
     objectStorage = new ObjectStorageService();
-    service = new AttachmentsService(mockAuthz, objectStorage);
+    service = new AttachmentsService(mockAuthz, objectStorage, {
+      dispatchJob: vi.fn().mockResolvedValue({ job: {}, isDuplicate: false }),
+    } as any);
   });
 
   describe('File Validation', () => {

@@ -3,11 +3,14 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { Permission } from '../authorization/permissions.js';
 import { ObjectStorageService, PresignedUploadResult, PresignedDownloadResult } from './object-storage.service.js';
+import { BackgroundJobsService } from '../background-jobs/background-jobs.service.js';
+import { JobType } from '../background-jobs/dto/background-job.dto.js';
 import path from 'path';
 
 export const MAX_FILE_SIZE_BYTES = (parseInt(process.env.MAX_FILE_SIZE_MB || '25', 10)) * 1024 * 1024;
@@ -55,10 +58,42 @@ const EXTENSION_MIME_MAP: Record<string, string[]> = {
 
 @Injectable()
 export class AttachmentsService {
+  private readonly logger = new Logger(AttachmentsService.name);
+
   constructor(
     private readonly authz: AuthorizationService,
     private readonly objectStorage: ObjectStorageService,
+    private readonly backgroundJobs: BackgroundJobsService,
   ) {}
+
+  /**
+   * Phase 15 — Asynchronously processes an uploaded attachment (virus scan,
+   * thumbnail generation, metadata extraction) in the background queue.
+   */
+  private enqueueAttachmentProcessing(record: {
+    id: string;
+    object_key: string | null;
+    file_name: string;
+    content_type: string;
+    projectId?: string;
+  }) {
+    this.backgroundJobs
+      .dispatchJob({
+        jobType: JobType.ATTACHMENT_PROCESSING,
+        payload: {
+          attachmentId: record.id,
+          fileKey: record.object_key ?? record.file_name,
+          fileName: record.file_name,
+          contentType: record.content_type,
+          projectId: record.projectId,
+        },
+        idempotencyKey: `attachment:${record.id}`,
+        maxRetries: 3,
+      })
+      .catch((err) => {
+        this.logger.error(`Failed to enqueue attachment processing job: ${err?.message || err}`);
+      });
+  }
 
   /**
    * Validate file metadata (size, MIME, extensions)
@@ -175,6 +210,14 @@ export class AttachmentsService {
       .returning(['id', 'work_item_id', 'user_id', 'file_name', 'file_size', 'content_type', 'url', 'object_key', 'created_at'])
       .executeTakeFirstOrThrow();
 
+    this.enqueueAttachmentProcessing({
+      id: record.id,
+      object_key: record.object_key,
+      file_name: record.file_name,
+      content_type: record.content_type,
+      projectId,
+    });
+
     return record;
   }
 
@@ -222,6 +265,13 @@ export class AttachmentsService {
       })
       .returning(['id', 'work_item_id', 'user_id', 'file_name', 'file_size', 'content_type', 'url', 'object_key', 'created_at'])
       .executeTakeFirstOrThrow();
+
+    this.enqueueAttachmentProcessing({
+      id: record.id,
+      object_key: record.object_key,
+      file_name: record.file_name,
+      content_type: record.content_type,
+    });
 
     return record;
   }

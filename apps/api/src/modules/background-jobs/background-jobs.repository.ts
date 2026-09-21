@@ -114,6 +114,22 @@ export class BackgroundJobsRepository {
     return rows.map((r) => this.mapToDto(r));
   }
 
+  /**
+   * Finds jobs stuck in PROCESSING longer than `sinceMinutes` — typically the
+   * result of a crashed worker — so the recovery routine can re-queue them.
+   */
+  async findStaleProcessing(sinceMinutes: number, now: Date = new Date()): Promise<BackgroundJobDto[]> {
+    const cutoff = new Date(now.getTime() - sinceMinutes * 60 * 1000);
+    const rows = await db
+      .selectFrom('background_jobs')
+      .where('status', '=', JobStatus.PROCESSING)
+      .where('started_at', '<', cutoff)
+      .selectAll()
+      .execute();
+
+    return rows.map((r) => this.mapToDto(r));
+  }
+
   private mapToDto(row: any): BackgroundJobDto {
     let payload: any = {};
     if (typeof row.payload === 'string') {

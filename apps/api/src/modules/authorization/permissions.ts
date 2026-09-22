@@ -67,6 +67,17 @@ export enum Permission {
   TEAM_DELETE = 'team:delete',
   TEAM_MANAGE_MEMBERS = 'team:manage_members',
   TEAM_MANAGE_SETTINGS = 'team:manage_settings',
+
+  // ── Delivery Plans (Phase 17) ──────────────────────────────────────────────
+  DELIVERY_PLAN_VIEW = 'delivery_plan:view',
+  DELIVERY_PLAN_CREATE = 'delivery_plan:create',
+  DELIVERY_PLAN_EDIT = 'delivery_plan:edit',
+  DELIVERY_PLAN_DELETE = 'delivery_plan:delete',
+
+  // ── Work item dependencies (Phase 17) ──────────────────────────────────────
+  WORK_ITEM_LINK_VIEW = 'work_item:link_view',
+  WORK_ITEM_LINK_CREATE = 'work_item:link_create',
+  WORK_ITEM_LINK_DELETE = 'work_item:link_delete',
 }
 
 const MEMBER_PERMISSIONS: ReadonlySet<Permission> = new Set([
@@ -85,6 +96,10 @@ const MEMBER_PERMISSIONS: ReadonlySet<Permission> = new Set([
   Permission.QUERY_CREATE,
   Permission.QUERY_EDIT,
   Permission.TEAM_VIEW,
+  Permission.DELIVERY_PLAN_VIEW,
+  Permission.WORK_ITEM_LINK_VIEW,
+  Permission.WORK_ITEM_LINK_CREATE,
+  Permission.WORK_ITEM_LINK_DELETE,
 ]);
 
 const ADMIN_PERMISSIONS: ReadonlySet<Permission> = new Set([
@@ -109,6 +124,9 @@ const ADMIN_PERMISSIONS: ReadonlySet<Permission> = new Set([
   Permission.TEAM_DELETE,
   Permission.TEAM_MANAGE_MEMBERS,
   Permission.TEAM_MANAGE_SETTINGS,
+  Permission.DELIVERY_PLAN_CREATE,
+  Permission.DELIVERY_PLAN_EDIT,
+  Permission.DELIVERY_PLAN_DELETE,
 ]);
 
 const OWNER_PERMISSIONS: ReadonlySet<Permission> = new Set(Object.values(Permission));

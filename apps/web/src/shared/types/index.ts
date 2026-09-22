@@ -6,3 +6,20 @@ export * from './boards';
 export * from './backlogs';
 export * from './iterations';
 export * from './notifications';
+export type {
+  DeliveryPlan,
+  PlanTeam,
+  CreateDeliveryPlanDto,
+  UpdateDeliveryPlanDto,
+  SetPlanTeamsDto,
+  TimelineTeam,
+  TimelineIteration,
+  TimelineWorkItem,
+  WorkItemLinkType,
+  TimelineDependency,
+  DeliveryPlanTimeline,
+  TimelineQueryParams,
+  WorkItemLink,
+  WorkItemLinksResponse,
+  CreateDependencyDto,
+} from './delivery-plans';

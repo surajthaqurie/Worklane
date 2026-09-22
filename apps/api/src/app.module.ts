@@ -14,6 +14,7 @@ import { AuthModule } from './modules/auth/auth.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { AttachmentsModule } from './modules/attachments/attachments.module.js';
 import { BackgroundJobsModule } from './modules/background-jobs/background-jobs.module.js';
+import { DeliveryPlansModule } from './modules/delivery-plans/delivery-plans.module.js';
 import { AppExceptionFilter } from './common/exceptions/app-exception.filter.js';
 import { IdempotencyModule } from './common/idempotency/idempotency.module.js';
 import { IdempotencyInterceptor } from './common/idempotency/idempotency.interceptor.js';
@@ -40,6 +41,7 @@ import { IdempotencyInterceptor } from './common/idempotency/idempotency.interce
     BoardsModule,
     AttachmentsModule,
     BackgroundJobsModule,
+    DeliveryPlansModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AppExceptionFilter },

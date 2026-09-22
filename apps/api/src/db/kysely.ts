@@ -90,6 +90,29 @@ export interface Database {
     team_id: string;
     area_id: string;
   };
+  delivery_plans: {
+    id: Generated<string>;
+    project_id: string;
+    name: string;
+    description: string | null;
+    created_by: string;
+    created_at: ColumnType<Date, string | undefined, never>;
+    updated_at: ColumnType<Date, string | undefined, string | Date>;
+  };
+  delivery_plan_teams: {
+    plan_id: string;
+    team_id: string;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
+  work_item_links: {
+    id: Generated<string>;
+    project_id: string;
+    source_work_item_id: string;
+    target_work_item_id: string;
+    link_type: Generated<'DEPENDS_ON' | 'RELATED'>;
+    created_by: string;
+    created_at: ColumnType<Date, string | undefined, never>;
+  };
   areas: {
     id: Generated<string>;
     project_id: string;

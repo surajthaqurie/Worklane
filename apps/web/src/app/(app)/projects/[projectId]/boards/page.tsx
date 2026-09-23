@@ -121,6 +121,7 @@ export default function ProjectBoardPage() {
       state: stateKey,
       previousState: options?.previousState ?? '',
       expectedVersion: options?.expectedVersion,
+      teamId: selectedTeamId,
     });
   };
 

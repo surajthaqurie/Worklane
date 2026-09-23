@@ -26,6 +26,12 @@ export interface WipConstraint {
   excludeItemId?: string;
   /** Board filter scope — counts only item types the board displays. */
   typeScope?: WorkItemType[];
+  /**
+   * Team scope — when the board is team-scoped, the limit is counted over the
+   * team's visible items (its areas + iterations) only, so a team board's WIP
+   * boundary is never hit by items the board does not display.
+   */
+  teamScope?: string | null;
 }
 
 @Injectable()
@@ -709,6 +715,31 @@ export class WorkItemsRepository {
         }
         if (wipConstraint.typeScope && wipConstraint.typeScope.length > 0) {
           scope = scope.where('type', 'in', wipConstraint.typeScope);
+        }
+        if (wipConstraint.teamScope) {
+          scope = scope.where((eb) =>
+            eb.and([
+              eb(
+                'area_id',
+                'in',
+                trx
+                  .selectFrom('team_areas')
+                  .where('team_id', '=', wipConstraint.teamScope!)
+                  .select('area_id'),
+              ),
+              eb.or([
+                eb('iteration_id', 'is', null),
+                eb(
+                  'iteration_id',
+                  'in',
+                  trx
+                    .selectFrom('team_iterations')
+                    .where('team_id', '=', wipConstraint.teamScope!)
+                    .select('iteration_id'),
+                ),
+              ]),
+            ]),
+          );
         }
         const inColumn = await scope.forUpdate().execute();
         if (inColumn.length >= wipConstraint.limit) {

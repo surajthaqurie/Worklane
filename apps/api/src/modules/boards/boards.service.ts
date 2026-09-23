@@ -255,7 +255,17 @@ export class BoardsService {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid move request');
     }
-    const { state: rawTargetState, expectedVersion, bypassWip } = parsed.data;
+    const { state: rawTargetState, expectedVersion, bypassWip, teamId: rawTeamId } = parsed.data;
+
+    // WIP is counted over the same scope the board renders so team-scoped
+    // boards are never throttled by items outside their visible set. An
+    // explicit team view overrides the board's own team.
+    const viewTeamId =
+      rawTeamId && rawTeamId !== 'default' && rawTeamId !== 'undefined' ? rawTeamId : board.teamId;
+    if (viewTeamId) {
+      await this.teamsService.assertTeamMember(projectId, viewTeamId, userId);
+    }
+    const teamScope = viewTeamId ?? null;
 
     const targetState = this.normalizeStateKey(rawTargetState);
     const targetColumn = this.resolveColumnForState(board.columns, targetState);
@@ -281,6 +291,7 @@ export class BoardsService {
         projectId,
         targetColumn.mappedStates,
         typeScope,
+        teamScope,
       );
       if (currentCount >= targetColumn.wipLimit) {
         throw new WipLimitExceededException({
@@ -302,6 +313,7 @@ export class BoardsService {
         limit: targetColumn.wipLimit,
         excludeItemId: workItemId,
         typeScope: this.boardTypeScope(board),
+        teamScope,
       };
     }
 

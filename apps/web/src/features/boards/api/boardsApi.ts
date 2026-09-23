@@ -8,6 +8,8 @@ export interface MoveWorkItemPayload {
   state: string;
   expectedVersion?: number;
   bypassWip?: boolean;
+  /** Active team view scope — the server counts WIP over the board's visible items. */
+  teamId?: string | null;
 }
 
 export const boardsApi = {

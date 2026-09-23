@@ -1,4 +1,4 @@
-import { Home, Folder, Settings, LayoutDashboard, List, Play, Users, SearchCheck, SquareKanban, Bell, CalendarRange } from 'lucide-react';
+import { Home, Folder, Settings, LayoutDashboard, List, Play, Users, SearchCheck, SquareKanban, Bell, CalendarRange, ChartLine } from 'lucide-react';
 
 export const globalNavigation = [
   { label: 'Dashboard', href: '/dashboard', icon: Home, match: '/dashboard' },
@@ -21,6 +21,7 @@ export const projectNavigation = [
   },
   { label: 'Backlogs', href: '/backlogs', icon: List, match: '/backlogs' },
   { label: 'Sprints', href: '/sprints', icon: Play, match: '/sprints' },
+  { label: 'Analytics', href: '/analytics', icon: ChartLine, match: '/analytics' },
   { label: 'Queries', href: '/queries', icon: SearchCheck, match: '/queries' },
   { label: 'Delivery Plans', href: '/delivery-plans', icon: CalendarRange, match: '/delivery-plans' },
 ];

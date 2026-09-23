@@ -341,6 +341,17 @@ export interface Database {
     started_at: ColumnType<Date | null, string | Date | null, string | Date | null>;
     completed_at: ColumnType<Date | null, string | Date | null, string | Date | null>;
   };
+  analytics_snapshots: {
+    id: Generated<string>;
+    project_id: string;
+    kind: string;
+    scope_key: string;
+    scope: ColumnType<Record<string, unknown> | string, Record<string, unknown> | string, Record<string, unknown> | string>;
+    data: ColumnType<Record<string, unknown> | string, Record<string, unknown> | string, Record<string, unknown> | string>;
+    item_count: Generated<number>;
+    job_id: string | null;
+    computed_at: Generated<Date>;
+  };
 }
 
 const dialect = new PostgresDialect({

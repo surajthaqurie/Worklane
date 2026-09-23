@@ -96,6 +96,8 @@ export const MoveWorkItemSchema = z.object({
   state: z.string().trim().min(1, { message: 'Target state is required' }),
   expectedVersion: z.number().int().positive().optional(),
   bypassWip: z.boolean().optional(),
+  /** Active team view scope — WIP limits are counted against the board's visible items. */
+  teamId: z.string().nullable().optional(),
 });
 
 export class CreateBoardDto {
@@ -123,5 +125,6 @@ export class MoveWorkItemDto {
   state!: string;
   expectedVersion?: number;
   bypassWip?: boolean;
+  teamId?: string | null;
 }
 

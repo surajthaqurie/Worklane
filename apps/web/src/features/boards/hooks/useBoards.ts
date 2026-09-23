@@ -133,6 +133,8 @@ export interface BoardMoveInput {
   previousState: string;
   expectedVersion?: number;
   bypassWip?: boolean;
+  /** Active team view scope so WIP counts the board's visible items only. */
+  teamId?: string | null;
 }
 
 /**
@@ -146,11 +148,16 @@ export function useBoardMoveWorkItem(projectId: string, boardId: string | null |
   const toast = useToast();
 
   return useMutation({
-    mutationFn: ({ workItemId, state, expectedVersion, bypassWip }: BoardMoveInput) => {
+    mutationFn: ({ workItemId, state, expectedVersion, bypassWip, teamId }: BoardMoveInput) => {
       if (!boardId) {
         throw new Error('No board selected — cannot move work item');
       }
-      return boardsApi.moveWorkItem(projectId, boardId, workItemId, { state, expectedVersion, bypassWip });
+      return boardsApi.moveWorkItem(projectId, boardId, workItemId, {
+        state,
+        expectedVersion,
+        bypassWip,
+        teamId,
+      });
     },
     onMutate: async ({ workItemId, state }) => {
       await cancelWorkItemScopes(queryClient, projectId);

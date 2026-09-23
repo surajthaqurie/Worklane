@@ -301,6 +301,89 @@ describe.skipIf(!INTEGRATION)('Board swimlanes & WIP enforcement (DB integration
     expect(recipients).not.toContain(owner.id);
   });
 
+  it('scopes WIP counts to the board team so out-of-team items are ignored', async () => {
+    // Every fresh project gets a default team + default area (projects.repository).
+    const defaultTeam = await db
+      .selectFrom('teams')
+      .where('project_id', '=', project.id)
+      .selectAll()
+      .executeTakeFirstOrThrow();
+    const defaultArea = await db
+      .selectFrom('team_areas')
+      .where('team_id', '=', defaultTeam.id)
+      .select('area_id')
+      .executeTakeFirstOrThrow();
+
+    // A second area not visible to the default team, so we can park items
+    // outside the board team's scope.
+    const otherArea = await db
+      .insertInto('areas')
+      .values({ project_id: project.id, name: 'Other Area', parent_id: null })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    const board = await boardsService.createBoard(owner.id, project.id, {
+      name: `TeamScope ${Date.now()}`,
+      teamId: defaultTeam.id,
+      columns: [
+        { id: 'c-todo', name: 'To Do', mappedStates: ['TODO'], wipLimit: null },
+        { id: 'c-wip', name: 'In Progress', mappedStates: ['IN_PROGRESS'], wipLimit: 2 },
+        { id: 'c-done', name: 'Done', mappedStates: ['DONE'], wipLimit: null },
+      ],
+    });
+    createdBoardIds.push(board.id);
+    expect(board.teamId).toBe(defaultTeam.id);
+
+    const inScopeFiller = await workItemsService.create(owner.id, project.id, {
+      type: 'STORY',
+      title: 'In-team filler',
+    });
+    const outScopeFiller = await workItemsService.create(owner.id, project.id, {
+      type: 'STORY',
+      title: 'Out-of-team filler',
+    });
+    const mover = await workItemsService.create(owner.id, project.id, {
+      type: 'STORY',
+      title: 'Team-scoped mover',
+    });
+    const blocker = await workItemsService.create(owner.id, project.id, {
+      type: 'STORY',
+      title: 'Second in-team mover',
+    });
+    createdIds.push(inScopeFiller.id, outScopeFiller.id, mover.id, blocker.id);
+
+    // One filler is in the board team's area; the other is explicitly not.
+    await db
+      .updateTable('work_items')
+      .set({ area_id: defaultArea.area_id })
+      .where('id', '=', inScopeFiller.id)
+      .execute();
+    await db
+      .updateTable('work_items')
+      .set({ area_id: otherArea.id })
+      .where('id', '=', outScopeFiller.id)
+      .execute();
+
+    // Move both into IN_PROGRESS via the project-wide endpoint (no board WIP).
+    await transitionsService.transitionState(owner.id, inScopeFiller.id, 'IN_PROGRESS');
+    await transitionsService.transitionState(owner.id, outScopeFiller.id, 'IN_PROGRESS');
+
+    // Project-wide IN_PROGRESS is already at the WIP limit (2 items), but only
+    // 1 is visible to the board team — so a team-scoped move still succeeds.
+    const moved = await boardsService.moveWorkItem(owner.id, project.id, board.id, mover.id, {
+      state: 'IN_PROGRESS',
+    });
+    expect(moved.state).toBe('IN_PROGRESS');
+
+    // Now the team's own column is full (2 in-team items): the next move into
+    // it must be rejected with the structured WIP feedback.
+    await expect(
+      boardsService.moveWorkItem(owner.id, project.id, board.id, blocker.id, {
+        state: 'IN_PROGRESS',
+      }),
+    ).rejects.toThrow(WipLimitExceededException);
+  });
+
   it('enforces board configuration permissions across roles', async () => {
     // A plain MEMBER cannot create or reconfigure boards…
     await expect(

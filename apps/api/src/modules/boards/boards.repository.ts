@@ -139,6 +139,7 @@ export class BoardsRepository {
     projectId: string,
     states: string[],
     typeScope?: Array<'EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG'>,
+    teamScope?: string | null,
   ): Promise<number> {
     let query = db
       .selectFrom('work_items')
@@ -146,6 +147,33 @@ export class BoardsRepository {
       .where('state', 'in', states);
     if (typeScope && typeScope.length > 0) {
       query = query.where('type', 'in', typeScope);
+    }
+    if (teamScope) {
+      // Mirror the findAll team scoping so WIP counts only the items a
+      // team-scoped board actually renders.
+      query = query.where((eb) =>
+        eb.and([
+          eb(
+            'area_id',
+            'in',
+            db
+              .selectFrom('team_areas')
+              .where('team_id', '=', teamScope)
+              .select('area_id'),
+          ),
+          eb.or([
+            eb('iteration_id', 'is', null),
+            eb(
+              'iteration_id',
+              'in',
+              db
+                .selectFrom('team_iterations')
+                .where('team_id', '=', teamScope)
+                .select('iteration_id'),
+            ),
+          ]),
+        ]),
+      );
     }
     const row = await query
       .select(db.fn.countAll().as('count'))

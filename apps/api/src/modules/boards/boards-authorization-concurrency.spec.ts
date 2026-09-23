@@ -317,6 +317,105 @@ describe('Board & Backlog API Authorization & Drag/Drop Concurrency', () => {
     });
   });
 
+  describe('Board move endpoint — team-scoped WIP', () => {
+    const teamBoard = {
+      id: 'board-team',
+      projectId: 'proj-1',
+      teamId: 'team-1',
+      name: 'Team Board',
+      isDefault: false,
+      swimlane: 'none',
+      columns: [
+        { id: 'col-todo', name: 'To Do', mappedStates: ['TODO'], wipLimit: null },
+        { id: 'col-wip', name: 'In Review', mappedStates: ['IN_REVIEW'], wipLimit: 2 },
+        { id: 'col-done', name: 'Done', mappedStates: ['DONE'], wipLimit: null },
+      ],
+      cardFields: {},
+      filterConfig: { backlogLevel: 'STORY' },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const todoItem = {
+      id: 'wi-1',
+      project_id: 'proj-1',
+      state: 'TODO',
+      type: 'STORY',
+      assigned_to: null,
+      parent_id: null,
+    };
+
+    beforeEach(() => {
+      authzMock.requireProjectPermission.mockResolvedValue({ role: 'ADMIN' });
+      teamsServiceMock.assertTeamMember.mockResolvedValue(true);
+      repoMock.getById.mockResolvedValue(teamBoard);
+      repoMock.getWorkItemForMove.mockResolvedValue(todoItem);
+      repoMock.countItemsInStates.mockResolvedValue(1);
+      transitionsServiceMock.transitionState.mockResolvedValue({
+        id: 'wi-1',
+        state: 'IN_REVIEW',
+        version: 3,
+      });
+    });
+
+    it('counts WIP over the board team scope and passes it into the atomic constraint', async () => {
+      await boardsService.moveWorkItem('user-1', 'proj-1', 'board-team', 'wi-1', {
+        state: 'IN_REVIEW',
+      });
+
+      // The pre-check must count only the team's visible items — never the
+      // project's whole backlog — so one team cannot be starved by another.
+      expect(repoMock.countItemsInStates).toHaveBeenCalledWith(
+        'proj-1',
+        ['IN_REVIEW'],
+        ['STORY', 'BUG', 'TASK'],
+        'team-1',
+      );
+
+      const [, , , , wipConstraint] = transitionsServiceMock.transitionState.mock.calls[0];
+      expect(wipConstraint).toMatchObject({
+        projectId: 'proj-1',
+        columnId: 'col-wip',
+        teamScope: 'team-1',
+      });
+    });
+
+    it('lets an explicit teamId view override the board team for WIP scoping', async () => {
+      await boardsService.moveWorkItem('user-1', 'proj-1', 'board-team', 'wi-1', {
+        state: 'IN_REVIEW',
+        teamId: 'team-2',
+      });
+
+      // Board access asserted team-1; the move itself re-scopes WIP to team-2.
+      expect(teamsServiceMock.assertTeamMember).toHaveBeenCalledWith('proj-1', 'team-2', 'user-1');
+      expect(repoMock.countItemsInStates).toHaveBeenCalledWith(
+        'proj-1',
+        ['IN_REVIEW'],
+        ['STORY', 'BUG', 'TASK'],
+        'team-2',
+      );
+    });
+
+    it('rejects a WIP move when the user is not a member of the view team', async () => {
+      // Project-global board, but the user insists on scoping WIP to team-2.
+      repoMock.getById.mockResolvedValue({ ...teamBoard, teamId: null });
+      teamsServiceMock.assertTeamMember.mockRejectedValue(
+        new ForbiddenException('You do not belong to this team'),
+      );
+
+      await expect(
+        boardsService.moveWorkItem('user-1', 'proj-1', 'board-team', 'wi-1', {
+          state: 'IN_REVIEW',
+          teamId: 'team-2',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+
+      // Never starts the pre-check or the transition.
+      expect(repoMock.countItemsInStates).not.toHaveBeenCalled();
+      expect(transitionsServiceMock.transitionState).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Board swimlanes', () => {
     it('defaults a created board to the `none` swimlane and persists a chosen mode', async () => {
       repoMock.create.mockResolvedValue({ id: 'b1', swimlane: 'epic' });

@@ -61,7 +61,7 @@ describe('WorkItemTransitionsService', () => {
     const result = await service.transitionState('u1', '1', 'IN_PROGRESS');
 
     expect(result.state).toBe('IN_PROGRESS');
-    expect(repo.updateState).toHaveBeenCalledWith('1', 'u1', 'TODO', 'IN_PROGRESS', false, undefined);
+    expect(repo.updateState).toHaveBeenCalledWith('1', 'u1', 'TODO', 'IN_PROGRESS', false, undefined, undefined);
   });
 
   it('should derive completion from the target state isDone flag', async () => {
@@ -70,7 +70,7 @@ describe('WorkItemTransitionsService', () => {
 
     await service.transitionState('u1', '1', 'DONE');
 
-    expect(repo.updateState).toHaveBeenCalledWith('1', 'u1', 'IN_PROGRESS', 'DONE', true, undefined);
+    expect(repo.updateState).toHaveBeenCalledWith('1', 'u1', 'IN_PROGRESS', 'DONE', true, undefined, undefined);
   });
 
   it('should reject a target state that is not part of the project workflow', async () => {

@@ -4,6 +4,7 @@ import { db } from '../../db/kysely.js';
 import { BackgroundJobsRepository } from './background-jobs.repository.js';
 import { BackgroundJobDto, JobType } from './dto/background-job.dto.js';
 import { logJobEvent } from './background-jobs.logger.js';
+import { AnalyticsService } from '../analytics/analytics.service.js';
 
 export type JobProgressCallback = (progress: number) => Promise<void>;
 export interface JobExecutionResult {
@@ -26,7 +27,10 @@ export interface JobExecutionResult {
 export class BackgroundJobsProcessor {
   private readonly logger = new Logger(BackgroundJobsProcessor.name);
 
-  constructor(private readonly repo?: BackgroundJobsRepository) {}
+  constructor(
+    private readonly repo?: BackgroundJobsRepository,
+    private readonly analytics?: AnalyticsService,
+  ) {}
 
   async executeJobTask(
     job: BackgroundJobDto,
@@ -145,6 +149,23 @@ export class BackgroundJobsProcessor {
         projectId: 'global',
         note: 'No projectId supplied — running global aggregation',
         rollupCompleted: true,
+        calculatedAt: new Date().toISOString(),
+      };
+    }
+
+    // Real historical analytics: when the Analytics module is wired up, this
+    // replays history / transitions / timestamps into snapshot rows instead of
+    // the legacy live aggregate below.
+    if (this.analytics) {
+      await onProgress(10);
+      const result = await this.analytics.recalculateProject(projectId, {
+        from: payload.from ? new Date(payload.from as string) : undefined,
+        to: payload.to ? new Date(payload.to as string) : undefined,
+        jobId: payload.jobId ?? null,
+        onProgress,
+      });
+      return {
+        ...result,
         calculatedAt: new Date().toISOString(),
       };
     }

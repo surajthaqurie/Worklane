@@ -25,3 +25,4 @@ export type {
 } from './delivery-plans';
 export * from './history';
 export * from './audit';
+export * from './dashboard';

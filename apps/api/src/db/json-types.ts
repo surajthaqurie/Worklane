@@ -22,3 +22,22 @@ export type BoardCardFieldsJson = CardFields;
 export type BoardFilterConfigJson = FilterConfig;
 export type QueryDefinitionJson = QueryDefinition;
 export type NotificationMetadataJson = NotificationMetadata;
+
+export type WidgetType =
+  | 'SPRINT_SUMMARY'
+  | 'BURNDOWN'
+  | 'VELOCITY'
+  | 'MY_WORK_ITEMS'
+  | 'BLOCKED_ITEMS'
+  | 'ACTIVITY'
+  | 'TEAM_PROGRESS';
+
+export interface DashboardWidgetLayoutItem {
+  id: string;
+  type: WidgetType;
+  position: number;
+  colSpan: number;
+  rowSpan?: number;
+  visible: boolean;
+  settings?: Record<string, unknown>;
+}

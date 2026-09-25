@@ -8,6 +8,7 @@ import type {
   TeamBacklogConfig,
   TeamBoardConfig,
   NotificationMetadataJson,
+  DashboardWidgetLayoutItem,
 } from './json-types.js';
 
 export interface Database {
@@ -351,6 +352,14 @@ export interface Database {
     item_count: Generated<number>;
     job_id: string | null;
     computed_at: Generated<Date>;
+  };
+  dashboard_layouts: {
+    id: Generated<string>;
+    user_id: string;
+    project_id: string | null;
+    widgets: ColumnType<DashboardWidgetLayoutItem[], DashboardWidgetLayoutItem[] | string, DashboardWidgetLayoutItem[] | string>;
+    created_at: ColumnType<Date, string | undefined, never>;
+    updated_at: ColumnType<Date, string | undefined, string | Date>;
   };
 }
 

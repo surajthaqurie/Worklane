@@ -69,12 +69,15 @@ describe.skipIf(!INTEGRATION)('IterationsService (DB integration)', () => {
       .limit(1)
       .executeTakeFirst();
     const user = await db.selectFrom('users').select('id').limit(1).executeTakeFirst();
+    if (!project || !user) {
+      throw new Error('Seeded dev data missing (org/user/project)');
+    }
     let area = await db.selectFrom('areas').where('project_id', '=', project.id).select('id').limit(1).executeTakeFirst();
     if (!area) {
       area = await db.insertInto('areas').values({ project_id: project.id, name: 'Integration Area' }).returning('id').executeTakeFirstOrThrow();
     }
-    if (!project || !user || !area) {
-      throw new Error('Seeded dev data missing (org/user/project/area)');
+    if (!area) {
+      throw new Error('Seeded dev data missing (area)');
     }
     projectId = project.id;
     userId = user.id;

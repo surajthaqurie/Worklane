@@ -10,7 +10,7 @@ import { TeamSelector } from './team-selector';
 
 export function ProjectSidebar() {
   const pathname = usePathname();
-  const { project, projectId } = useProjectContext();
+  const { project, projectId, can, projectRole } = useProjectContext();
 
   const isActive = (itemMatch: string) => {
     const basePath = `/projects/${projectId}`;
@@ -79,7 +79,14 @@ export function ProjectSidebar() {
       </nav>
 
       <div className="p-3 border-t border-[var(--border-subtle)]">
-        {projectSettingsNavigation.map((item) => {
+        {projectSettingsNavigation
+          .filter((item) => {
+            if (item.href === '/settings/audit-logs') {
+              return can('audit_log:view') || projectRole === 'ADMIN' || projectRole === 'OWNER';
+            }
+            return true;
+          })
+          .map((item) => {
           const href = `/projects/${projectId}${item.href}`;
           const active = isActive(item.match);
           const Icon = item.icon;

@@ -44,6 +44,7 @@ export type PermissionValue =
   | 'team:edit'
   | 'team:delete'
   | 'team:manage_members'
-  | 'team:manage_settings';
+  | 'team:manage_settings'
+  | 'audit_log:view';
 
 export type ProjectRole = 'OWNER' | 'ADMIN' | 'MEMBER';

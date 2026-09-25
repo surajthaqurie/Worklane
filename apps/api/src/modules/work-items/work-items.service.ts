@@ -9,6 +9,7 @@ import { CreateWorkItemDto, UpdateWorkItemDto } from './dto/work-items.dto.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { WorkItemTypeRegistryService } from './work-item-types.registry.js';
 import { db } from '../../db/kysely.js';
+import type { HistoryQueryFilters } from '../work-item-history/work-item-history.repository.js';
 
 @Injectable()
 export class WorkItemsService {
@@ -514,6 +515,13 @@ export class WorkItemsService {
     if (!item) throw new NotFoundException('Work item not found');
     await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_VIEW);
     return await this.repo.getActivity(id);
+  }
+
+  async getHistory(userId: string, id: string, query?: HistoryQueryFilters) {
+    const item = await this.repo.getWorkItemById(id);
+    if (!item) throw new NotFoundException('Work item not found');
+    await this.authz.requireProjectPermission(item.project_id, userId, Permission.WORK_ITEM_VIEW);
+    return await this.repo.getHistory(id, query);
   }
 
   private mapWorkItem(item: any, projectKey: string) {

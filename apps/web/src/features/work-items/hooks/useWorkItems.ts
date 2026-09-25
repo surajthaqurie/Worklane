@@ -7,6 +7,7 @@ import {
   CreateWorkItemDto,
   UpdateWorkItemDto,
 } from '@/shared/types/work-items';
+import type { PaginatedWorkItemHistory, HistoryQueryParams } from '@/shared/types/history';
 import { BacklogResponse } from '@/shared/types/backlogs';
 import { SprintBoard } from '@/shared/types/boards';
 import { formatApiError } from '@/shared/utils/error';
@@ -179,8 +180,10 @@ export function useUpdateWorkItem(projectId: string) {
       toast.showError('Failed to update work item', formatApiError(err));
       invalidateWorkItemScopes(queryClient, projectId);
     },
-    onSettled: () => {
+    onSettled: (_data, _err, { id }) => {
       invalidateWorkItemScopes(queryClient, projectId);
+      queryClient.invalidateQueries({ queryKey: ['work-items', id, 'history'] });
+      queryClient.invalidateQueries({ queryKey: ['work-items', id, 'activity'] });
     },
   });
 }
@@ -204,8 +207,10 @@ export function useTransitionWorkItemState(projectId: string) {
       toast.showError('State transition failed', formatApiError(err));
       invalidateWorkItemScopes(queryClient, projectId);
     },
-    onSettled: () => {
+    onSettled: (_data, _err, { id }) => {
       invalidateWorkItemScopes(queryClient, projectId);
+      queryClient.invalidateQueries({ queryKey: ['work-items', id, 'history'] });
+      queryClient.invalidateQueries({ queryKey: ['work-items', id, 'activity'] });
     },
   });
 }
@@ -251,6 +256,19 @@ export function useWorkItemActivity(id: string) {
   });
 }
 
+export function useWorkItemHistory(
+  id: string,
+  params: HistoryQueryParams = {},
+  enabled = true,
+) {
+  return useQuery<PaginatedWorkItemHistory>({
+    queryKey: ['work-items', id, 'history', params],
+    queryFn: () => workItemsApi.getHistory(id, params),
+    enabled: !!id && enabled,
+    staleTime: 10 * 1000,
+  });
+}
+
 export function useWorkItemComments(id: string) {
   return useInfiniteQuery<WorkItemCommentPage>({
     queryKey: ['work-items', id, 'comments'],
@@ -270,6 +288,7 @@ export function useAddComment(workItemId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'comments'] });
       queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'activity'] });
+      queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'history'] });
     },
     onError: (err) => {
       toast.showError('Failed to post comment', formatApiError(err));

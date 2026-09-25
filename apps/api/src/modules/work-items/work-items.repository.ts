@@ -8,6 +8,7 @@ import {
   WorkItemHistoryEntryInput,
 } from '../work-item-history/work-item-history.constants.js';
 import { WorkItemHistoryService } from '../work-item-history/work-item-history.service.js';
+import type { HistoryQueryFilters } from '../work-item-history/work-item-history.repository.js';
 import type { WorkItemType } from './work-item.types.js';
 import { WipLimitExceededException } from '../../common/exceptions/wip-limit.exception.js';
 
@@ -792,6 +793,10 @@ export class WorkItemsRepository {
 
   async getActivity(workItemId: string) {
     return await this.history.getActivity(workItemId);
+  }
+
+  async getHistory(workItemId: string, options?: HistoryQueryFilters) {
+    return await this.history.getHistory(workItemId, options);
   }
 
   async getBatchRollups(projectId: string, itemIds: string[]): Promise<Record<string, {

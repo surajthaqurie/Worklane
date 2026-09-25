@@ -202,3 +202,94 @@ describe('describeHistoryEntry', () => {
     ).toBe('mystery changed');
   });
 });
+
+describe('fieldNameFromKey', () => {
+  it('maps db keys and actions to user-friendly names', async () => {
+    const { fieldNameFromKey } = await import('./work-item-history.service.js');
+    expect(fieldNameFromKey('state')).toBe('State');
+    expect(fieldNameFromKey('priority')).toBe('Priority');
+    expect(fieldNameFromKey('assigned_to')).toBe('Assignee');
+    expect(fieldNameFromKey('title')).toBe('Title');
+    expect(fieldNameFromKey('iteration_id')).toBe('Iteration');
+    expect(fieldNameFromKey(null, WorkItemHistoryAction.CREATED)).toBe('Item Created');
+    expect(fieldNameFromKey(null, WorkItemHistoryAction.COMMENT_ADDED)).toBe('Comment Added');
+  });
+});
+
+describe('sanitizeHistoryValue', () => {
+  it('redacts sensitive fields while keeping safe fields intact', async () => {
+    const { sanitizeHistoryValue } = await import('./work-item-history.service.js');
+    expect(sanitizeHistoryValue('password', 'secret123')).toBe('[REDACTED]');
+    expect(sanitizeHistoryValue('apiKey', 'abcdef123')).toBe('[REDACTED]');
+    expect(sanitizeHistoryValue('secret_token', 'token_xyz')).toBe('[REDACTED]');
+    expect(sanitizeHistoryValue('title', 'Refactor database')).toBe('Refactor database');
+    expect(sanitizeHistoryValue('state', 'In Progress')).toBe('In Progress');
+    expect(sanitizeHistoryValue('state', null)).toBeNull();
+  });
+});
+
+describe('groupHistoryItems', () => {
+  it('groups consecutive changes by same actor within 5 seconds window', async () => {
+    const { groupHistoryItems } = await import('./work-item-history.service.js');
+    const now = new Date('2026-09-25T12:00:00Z');
+    const actor = { id: 'u1', name: 'Alice', avatarUrl: null };
+
+    const items = [
+      {
+        id: 'h1',
+        workItemId: 'wi-1',
+        action: 'STATE_CHANGED',
+        field: 'state',
+        fieldName: 'State',
+        before: 'New',
+        after: 'In Progress',
+        rawBefore: 'New',
+        rawAfter: 'In Progress',
+        changedBy: actor,
+        changedAt: now,
+        description: 'moved from New to In Progress',
+      },
+      {
+        id: 'h2',
+        workItemId: 'wi-1',
+        action: 'PRIORITY_CHANGED',
+        field: 'priority',
+        fieldName: 'Priority',
+        before: 'Low',
+        after: 'High',
+        rawBefore: 'LOW',
+        rawAfter: 'HIGH',
+        changedBy: actor,
+        changedAt: new Date('2026-09-25T12:00:02Z'), // 2 seconds later
+        description: 'changed priority from Low to High',
+      },
+      {
+        id: 'h3',
+        workItemId: 'wi-1',
+        action: 'COMMENT_ADDED',
+        field: null,
+        fieldName: 'Comment Added',
+        before: null,
+        after: null,
+        rawBefore: null,
+        rawAfter: null,
+        changedBy: { id: 'u2', name: 'Bob', avatarUrl: null }, // different actor
+        changedAt: new Date('2026-09-25T12:00:03Z'),
+        description: 'added a comment',
+      },
+    ];
+
+    const groups = groupHistoryItems(items);
+    expect(groups).toHaveLength(2);
+
+    // Group 1: Alice's grouped changes
+    expect(groups[0].changedBy.name).toBe('Alice');
+    expect(groups[0].items).toHaveLength(2);
+    expect(groups[0].summary).toBe('Updated State, Priority');
+
+    // Group 2: Bob's comment
+    expect(groups[1].changedBy.name).toBe('Bob');
+    expect(groups[1].items).toHaveLength(1);
+    expect(groups[1].summary).toBe('added a comment');
+  });
+});

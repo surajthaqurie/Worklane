@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
 import {
   HistoryExecutor,
+  HistoryQueryFilters,
   HistoryRowWithActor,
   WorkItemHistoryRepository,
 } from './work-item-history.repository.js';
@@ -9,6 +10,45 @@ import {
   WorkItemHistoryAction,
   WorkItemHistoryEntryInput,
 } from './work-item-history.constants.js';
+
+export interface WorkItemHistoryActor {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+export interface WorkItemHistoryItem {
+  id: string;
+  workItemId: string;
+  action: string;
+  field: string | null;
+  fieldName: string;
+  before: string | null;
+  after: string | null;
+  rawBefore: string | null;
+  rawAfter: string | null;
+  changedBy: WorkItemHistoryActor;
+  changedAt: Date;
+  description: string;
+}
+
+export interface WorkItemHistoryGroup {
+  groupId: string;
+  changedBy: WorkItemHistoryActor;
+  changedAt: Date;
+  summary: string;
+  items: WorkItemHistoryItem[];
+}
+
+export interface PaginatedWorkItemHistory {
+  items: WorkItemHistoryItem[];
+  groups: WorkItemHistoryGroup[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasMore: boolean;
+}
 
 export interface WorkItemActivityEntry {
   id: string;
@@ -169,6 +209,104 @@ export function describeHistoryEntry(source: HistoryDescriptionSource): string {
   }
 }
 
+export function fieldNameFromKey(field: string | null, action?: string): string {
+  if (!field) {
+    if (action === WorkItemHistoryAction.CREATED) return 'Item Created';
+    if (action === WorkItemHistoryAction.DELETED) return 'Item Deleted';
+    if (action === WorkItemHistoryAction.COMMENT_ADDED) return 'Comment Added';
+    if (action === WorkItemHistoryAction.COMMENT_UPDATED) return 'Comment Edited';
+    if (action === WorkItemHistoryAction.COMMENT_DELETED) return 'Comment Deleted';
+    return 'General';
+  }
+  switch (field) {
+    case 'title':
+      return 'Title';
+    case 'description':
+      return 'Description';
+    case 'state':
+      return 'State';
+    case 'priority':
+      return 'Priority';
+    case 'severity':
+      return 'Severity';
+    case 'type':
+      return 'Type';
+    case 'points':
+      return 'Story Points';
+    case 'assigned_to':
+      return 'Assignee';
+    case 'parent_id':
+      return 'Parent Item';
+    case 'iteration_id':
+      return 'Iteration';
+    case 'area_id':
+      return 'Area';
+    case 'tags':
+      return 'Tags';
+    case 'backlog_order':
+      return 'Backlog Order';
+    case 'remaining_work':
+      return 'Remaining Work';
+    case 'completed_work':
+      return 'Completed Work';
+    case 'start_date':
+      return 'Start Date';
+    case 'target_date':
+      return 'Target Date';
+    case 'custom_fields':
+      return 'Custom Fields';
+    default:
+      return prettifyKey(field);
+  }
+}
+
+const SENSITIVE_FIELD_PATTERN = /(password|token|secret|key|hash|credential|auth)/i;
+
+export function sanitizeHistoryValue(field: string | null, value: string | null): string | null {
+  if (value === null || value === undefined) return null;
+  if (field && SENSITIVE_FIELD_PATTERN.test(field)) {
+    return '[REDACTED]';
+  }
+  return value;
+}
+
+export function groupHistoryItems(items: WorkItemHistoryItem[]): WorkItemHistoryGroup[] {
+  if (items.length === 0) return [];
+
+  const groups: WorkItemHistoryGroup[] = [];
+  let currentGroup: WorkItemHistoryGroup | null = null;
+
+  for (const item of items) {
+    const itemTime = new Date(item.changedAt).getTime();
+
+    if (
+      currentGroup &&
+      currentGroup.changedBy.id === item.changedBy.id &&
+      Math.abs(itemTime - new Date(currentGroup.changedAt).getTime()) <= 5000
+    ) {
+      currentGroup.items.push(item);
+    } else {
+      currentGroup = {
+        groupId: `group_${item.id}`,
+        changedBy: item.changedBy,
+        changedAt: item.changedAt,
+        summary: item.description,
+        items: [item],
+      };
+      groups.push(currentGroup);
+    }
+  }
+
+  for (const group of groups) {
+    if (group.items.length > 1) {
+      const fieldNames = Array.from(new Set(group.items.map((i) => i.fieldName)));
+      group.summary = `Updated ${fieldNames.join(', ')}`;
+    }
+  }
+
+  return groups;
+}
+
 @Injectable()
 export class WorkItemHistoryService {
   constructor(private readonly repository: WorkItemHistoryRepository) {}
@@ -235,6 +373,81 @@ export class WorkItemHistoryService {
         createdAt: row.created_at,
       };
     });
+  }
+
+  /**
+   * Returns paginated and filtered history for a work item, with changes grouped appropriately.
+   * Enforces safe limit bounds (default 20, max 100).
+   */
+  async getHistory(
+    workItemId: string,
+    options: HistoryQueryFilters = {},
+  ): Promise<PaginatedWorkItemHistory> {
+    const { rows, total, page, limit } = await this.repository.findWithPaginationAndFilters(
+      workItemId,
+      options,
+    );
+
+    if (rows.length === 0) {
+      return {
+        items: [],
+        groups: [],
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 0,
+        hasMore: false,
+      };
+    }
+
+    const lookups = await this.loadLookups(rows);
+
+    const items: WorkItemHistoryItem[] = rows.map((row) => {
+      const resolvedPrev = resolveHistoryLabel(row.field, row.old_value, lookups);
+      const resolvedNext = resolveHistoryLabel(row.field, row.new_value, lookups);
+
+      const before = sanitizeHistoryValue(row.field, resolvedPrev);
+      const after = sanitizeHistoryValue(row.field, resolvedNext);
+      const rawBefore = sanitizeHistoryValue(row.field, row.old_value);
+      const rawAfter = sanitizeHistoryValue(row.field, row.new_value);
+
+      const description = describeHistoryEntry({
+        action: row.action,
+        previousLabel: before,
+        newLabel: after,
+      });
+
+      return {
+        id: row.id,
+        workItemId: row.work_item_id,
+        action: row.action,
+        field: row.field,
+        fieldName: fieldNameFromKey(row.field, row.action),
+        before,
+        after,
+        rawBefore,
+        rawAfter,
+        changedBy: {
+          id: row.user_id,
+          name: row.user_name || 'System User',
+          avatarUrl: row.user_avatar_url,
+        },
+        changedAt: row.created_at,
+        description,
+      };
+    });
+
+    const groups = groupHistoryItems(items);
+
+    return {
+      items,
+      groups,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      hasMore: page * limit < total,
+    };
   }
 
   private async loadLookups(rows: HistoryRowWithActor[]): Promise<HistoryLookups> {

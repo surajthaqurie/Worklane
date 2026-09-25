@@ -31,6 +31,7 @@ import { Spinner } from '@/shared/components/ui/Spinner';
 import { WorkItemTypeBadge } from './WorkItemBadge';
 import { CreateWorkItemModal } from './CreateWorkItemModal';
 import { HierarchyView } from './HierarchyView';
+import { WorkItemHistoryView } from './WorkItemHistoryView';
 import { AttachmentManager } from '@/features/attachments/components/AttachmentManager';
 
 export interface WorkItemDrawerProps {
@@ -53,7 +54,7 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
 
   const { data: commentPages, isLoading: isLoadingComments } = useWorkItemComments(itemId);
   const comments = commentPages?.pages.flatMap((p) => p.items) ?? [];
-  const { data: activity = [], isLoading: isLoadingActivity } = useWorkItemActivity(itemId);
+  const { data: activity = [] } = useWorkItemActivity(itemId);
   const { data: hierarchyResponse, isLoading: isLoadingHierarchy } = useWorkItemHierarchy(projectId, itemId);
   // Lean list responses (board, backlog, grid) omit `description`/`points`;
   // fetch the full row so editing never clobbers fields we didn't receive.
@@ -800,27 +801,12 @@ export function WorkItemDrawer({ item, onClose }: WorkItemDrawerProps) {
           )}
 
           {activeTab === 'activity' && (
-            <div className="flex flex-col gap-3">
-              {isLoadingActivity ? (
-                <div className="flex justify-center p-4">
-                  <Spinner size="sm" />
-                </div>
-              ) : activity.length === 0 ? (
-                <div className="text-center py-6 text-xs text-[var(--text-muted)]">No activity logged.</div>
-              ) : (
-                activity.map((act) => (
-                  <div key={act.id} className="text-xs flex flex-col gap-0.5 border-b border-[var(--border-subtle)] pb-2.5">
-                    <div className="flex justify-between">
-                      <span className="font-medium text-[var(--text-primary)]">{act.actorName}</span>
-                      <span className="text-[10px] text-[var(--text-muted)]">
-                        {format(new Date(act.createdAt), 'MMM d, h:mm a')}
-                      </span>
-                    </div>
-                    <span className="text-[var(--text-secondary)]">{act.description}</span>
-                  </div>
-                ))
-              )}
-            </div>
+            <WorkItemHistoryView
+              workItemId={current.id}
+              projectId={projectId}
+              members={members}
+              fallbackActivity={activity}
+            />
           )}
 
           {activeTab === 'hierarchy' && (

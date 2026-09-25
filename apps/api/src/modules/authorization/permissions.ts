@@ -78,6 +78,9 @@ export enum Permission {
   WORK_ITEM_LINK_VIEW = 'work_item:link_view',
   WORK_ITEM_LINK_CREATE = 'work_item:link_create',
   WORK_ITEM_LINK_DELETE = 'work_item:link_delete',
+
+  // ── Audit Logs (Phase 19) ──────────────────────────────────────────────────
+  AUDIT_LOG_VIEW = 'audit_log:view',
 }
 
 const MEMBER_PERMISSIONS: ReadonlySet<Permission> = new Set([
@@ -127,6 +130,7 @@ const ADMIN_PERMISSIONS: ReadonlySet<Permission> = new Set([
   Permission.DELIVERY_PLAN_CREATE,
   Permission.DELIVERY_PLAN_EDIT,
   Permission.DELIVERY_PLAN_DELETE,
+  Permission.AUDIT_LOG_VIEW,
 ]);
 
 const OWNER_PERMISSIONS: ReadonlySet<Permission> = new Set(Object.values(Permission));

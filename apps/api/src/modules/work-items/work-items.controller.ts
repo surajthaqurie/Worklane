@@ -23,6 +23,10 @@ import {
   commentPageSchema,
   parseCommentInput,
 } from './dto/comments.dto.js';
+import {
+  workItemHistoryQuerySchema,
+  parseHistoryInput,
+} from './dto/history.dto.js';
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -172,5 +176,23 @@ export class WorkItemsController {
   @Get('work-items/:id/activity')
   getActivity(@Req() req: { user: { id: string } }, @Param('id') id: string) {
     return this.workItemsService.getActivity(req.user.id, id);
+  }
+
+  @Get('work-items/:id/history')
+  getHistory(
+    @Req() req: { user: { id: string } },
+    @Param('id') id: string,
+    @Query() query: Record<string, unknown>,
+  ) {
+    const parsed = parseHistoryInput(workItemHistoryQuerySchema, query);
+    return this.workItemsService.getHistory(req.user.id, id, {
+      page: parsed.page,
+      limit: parsed.limit,
+      actorId: parsed.actorId,
+      field: parsed.field,
+      startDate: parsed.from,
+      endDate: parsed.to,
+      order: parsed.order,
+    });
   }
 }

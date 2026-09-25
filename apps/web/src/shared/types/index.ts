@@ -23,3 +23,5 @@ export type {
   WorkItemLinksResponse,
   CreateDependencyDto,
 } from './delivery-plans';
+export * from './history';
+export * from './audit';

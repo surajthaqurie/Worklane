@@ -59,7 +59,8 @@ export function useCumulativeFlow(
   projectId: string,
   range: AnalyticsRange,
   groupBy: 'category' | 'state',
-  teamId: string | null | undefined,
+  teamId?: string | null,
+  bucketSizeDays?: number,
 ) {
   return useQuery<CumulativeFlowDto>({
     queryKey: [
@@ -69,10 +70,11 @@ export function useCumulativeFlow(
       'cumulative-flow',
       windowKey(range),
       groupBy,
+      bucketSizeDays ?? 1,
       { teamId: teamId ?? null },
     ],
     queryFn: ({ signal }) =>
-      analyticsApi.getCumulativeFlow(projectId, { ...range, groupBy, teamId, signal }),
+      analyticsApi.getCumulativeFlow(projectId, { ...range, groupBy, bucketSizeDays, teamId, signal }),
     enabled: !!projectId,
   });
 }
@@ -81,24 +83,42 @@ function useFlowTime(
   endpoint: 'cycle' | 'lead',
   projectId: string,
   range: AnalyticsRange,
-  teamId: string | null | undefined,
+  teamId?: string | null,
+  type?: string,
 ) {
   return useQuery<FlowTimeDto>({
-    queryKey: ['projects', projectId, 'analytics', `${endpoint}-time`, windowKey(range), { teamId: teamId ?? null }],
+    queryKey: [
+      'projects',
+      projectId,
+      'analytics',
+      `${endpoint}-time`,
+      windowKey(range),
+      { teamId: teamId ?? null, type: type ?? null },
+    ],
     queryFn: ({ signal }) =>
       endpoint === 'cycle'
-        ? analyticsApi.getCycleTime(projectId, { ...range, teamId, signal })
-        : analyticsApi.getLeadTime(projectId, { ...range, teamId, signal }),
+        ? analyticsApi.getCycleTime(projectId, { ...range, teamId, type, signal })
+        : analyticsApi.getLeadTime(projectId, { ...range, teamId, type, signal }),
     enabled: !!projectId,
   });
 }
 
-export function useCycleTime(projectId: string, range: AnalyticsRange, teamId: string | null | undefined) {
-  return useFlowTime('cycle', projectId, range, teamId);
+export function useCycleTime(
+  projectId: string,
+  range: AnalyticsRange,
+  teamId?: string | null,
+  type?: string,
+) {
+  return useFlowTime('cycle', projectId, range, teamId, type);
 }
 
-export function useLeadTime(projectId: string, range: AnalyticsRange, teamId: string | null | undefined) {
-  return useFlowTime('lead', projectId, range, teamId);
+export function useLeadTime(
+  projectId: string,
+  range: AnalyticsRange,
+  teamId?: string | null,
+  type?: string,
+) {
+  return useFlowTime('lead', projectId, range, teamId, type);
 }
 
 export function useRecomputeAnalytics(projectId: string) {

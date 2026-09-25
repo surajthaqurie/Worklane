@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional, forwardRef } from '@nestjs/common';
 import { AnalyticsRepository, AnalyticsTeamScope } from './analytics.repository.js';
 import { AuthorizationService } from '../authorization/authorization.service.js';
 import { TeamsService } from '../teams/teams.service.js';
 import { Permission } from '../authorization/permissions.js';
+import { BackgroundJobsService } from '../background-jobs/background-jobs.service.js';
+import { JobType } from '../background-jobs/dto/background-job.dto.js';
 import { startOfUtcDay, computeBurndown, computeCumulativeFlow, computeTimeToDone, computeVelocity, computeSummary } from './analytics.calculations.js';
 import {
   AnalyticsSnapshotKind,
@@ -36,6 +38,9 @@ export class AnalyticsService {
     private readonly repo: AnalyticsRepository,
     private readonly authz: AuthorizationService,
     private readonly teamsService: TeamsService,
+    @Optional()
+    @Inject(forwardRef(() => BackgroundJobsService))
+    private readonly backgroundJobs?: BackgroundJobsService,
   ) {}
 
   // ─── Requests ─────────────────────────────────────────────────────────────
@@ -72,7 +77,7 @@ export class AnalyticsService {
   ): Promise<VelocityDto> {
     await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
     const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 180);
-    const scope = { from: dateOf(fromMs), to: dateOf(toMs) };
+    const scope = { from: dateOf(fromMs), to: dateOf(toMs), ...(query.teamId ? { teamId: query.teamId } : {}) };
     const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
 
     return this.serve<VelocityDto>(
@@ -93,7 +98,13 @@ export class AnalyticsService {
     const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 90);
     const bucketSizeDays = query.bucketSizeDays ?? 1;
     const groupBy = query.groupBy === 'state' ? 'state' : 'category';
-    const scope = { from: dateOf(fromMs), to: dateOf(toMs), bucketSizeDays: String(bucketSizeDays), groupBy };
+    const scope = {
+      from: dateOf(fromMs),
+      to: dateOf(toMs),
+      bucketSizeDays: String(bucketSizeDays),
+      groupBy,
+      ...(query.teamId ? { teamId: query.teamId } : {}),
+    };
     const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
 
     return this.serve<CumulativeFlowDto>(
@@ -112,7 +123,7 @@ export class AnalyticsService {
   ): Promise<FlowTimeDto> {
     await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
     const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 90);
-    const scope = { from: dateOf(fromMs), to: dateOf(toMs), type: query.type ?? 'all' };
+    const scope = { from: dateOf(fromMs), to: dateOf(toMs), type: query.type ?? 'all', ...(query.teamId ? { teamId: query.teamId } : {}) };
     const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
 
     return this.serve<FlowTimeDto>(
@@ -137,7 +148,7 @@ export class AnalyticsService {
   ): Promise<FlowTimeDto> {
     await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
     const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 90);
-    const scope = { from: dateOf(fromMs), to: dateOf(toMs), type: query.type ?? 'all' };
+    const scope = { from: dateOf(fromMs), to: dateOf(toMs), type: query.type ?? 'all', ...(query.teamId ? { teamId: query.teamId } : {}) };
     const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
 
     return this.serve<FlowTimeDto>(
@@ -186,6 +197,19 @@ export class AnalyticsService {
     body: RecomputeQueryDto,
   ) {
     await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    if (this.backgroundJobs) {
+      await this.backgroundJobs
+        .dispatchJob({
+          jobType: JobType.ANALYTICS_CALCULATION,
+          payload: {
+            projectId,
+            from: body.from,
+            to: body.to,
+          },
+          maxRetries: 2,
+        })
+        .catch(() => {});
+    }
     return this.recalculateProject(projectId, {
       from: body.from ? new Date(body.from) : undefined,
       to: body.to ? new Date(body.to) : undefined,

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, Optional, forwardRef } from '@nestjs/common';
 import { sql } from 'kysely';
 import { db } from '../../db/kysely.js';
 import { BackgroundJobsRepository } from './background-jobs.repository.js';
@@ -29,6 +29,8 @@ export class BackgroundJobsProcessor {
 
   constructor(
     private readonly repo?: BackgroundJobsRepository,
+    @Optional()
+    @Inject(forwardRef(() => AnalyticsService))
     private readonly analytics?: AnalyticsService,
   ) {}
 

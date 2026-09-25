@@ -257,9 +257,13 @@ export class AnalyticsRepository {
         )
       : items;
 
+    const iterationsFiltered = teamScope
+      ? iterations.filter((it) => teamScope.iterationIds.includes(it.id))
+      : iterations;
+
     const history = await this.loadHistoryForItems(itemsFiltered.map((i) => i.id));
 
-    return { iterations, states, items: itemsFiltered, history };
+    return { iterations: iterationsFiltered, states, items: itemsFiltered, history };
   }
 
   /**
@@ -300,9 +304,13 @@ export class AnalyticsRepository {
         .then((rows) => rows.map(mapWorkItem)),
     ]);
 
+    const iterationsFiltered = opts.teamScope
+      ? iterations.filter((it) => opts.teamScope!.iterationIds.includes(it.id))
+      : iterations;
+
     const history = await this.loadHistoryForItems(items.map((i) => i.id));
 
-    return { iterations, states, items, history };
+    return { iterations: iterationsFiltered, states, items, history };
   }
 
   private applyTeamScope<T>(query: T, teamScope: AnalyticsTeamScope | null | undefined): T {

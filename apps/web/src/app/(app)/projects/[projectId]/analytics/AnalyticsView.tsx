@@ -28,31 +28,15 @@ const PRESETS = [
   { label: '180d', days: 180 },
 ] as const;
 
-function ChartSkeleton({ height = 280 }: { height?: number }) {
-  return (
-    <div
-      className="animate-pulse rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]"
-      style={{ height }}
-      role="status"
-      aria-label="Loading chart"
-    />
-  );
-}
-
-function ChartError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6">
-      <ErrorState error={new Error(message)} onRetry={onRetry} title="Failed to load chart" />
-    </div>
-  );
-}
-
 export function AnalyticsView({ projectId }: { projectId: string }) {
   const { selectedTeamId } = useProjectContext();
   const [from, setFrom] = useState(() => format(subDays(new Date(), 90), 'yyyy-MM-dd'));
   const [to, setTo] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [groupBy, setGroupBy] = useState<'category' | 'state'>('category');
+  const [bucketSizeDays, setBucketSizeDays] = useState<number>(1);
   const [selectedIterationId, setSelectedIterationId] = useState<string | undefined>(undefined);
+  const [cycleType, setCycleType] = useState<string | undefined>(undefined);
+  const [leadType, setLeadType] = useState<string | undefined>(undefined);
 
   const iterations = useIterations(projectId, selectedTeamId);
   const activeIteration =
@@ -63,15 +47,18 @@ export function AnalyticsView({ projectId }: { projectId: string }) {
   const summary = useAnalyticsSummary(projectId, range, selectedTeamId);
   const burndown = useBurndown(projectId, iterationId, selectedTeamId);
   const velocity = useVelocity(projectId, range, selectedTeamId);
-  const cumulativeFlow = useCumulativeFlow(projectId, range, groupBy, selectedTeamId);
-  const cycleTime = useCycleTime(projectId, range, selectedTeamId);
-  const leadTime = useLeadTime(projectId, range, selectedTeamId);
+  const cumulativeFlow = useCumulativeFlow(projectId, range, groupBy, selectedTeamId, bucketSizeDays);
+  const cycleTime = useCycleTime(projectId, range, selectedTeamId, cycleType);
+  const leadTime = useLeadTime(projectId, range, selectedTeamId, leadType);
   const recompute = useRecomputeAnalytics(projectId);
 
   const applyPreset = (days: number) => {
     setFrom(format(subDays(new Date(), days), 'yyyy-MM-dd'));
     setTo(format(new Date(), 'yyyy-MM-dd'));
   };
+
+  const formattedRange = `${from} → ${to}`;
+  const iterationOptions = iterations.data?.map((it) => ({ id: it.id, name: it.name })) ?? [];
 
   return (
     <div className="flex flex-col w-full h-full p-6 overflow-y-auto">
@@ -83,7 +70,7 @@ export function AnalyticsView({ projectId }: { projectId: string }) {
               Analytics
             </h1>
             <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
-              Metrics replayed from history — sprint burndown, velocity, cumulative flow, cycle &amp; lead time.
+              Historical project metrics replayed from immutable event logs — sprint burndown, velocity, cumulative flow, cycle &amp; lead time.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -110,6 +97,7 @@ export function AnalyticsView({ projectId }: { projectId: string }) {
                 max={to}
                 onChange={(e) => setFrom(e.target.value)}
                 className="rounded-[var(--radius-button)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 py-1.5 text-[12px] text-[var(--text-primary)]"
+                aria-label="Start date filter"
               />
             </label>
             <label className="flex items-center gap-1.5 text-[12px] text-[var(--text-secondary)]">
@@ -120,6 +108,7 @@ export function AnalyticsView({ projectId }: { projectId: string }) {
                 min={from}
                 onChange={(e) => setTo(e.target.value)}
                 className="rounded-[var(--radius-button)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 py-1.5 text-[12px] text-[var(--text-primary)]"
+                aria-label="End date filter"
               />
             </label>
             <button
@@ -135,7 +124,7 @@ export function AnalyticsView({ projectId }: { projectId: string }) {
       </div>
 
       {summary.isLoading ? (
-        <div className="flex items-center justify-center p-12">
+        <div className="flex items-center justify-center p-12" role="status" aria-label="Loading summary analytics">
           <Spinner size="lg" />
         </div>
       ) : summary.isError || !summary.data ? (
@@ -144,67 +133,61 @@ export function AnalyticsView({ projectId }: { projectId: string }) {
         <div className="flex flex-col gap-5">
           <SummaryCards summary={summary.data} />
 
-          <section className="grid grid-cols-1 xl:grid-cols-3 gap-5" aria-label="Charts">
+          <section className="grid grid-cols-1 xl:grid-cols-3 gap-5" aria-label="Analytics charts">
             <div className="xl:col-span-2 grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {iterationId ? (
-                burndown.isLoading ? (
-                  <ChartSkeleton />
-                ) : burndown.isError || !burndown.data ? (
-                  <ChartError message={(burndown.error as Error)?.message} onRetry={() => burndown.refetch()} />
-                ) : burndown.data.totalScopeItems === 0 ? (
-                  <div className="rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 text-[13px] text-[var(--text-muted)]">
-                    No work items were scoped to this sprint.
-                  </div>
-                ) : (
-                  <SprintBurndownChart data={burndown.data} />
-                )
-              ) : iterations.isLoading ? (
-                <ChartSkeleton />
-              ) : (
-                <div className="rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 text-[13px] text-[var(--text-muted)]">
-                  No iterations yet — burndown needs a sprint.
-                </div>
-              )}
+              <SprintBurndownChart
+                data={burndown.data}
+                isLoading={burndown.isLoading || iterations.isLoading}
+                error={burndown.error}
+                onRetry={() => burndown.refetch()}
+                iterations={iterationOptions}
+                selectedIterationId={iterationId}
+                onSelectIteration={setSelectedIterationId}
+              />
 
-              {velocity.isLoading ? (
-                <ChartSkeleton />
-              ) : velocity.isError || !velocity.data ? (
-                <ChartError message={(velocity.error as Error)?.message} onRetry={() => velocity.refetch()} />
-              ) : velocity.data.iterations.length === 0 ? (
-                <div className="rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 text-[13px] text-[var(--text-muted)]">
-                  No sprints overlap the selected window.
-                </div>
-              ) : (
-                <VelocityChart data={velocity.data} />
-              )}
+              <VelocityChart
+                data={velocity.data}
+                isLoading={velocity.isLoading}
+                error={velocity.error}
+                onRetry={() => velocity.refetch()}
+                dateRange={formattedRange}
+              />
 
-              {cumulativeFlow.isLoading ? (
-                <ChartSkeleton />
-              ) : cumulativeFlow.isError || !cumulativeFlow.data ? (
-                <ChartError message={(cumulativeFlow.error as Error)?.message} onRetry={() => cumulativeFlow.refetch()} />
-              ) : cumulativeFlow.data.points.every((p) => p.series.every((s) => s.value === 0)) ? (
-                <div className="rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 text-[13px] text-[var(--text-muted)]">
-                  No work items in the selected window.
-                </div>
-              ) : (
-                <CumulativeFlowChart data={cumulativeFlow.data} />
-              )}
+              <CumulativeFlowChart
+                data={cumulativeFlow.data}
+                isLoading={cumulativeFlow.isLoading}
+                error={cumulativeFlow.error}
+                onRetry={() => cumulativeFlow.refetch()}
+                groupBy={groupBy}
+                onGroupByChange={setGroupBy}
+                bucketSizeDays={bucketSizeDays}
+                onBucketSizeChange={setBucketSizeDays}
+                dateRange={formattedRange}
+              />
 
-              {cycleTime.isLoading ? (
-                <ChartSkeleton />
-              ) : cycleTime.isError || !cycleTime.data ? (
-                <ChartError message={(cycleTime.error as Error)?.message} onRetry={() => cycleTime.refetch()} />
-              ) : (
-                <FlowTimeChart data={cycleTime.data} title="Cycle Time" />
-              )}
+              <FlowTimeChart
+                title="Cycle Time"
+                data={cycleTime.data}
+                isLoading={cycleTime.isLoading}
+                error={cycleTime.error}
+                onRetry={() => cycleTime.refetch()}
+                selectedType={cycleType}
+                onSelectType={setCycleType}
+                dateRange={formattedRange}
+              />
 
-              {leadTime.isLoading ? (
-                <ChartSkeleton />
-              ) : leadTime.isError || !leadTime.data ? (
-                <ChartError message={(leadTime.error as Error)?.message} onRetry={() => leadTime.refetch()} />
-              ) : (
-                <FlowTimeChart data={leadTime.data} title="Lead Time" />
-              )}
+              <div className="lg:col-span-2">
+                <FlowTimeChart
+                  title="Lead Time"
+                  data={leadTime.data}
+                  isLoading={leadTime.isLoading}
+                  error={leadTime.error}
+                  onRetry={() => leadTime.refetch()}
+                  selectedType={leadType}
+                  onSelectType={setLeadType}
+                  dateRange={formattedRange}
+                />
+              </div>
             </div>
 
             <aside className="flex flex-col gap-4">
@@ -212,21 +195,21 @@ export function AnalyticsView({ projectId }: { projectId: string }) {
                 <h2 className="text-[14px] font-semibold text-[var(--text-primary)] mb-2">Burndown sprint</h2>
                 {iterations.isLoading ? (
                   <div className="h-8 animate-pulse rounded bg-[var(--bg-surface-raised)]" role="status" aria-label="Loading iterations" />
-                ) : iterations.data && iterations.data.length > 0 ? (
+                ) : iterationOptions.length > 0 ? (
                   <select
                     value={iterationId ?? ''}
                     onChange={(e) => setSelectedIterationId(e.target.value || undefined)}
                     className="w-full rounded-[var(--radius-button)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[13px] text-[var(--text-primary)]"
-                    aria-label="Burndown sprint"
+                    aria-label="Burndown sprint filter"
                   >
-                    {iterations.data.map((it) => (
+                    {iterationOptions.map((it) => (
                       <option key={it.id} value={it.id}>
                         {it.name}
                       </option>
                     ))}
                   </select>
                 ) : (
-                  <p className="text-[12px] text-[var(--text-muted)]">No sprints yet.</p>
+                  <p className="text-[12px] text-[var(--text-muted)]">No sprints found for this project/team.</p>
                 )}
               </div>
 
@@ -242,6 +225,7 @@ export function AnalyticsView({ projectId }: { projectId: string }) {
                           ? 'bg-[var(--brand-primary)] text-white'
                           : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)]'
                       }`}
+                      aria-pressed={groupBy === g}
                     >
                       {g}
                     </button>
@@ -251,11 +235,12 @@ export function AnalyticsView({ projectId }: { projectId: string }) {
 
               <div className="rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 text-[12px] text-[var(--text-muted)] leading-relaxed">
                 <p>
-                  <span className="font-medium text-[var(--text-secondary)]">How this works.</span>{' '}
-                  Burndown, velocity, CFD, cycle and lead time are recomputed from the work-item event log — state
-                  transitions, iteration moves and timestamps — never from the live board alone. Select{' '}
-                  <span className="font-medium text-[var(--text-secondary)]">Recompute snapshots</span> to pre-aggregate
-                  the default windows in the background.
+                  <span className="font-medium text-[var(--text-secondary)]">Historical metrics integrity.</span>{' '}
+                  Burndown, velocity, CFD, cycle time, and lead time are computed by replaying immutable state transitions,
+                  iteration assignments, point changes, and timestamps — never by inspecting the live board state alone.
+                </p>
+                <p className="mt-2">
+                  Click <span className="font-medium text-[var(--text-secondary)]">Recompute snapshots</span> to trigger a background BullMQ aggregation job.
                 </p>
               </div>
             </aside>

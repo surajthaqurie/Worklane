@@ -123,4 +123,28 @@ describe('makeArea', () => {
   it('carves margins out of the total width', () => {
     expect(makeArea(300)).toEqual({ left: 44, top: 12, width: 244, height: 218 });
   });
+
+  it('clamps width and height to 0 for tiny containers', () => {
+    expect(makeArea(20, 20)).toEqual({ left: 44, top: 12, width: 0, height: 0 });
+  });
+});
+
+describe('boundary & edge cases', () => {
+  it('handles negative or zero niceCeil gracefully', () => {
+    expect(niceCeil(-5)).toBe(1);
+    expect(niceCeil(0)).toBe(1);
+  });
+
+  it('handles empty stackedAreaPaths', () => {
+    const res = stackedAreaPaths([], AREA);
+    expect(res.paths).toEqual([]);
+    expect(res.topEdge).toBe('');
+    expect(res.maxY).toBe(1);
+  });
+
+  it('handles single-column stackedAreaPaths', () => {
+    const res = stackedAreaPaths([[5, 10]], AREA, 10);
+    expect(res.paths).toHaveLength(1);
+    expect(res.maxY).toBe(10);
+  });
 });

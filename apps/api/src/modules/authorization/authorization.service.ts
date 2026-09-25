@@ -1,12 +1,18 @@
 import { Injectable, ForbiddenException, NotFoundException, Optional } from '@nestjs/common';
 import { db } from '../../db/kysely.js';
-import { Permission, ProjectRole, hasPermission, getPermissionsForRole } from './permissions.js';
+import { Permission, ProjectRole, OrganizationRole, hasPermission, getPermissionsForRole } from './permissions.js';
 import { AuditLoggerService } from '../audit/audit-logger.service.js';
 
 export interface ProjectMembership {
   projectId: string;
   userId: string;
   role: ProjectRole;
+}
+
+export interface OrganizationMembership {
+  organizationId: string;
+  userId: string;
+  role: OrganizationRole;
 }
 
 /** Raw `projects` row as returned by `requireProjectPermissionWithProject`. */
@@ -261,5 +267,121 @@ export class AuthorizationService {
     const role = await this.getProjectRole(projectId, userId);
     if (!role) return { role: null, permissions: [] };
     return { role, permissions: getPermissionsForRole(role) };
+  }
+
+  // ─── Organization Authorization ──────────────────────────────────────────
+
+  private static readonly UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  /**
+   * Resolves the user's role in an organization.
+   * Returns 'OWNER' | 'ADMIN' | 'MEMBER' | null.
+   */
+  async getOrgRole(organizationId: string, userId: string): Promise<OrganizationRole | null> {
+    if (!AuthorizationService.UUID_REGEX.test(organizationId) || !AuthorizationService.UUID_REGEX.test(userId)) {
+      return null;
+    }
+
+    const memberRow = await db
+      .selectFrom('organization_members')
+      .where('organization_id', '=', organizationId)
+      .where('user_id', '=', userId)
+      .select(['role'])
+      .executeTakeFirst();
+
+    if (memberRow) {
+      return memberRow.role as OrganizationRole;
+    }
+
+    // Fall back to created_by check
+    const org = await db
+      .selectFrom('organizations')
+      .where('id', '=', organizationId)
+      .select(['created_by'])
+      .executeTakeFirst();
+
+    if (!org) return null;
+    if (org.created_by === userId) return 'OWNER';
+
+    return null;
+  }
+
+  /**
+   * Asserts that `userId` is a member of `organizationId` (any role).
+   * Throws NotFoundException if org does not exist, or ForbiddenException if user is not a member.
+   */
+  async requireOrgMember(organizationId: string, userId: string): Promise<OrganizationMembership> {
+    if (!AuthorizationService.UUID_REGEX.test(organizationId)) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const org = await db
+      .selectFrom('organizations')
+      .where('id', '=', organizationId)
+      .select(['id'])
+      .executeTakeFirst();
+
+    if (!org) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const role = await this.getOrgRole(organizationId, userId);
+    if (!role) {
+      if (this.auditLogger) {
+        await this.auditLogger.logEvent('PERMISSION_DENIED', userId, undefined, {
+          requiredScope: 'organization',
+          organizationId,
+        });
+      }
+      throw new ForbiddenException('You do not belong to this organization');
+    }
+
+    return { organizationId, userId, role };
+  }
+
+  /**
+   * Asserts that `userId` has ADMIN or OWNER role in `organizationId`.
+   */
+  async requireOrgAdmin(organizationId: string, userId: string): Promise<OrganizationMembership> {
+    const membership = await this.requireOrgMember(organizationId, userId);
+    if (membership.role !== 'OWNER' && membership.role !== 'ADMIN') {
+      throw new ForbiddenException('You do not have administrative privileges in this organization');
+    }
+    return membership;
+  }
+
+  /**
+   * Asserts that `userId` is an OWNER of `organizationId`.
+   */
+  async requireOrgOwner(organizationId: string, userId: string): Promise<OrganizationMembership> {
+    const membership = await this.requireOrgMember(organizationId, userId);
+    if (membership.role !== 'OWNER') {
+      throw new ForbiddenException('You must be an owner of this organization to perform this action');
+    }
+    return membership;
+  }
+
+  /**
+   * Asserts that `projectId` belongs to `organizationId`.
+   * Security defense against direct URL manipulation cross-tenant access.
+   */
+  async assertProjectBelongsToOrganization(projectId: string, organizationId: string): Promise<void> {
+    if (!AuthorizationService.UUID_REGEX.test(projectId) || !AuthorizationService.UUID_REGEX.test(organizationId)) {
+      throw new NotFoundException('Project not found');
+    }
+
+    const project = await db
+      .selectFrom('projects')
+      .where('id', '=', projectId)
+      .select(['id', 'organization_id'])
+      .executeTakeFirst();
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    if (project.organization_id !== organizationId) {
+      throw new ForbiddenException('Project does not belong to this organization');
+    }
   }
 }

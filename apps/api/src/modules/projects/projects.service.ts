@@ -37,11 +37,14 @@ export class ProjectsService {
   }
 
   async create(userId: string, data: CreateProjectDto) {
+    const orgId = data.organizationId ?? '00000000-0000-0000-0000-000000000000';
+    await this.authz.requireOrgMember(orgId, userId);
+
     const project = await this.repo.createProject({
       name: data.name,
       key: data.key,
       description: data.description,
-      organization_id: data.organizationId ?? '00000000-0000-0000-0000-000000000000',
+      organization_id: orgId,
       created_by: userId,
     });
     // Creator is added as OWNER in project_members (repo handles this)
@@ -54,8 +57,11 @@ export class ProjectsService {
     return this.mapProject(project);
   }
 
-  async findAll(userId: string) {
-    const projects = await this.repo.getProjects(userId);
+  async findAll(userId: string, organizationId?: string) {
+    if (organizationId) {
+      await this.authz.requireOrgMember(organizationId, userId);
+    }
+    const projects = await this.repo.getProjects(userId, organizationId);
     return projects.map(this.mapProject);
   }
 
@@ -171,6 +177,7 @@ export class ProjectsService {
   private mapProject(p: any) {
     return {
       id: p.id,
+      organizationId: p.organization_id,
       name: p.name,
       description: p.description,
       key: p.key,

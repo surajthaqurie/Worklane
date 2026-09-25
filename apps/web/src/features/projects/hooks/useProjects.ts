@@ -2,10 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../api/projectsApi';
 import { Project, ProjectArea, ProjectTag, ProjectMember, ProjectOverview } from '@/shared/types/projects';
 
-export function useProjects() {
+export function useProjects(organizationId?: string) {
   return useQuery<Project[]>({
-    queryKey: ['projects'],
-    queryFn: () => projectsApi.getProjects(),
+    queryKey: organizationId ? ['projects', { organizationId }] : ['projects'],
+    queryFn: () => projectsApi.getProjects(organizationId),
     staleTime: 5 * 60 * 1000,
   });
 }

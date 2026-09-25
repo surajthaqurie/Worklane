@@ -98,8 +98,8 @@ export class ProjectsRepository {
     });
   }
 
-  async getProjects(userId: string) {
-    return await db
+  async getProjects(userId: string, organizationId?: string) {
+    let query = db
       .selectFrom('projects')
       .leftJoin('project_members', 'projects.id', 'project_members.project_id')
       .where((eb) =>
@@ -107,7 +107,13 @@ export class ProjectsRepository {
           eb('projects.created_by', '=', userId),
           eb('project_members.user_id', '=', userId),
         ]),
-      )
+      );
+
+    if (organizationId) {
+      query = query.where('projects.organization_id', '=', organizationId);
+    }
+
+    return await query
       .selectAll('projects')
       .distinct()
       .execute();

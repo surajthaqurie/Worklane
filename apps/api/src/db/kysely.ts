@@ -15,6 +15,16 @@ export interface Database {
   organizations: {
     id: Generated<string>;
     name: string;
+    description: string | null;
+    created_by: string | null;
+    created_at: ColumnType<Date, string | undefined, never>;
+    updated_at: ColumnType<Date, string | undefined, string | Date>;
+  };
+  organization_members: {
+    id: Generated<string>;
+    organization_id: string;
+    user_id: string;
+    role: Generated<'OWNER' | 'ADMIN' | 'MEMBER'>;
     created_at: ColumnType<Date, string | undefined, never>;
   };
   users: {

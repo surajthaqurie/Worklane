@@ -1,5 +1,6 @@
 export interface Project {
   id: string;
+  organizationId?: string;
   key: string;
   name: string;
   description: string | null;

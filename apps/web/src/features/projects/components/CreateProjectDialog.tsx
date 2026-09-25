@@ -8,9 +8,14 @@ import { useToast } from '@/shared/hooks/useToast';
 export interface CreateProjectDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  defaultOrganizationId?: string;
 }
 
-export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProps) {
+export function CreateProjectDialog({
+  isOpen,
+  onClose,
+  defaultOrganizationId,
+}: CreateProjectDialogProps) {
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
   const [description, setDescription] = useState('');
@@ -23,7 +28,12 @@ export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProp
     if (!name.trim() || !key.trim()) return;
 
     createProject.mutate(
-      { name: name.trim(), key: key.trim().toUpperCase(), description: description.trim() || undefined },
+      {
+        name: name.trim(),
+        key: key.trim().toUpperCase(),
+        description: description.trim() || undefined,
+        organizationId: defaultOrganizationId,
+      } as any,
       {
         onSuccess: () => {
           toast.showSuccess('Project created successfully');

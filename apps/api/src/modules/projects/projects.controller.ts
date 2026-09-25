@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../../common/auth/auth.guard.js';
@@ -31,8 +32,11 @@ export class ProjectsController {
   }
 
   @Get()
-  findAll(@CurrentUser() user: AuthenticatedUser) {
-    return this.projectsService.findAll(user.id);
+  findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('organizationId') organizationId?: string,
+  ) {
+    return this.projectsService.findAll(user.id, organizationId);
   }
 
   @Get(':id')

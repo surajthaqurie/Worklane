@@ -127,7 +127,7 @@ describe('CSV Validator', () => {
 
   it('supports intra-file parent resolution referencing earlier rows in CSV', () => {
     const rows = [
-      { Title: 'Mobile App Epic', Type: 'EPIC' },
+      { Title: 'Mobile App Epic', Type: 'EPIC', Parent: '' },
       { Title: 'Push Notifications Feature', Type: 'FEATURE', Parent: 'Mobile App Epic' },
       { Title: 'Receive APNS token', Type: 'STORY', Parent: 'Push Notifications Feature' },
       { Title: 'Configure background handler', Type: 'TASK', Parent: 'Receive APNS token' },

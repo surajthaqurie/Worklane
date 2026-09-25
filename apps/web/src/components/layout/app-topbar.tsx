@@ -6,6 +6,7 @@ import { useTheme } from '@/shared/components/providers';
 import { GlobalSearch } from '@/shared/components/ui/GlobalSearch';
 import { NotificationsPopover } from '@/features/notifications/components/NotificationsPopover';
 import { useAuth } from '@/shared/context/AuthContext';
+import { OrganizationSwitcher } from '@/features/organizations';
 
 const emptySubscribe = () => () => {};
 
@@ -55,15 +56,18 @@ export function AppTopbar({ onMenuClick }: AppTopbarProps) {
 
   return (
     <header className="flex items-center justify-between h-14 px-4 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] sm:px-6 lg:px-8 z-10 shrink-0">
-      <div className="flex flex-1 items-center">
+      <div className="flex flex-1 items-center gap-3">
         <button
           onClick={onMenuClick}
-          className="p-1 -ml-1 mr-3 text-[var(--text-secondary)] md:hidden hover:text-[var(--text-primary)] focus:outline-none"
+          className="p-1 -ml-1 mr-1 text-[var(--text-secondary)] md:hidden hover:text-[var(--text-primary)] focus:outline-none"
         >
           <span className="sr-only">Open sidebar</span>
           <Menu className="w-5 h-5" aria-hidden="true" />
         </button>
-        <div className="flex w-full md:ml-0 max-w-md items-center">
+
+        <OrganizationSwitcher />
+
+        <div className="hidden sm:flex w-full md:ml-0 max-w-md items-center">
           <GlobalSearch />
         </div>
       </div>

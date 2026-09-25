@@ -14,6 +14,7 @@
 // ─── Project-level roles ──────────────────────────────────────────────────────
 
 export type ProjectRole = 'OWNER' | 'ADMIN' | 'MEMBER';
+export type OrganizationRole = 'OWNER' | 'ADMIN' | 'MEMBER';
 
 // ─── Permission enum ──────────────────────────────────────────────────────────
 

@@ -24,7 +24,7 @@ export function ProjectSidebar() {
     <div className="flex flex-col w-64 h-full bg-[var(--bg-surface)] border-r border-[var(--border-subtle)]">
       <div className="p-4 border-b border-[var(--border-subtle)]">
         <Link
-          href="/projects"
+          href={project?.organizationId ? `/orgs/${project.organizationId}/projects` : '/projects'}
           className="flex items-center text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] mb-4 font-medium transition-colors"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />

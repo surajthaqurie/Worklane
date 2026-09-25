@@ -1,66 +1,87 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppSidebar } from './app-sidebar';
 import { AppTopbar } from './app-topbar';
 import { MobileNavigation } from './mobile-navigation';
 import { useAuth } from '@/shared/context/AuthContext';
+import { LoadingScreen } from '@/components/feedback/Spinner';
+import { useSidebarState } from '@/shared/hooks/useSidebarState';
+import { CommandPaletteProvider } from '@/components/navigation/CommandPaletteProvider';
 
-export function AppShell({ children, sidebar }: { children: React.ReactNode, sidebar?: React.ReactNode }) {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+/**
+ * AppShell — the outermost authenticated layout.
+ *
+ * Renders:
+ *  - Desktop sidebar (collapsed/expanded, state persisted to localStorage)
+ *  - Mobile navigation drawer
+ *  - Top bar with command palette trigger, breadcrumbs, user menu
+ *  - Main content area (scrollable)
+ *
+ * Route protection: redirects to /login when the session is gone.
+ * Uses router.replace (not push) so the protected URL doesn't land in history.
+ * Returns null while auth is loading to prevent a flash of the protected shell.
+ */
+export function AppShell({
+  children,
+  sidebar,
+}: {
+  children: React.ReactNode;
+  sidebar?: React.ReactNode;
+}) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user, isLoading } = useAuth();
+  const { isCollapsed, toggle } = useSidebarState();
   const router = useRouter();
 
-  useEffect(() => {
-    if (!isLoading && !user) {
-      router.push('/login');
-    }
-  }, [isLoading, user, router]);
+  // Route protection — redirect without adding to history
+  if (!isLoading && !user) {
+    router.replace('/login');
+    return null;
+  }
 
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[var(--bg-app)]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium text-[var(--text-secondary)]">Loading session...</p>
-        </div>
+        <LoadingScreen message="Loading session..." />
       </div>
     );
   }
 
-  if (!user) {
-    return null;
-  }
-
   return (
-    <div className="flex h-screen bg-[var(--bg-app)] overflow-hidden">
-      {/* Desktop Sidebar */}
-      <div className="hidden md:block h-full border-r border-[var(--border-subtle)]">
-        {sidebar || (
-          <AppSidebar 
-            isCollapsed={isSidebarCollapsed} 
-            onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
-          />
-        )}
-      </div>
+    <CommandPaletteProvider>
+      <div className="flex h-screen bg-[var(--bg-app)] overflow-hidden">
+        {/* Desktop Sidebar */}
+        <div className="hidden md:block h-full border-r border-[var(--border-subtle)] shrink-0">
+          {sidebar || (
+            <AppSidebar
+              isCollapsed={isCollapsed}
+              onToggle={toggle}
+            />
+          )}
+        </div>
 
-      {/* Mobile Navigation Drawer */}
-      <MobileNavigation 
-        isOpen={isMobileMenuOpen} 
-        onClose={() => setIsMobileMenuOpen(false)} 
-      />
+        {/* Mobile Drawer */}
+        <MobileNavigation
+          isOpen={isMobileMenuOpen}
+          onClose={() => setIsMobileMenuOpen(false)}
+        />
 
-      {/* Main Content Area */}
-      <div className="flex flex-col flex-1 w-0 overflow-hidden">
-        <AppTopbar onMenuClick={() => setIsMobileMenuOpen(true)} />
-        <main className="flex-1 relative overflow-y-auto focus:outline-none p-4 md:p-8">
-          <div className="max-w-7xl mx-auto h-full">
-            {children}
-          </div>
-        </main>
+        {/* Main content */}
+        <div className="flex flex-col flex-1 w-0 min-w-0 overflow-hidden">
+          <AppTopbar onMenuClick={() => setIsMobileMenuOpen(true)} />
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className="flex-1 relative overflow-y-auto focus:outline-none"
+          >
+            <div className="h-full p-4 md:p-6 max-w-screen-2xl mx-auto">
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </CommandPaletteProvider>
   );
 }

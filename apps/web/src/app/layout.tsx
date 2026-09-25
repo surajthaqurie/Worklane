@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TaskForge",
-  description: "Modern project-management for your team.",
+  title: "Worklane",
+  description: "Azure Boards-inspired project management platform for high-performance teams.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -35,7 +35,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body suppressHydrationWarning className="min-h-full flex flex-col font-sans bg-[var(--bg-app)] text-[var(--text-primary)]">
+      <body
+        suppressHydrationWarning
+        className="min-h-full flex flex-col font-sans bg-[var(--bg-app)] text-[var(--text-primary)]"
+      >
+        <a href="#main-content" className="skip-to-content">
+          Skip to main content
+        </a>
         <Providers>{children}</Providers>
       </body>
     </html>

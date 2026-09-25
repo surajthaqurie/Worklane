@@ -6,9 +6,13 @@ import { BackgroundJobsController } from './background-jobs.controller.js';
 import { BackgroundJobsQueue } from './queue/background-jobs.queue.js';
 import { BackgroundJobsWorker } from './queue/background-jobs.worker.js';
 import { AnalyticsModule } from '../analytics/analytics.module.js';
+import { CsvImportModule } from '../csv-import/csv-import.module.js';
 
 @Module({
-  imports: [forwardRef(() => AnalyticsModule)],
+  imports: [
+    forwardRef(() => AnalyticsModule),
+    forwardRef(() => CsvImportModule),
+  ],
   controllers: [BackgroundJobsController],
   providers: [
     BackgroundJobsRepository,

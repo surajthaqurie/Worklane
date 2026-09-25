@@ -17,6 +17,7 @@ import { BackgroundJobsModule } from './modules/background-jobs/background-jobs.
 import { DeliveryPlansModule } from './modules/delivery-plans/delivery-plans.module.js';
 import { AnalyticsModule } from './modules/analytics/analytics.module.js';
 import { DashboardsModule } from './modules/dashboards/dashboards.module.js';
+import { CsvImportModule } from './modules/csv-import/csv-import.module.js';
 import { AppExceptionFilter } from './common/exceptions/app-exception.filter.js';
 import { IdempotencyModule } from './common/idempotency/idempotency.module.js';
 import { IdempotencyInterceptor } from './common/idempotency/idempotency.interceptor.js';
@@ -46,6 +47,7 @@ import { IdempotencyInterceptor } from './common/idempotency/idempotency.interce
     DeliveryPlansModule,
     AnalyticsModule,
     DashboardsModule,
+    CsvImportModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AppExceptionFilter },

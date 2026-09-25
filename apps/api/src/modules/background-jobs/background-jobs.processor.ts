@@ -5,6 +5,7 @@ import { BackgroundJobsRepository } from './background-jobs.repository.js';
 import { BackgroundJobDto, JobType } from './dto/background-job.dto.js';
 import { logJobEvent } from './background-jobs.logger.js';
 import { AnalyticsService } from '../analytics/analytics.service.js';
+import { CsvImportService } from '../csv-import/csv-import.service.js';
 
 export type JobProgressCallback = (progress: number) => Promise<void>;
 export interface JobExecutionResult {
@@ -32,6 +33,9 @@ export class BackgroundJobsProcessor {
     @Optional()
     @Inject(forwardRef(() => AnalyticsService))
     private readonly analytics?: AnalyticsService,
+    @Optional()
+    @Inject(forwardRef(() => CsvImportService))
+    private readonly csvImportService?: CsvImportService,
   ) {}
 
   async executeJobTask(
@@ -113,6 +117,10 @@ export class BackgroundJobsProcessor {
     payload: Record<string, any>,
     onProgress: JobProgressCallback,
   ): Promise<JobExecutionResult> {
+    if (this.csvImportService && payload.validRows) {
+      return await this.csvImportService.executeImportJob(payload, onProgress);
+    }
+
     const rowCount = Number(payload.rowCount ?? 50);
     if (!Number.isInteger(rowCount) || rowCount <= 0) {
       throw new Error(`Invalid rowCount '${payload.rowCount}' — expected a positive integer`);

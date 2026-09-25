@@ -8,7 +8,8 @@ import { WorkItem } from '@/shared/types/work-items';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { WorkItemDrawer } from '@/features/work-items/components/WorkItemDrawer';
 import { CreateWorkItemModal } from '@/features/work-items/components/CreateWorkItemModal';
-import { Search, Filter, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CsvImportModal } from '@/features/csv-import';
+import { Search, Filter, Loader2, ChevronLeft, ChevronRight, UploadCloud } from 'lucide-react';
 import { useToast } from '@/shared/hooks/useToast';
 import { useDebounce } from '@/shared/hooks/useDebounce';
 import { WorkItemPriorityBadge } from '@/features/work-items/components/WorkItemBadge';
@@ -36,13 +37,14 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
   const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(0);
+  const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
 
   const isCreateModalOpen = searchParams.get('new') === '1';
 
   const openModal = () => router.push(`${pathname}?new=1`);
   const closeModal = () => router.replace(pathname);
 
-  const { data: workItems = [], isLoading } = useWorkItems(
+  const { data: workItems = [], isLoading, refetch: refetchWorkItems } = useWorkItems(
     resolvedParams.projectId,
     selectedTeamId,
     {
@@ -78,10 +80,18 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
             All work items across the project.
           </p>
         </div>
-        <div className="mt-4 flex md:ml-4 md:mt-0 gap-3">
+        <div className="mt-4 flex md:ml-4 md:mt-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsCsvImportOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-primary)] text-[13px] font-medium rounded-[var(--radius-button)] transition-colors cursor-pointer shadow-xs"
+          >
+            <UploadCloud className="w-4 h-4 text-[var(--brand-primary)]" />
+            <span>Import CSV</span>
+          </button>
           <button
             onClick={openModal}
-            className="px-4 py-2 bg-[var(--brand-primary)] hover:opacity-90 text-white text-[13px] font-medium rounded-[var(--radius-button)] transition-colors"
+            className="px-4 py-2 bg-[var(--brand-primary)] hover:opacity-90 text-white text-[13px] font-medium rounded-[var(--radius-button)] transition-colors cursor-pointer shadow-xs"
           >
             + New Work Item
           </button>
@@ -235,6 +245,15 @@ function WorkItemsPageContent({ params }: { params: Promise<{ projectId: string 
         teamId={selectedTeamId}
         isOpen={isCreateModalOpen}
         onClose={closeModal}
+      />
+
+      <CsvImportModal
+        isOpen={isCsvImportOpen}
+        onClose={() => setIsCsvImportOpen(false)}
+        projectId={resolvedParams.projectId}
+        onImportComplete={() => {
+          refetchWorkItems();
+        }}
       />
     </div>
   );

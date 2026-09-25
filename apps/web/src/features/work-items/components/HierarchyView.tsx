@@ -4,7 +4,7 @@ import React from 'react';
 import { HierarchyNode, WorkItemHierarchyResponse } from '@/shared/types/work-items';
 import { WorkItemTypeBadge } from './WorkItemBadge';
 import { Spinner } from '@/shared/components/ui/Spinner';
-import { Layers, ChevronRight, CheckCircle2, Clock, Hash, Percent } from 'lucide-react';
+import { Layers, ChevronRight, Hash } from 'lucide-react';
 
 interface HierarchyViewProps {
   hierarchy: WorkItemHierarchyResponse | undefined;

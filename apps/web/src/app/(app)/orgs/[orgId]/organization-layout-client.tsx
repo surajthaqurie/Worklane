@@ -8,7 +8,6 @@ import { AppShell } from '@/components/layout/app-shell';
 
 export function OrganizationLayoutClient({
   children,
-  orgId,
 }: {
   children: React.ReactNode;
   orgId: string;

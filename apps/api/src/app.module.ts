@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ProjectsModule } from './modules/projects/projects.module.js';
@@ -19,9 +19,11 @@ import { AnalyticsModule } from './modules/analytics/analytics.module.js';
 import { DashboardsModule } from './modules/dashboards/dashboards.module.js';
 import { CsvImportModule } from './modules/csv-import/csv-import.module.js';
 import { OrganizationsModule } from './modules/organizations/organizations.module.js';
+import { HealthModule } from './modules/health/health.module.js';
 import { AppExceptionFilter } from './common/exceptions/app-exception.filter.js';
 import { IdempotencyModule } from './common/idempotency/idempotency.module.js';
 import { IdempotencyInterceptor } from './common/idempotency/idempotency.interceptor.js';
+import { RequestIdMiddleware } from './common/middleware/request-id.middleware.js';
 
 @Module({
   imports: [
@@ -31,6 +33,7 @@ import { IdempotencyInterceptor } from './common/idempotency/idempotency.interce
         limit: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
       },
     ]),
+    HealthModule,
     IdempotencyModule,
     AuditModule,
     AuthModule,
@@ -57,4 +60,8 @@ import { IdempotencyInterceptor } from './common/idempotency/idempotency.interce
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
+  }
+}

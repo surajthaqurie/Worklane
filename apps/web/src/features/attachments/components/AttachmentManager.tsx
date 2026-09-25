@@ -65,8 +65,9 @@ export function AttachmentManager({ projectId, workItemId, canEdit = true }: Att
       setDownloadingId(att.id);
       const res = await attachmentsApi.getDownloadUrl(projectId, workItemId, att.id);
       window.open(res.downloadUrl, '_blank');
-    } catch (err: any) {
-      toast.showError('Download failed', err?.message || 'Could not generate download URL');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not generate download URL';
+      toast.showError('Download failed', message);
     } finally {
       setDownloadingId(null);
     }

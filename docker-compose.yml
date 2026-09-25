@@ -31,6 +31,27 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:
+    image: minio/minio:latest
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - storage
+      - full
+
   api:
     build:
       context: .
@@ -49,6 +70,14 @@ services:
       JWT_REFRESH_SECRET: super-secret-worklane-refresh-key-change-in-production
       SEED_ADMIN_EMAIL: admin@worklane.dev
       SEED_ADMIN_PASSWORD: WorklaneAdmin2026!
+      RUN_MIGRATIONS: "true"
+      UPLOAD_DIR: /app/uploads
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: worklane-attachments
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadminpassword
+      S3_FORCE_PATH_STYLE: "true"
     depends_on:
       db:
         condition: service_healthy
@@ -56,6 +85,30 @@ services:
         condition: service_healthy
     volumes:
       - uploads_data:/app/uploads
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: ["node", "apps/api/dist/background-worker.js"]
+    restart: always
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://postgres:root@db:5432/todoapp
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      UPLOAD_DIR: /app/uploads
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: worklane-attachments
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadminpassword
+      S3_FORCE_PATH_STYLE: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   web:
     build:
@@ -70,11 +123,13 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: http://localhost:4000
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     profiles:
       - full
 
 volumes:
   postgres_data:
   redis_data:
+  minio_data:
   uploads_data:

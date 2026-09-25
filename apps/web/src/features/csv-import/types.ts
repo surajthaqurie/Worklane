@@ -59,3 +59,12 @@ export interface CsvImportResult {
   errors: CsvRowError[];
   message?: string;
 }
+
+export interface CsvJobStatus {
+  id: string;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'DEAD_LETTER';
+  progress: number;
+  result?: CsvImportResult | null;
+  errorMessage?: string | null;
+}
+

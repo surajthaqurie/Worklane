@@ -520,7 +520,7 @@ export function Queries({ projectId }: { projectId: string }) {
 
           {draftDef.filters.length === 0 ? (
             <span className="text-xs text-[var(--text-muted)] italic py-2">
-              No clauses defined. Click "Add Clause" or "Run Query" to fetch all project work items.
+              No clauses defined. Click &quot;Add Clause&quot; or &quot;Run Query&quot; to fetch all project work items.
             </span>
           ) : (
             <div className="flex flex-col gap-2">

@@ -10,9 +10,6 @@ import {
   ArrowLeft,
   Download,
   RefreshCw,
-  FileText,
-  AlertTriangle,
-  X,
 } from 'lucide-react';
 import { Modal } from '@/shared/components/ui';
 import {
@@ -65,7 +62,7 @@ export function CsvImportModal({
   const [step, setStep] = useState<'UPLOAD' | 'MAPPING' | 'PREVIEW' | 'PROGRESS'>('UPLOAD');
 
   // File & Parsing state
-  const [file, setFile] = useState<File | null>(null);
+  const [, setFile] = useState<File | null>(null);
   const [parseResult, setParseResult] = useState<CsvParseResult | null>(null);
 
   // Mapping state: CSV Header -> Target Field Key
@@ -281,7 +278,7 @@ export function CsvImportModal({
             {parseMutation.isError && (
               <div className="rounded-[var(--radius-button)] border border-rose-200 bg-rose-50 dark:bg-rose-950/30 p-3 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{(parseMutation.error as any)?.message || 'Failed to parse CSV file'}</span>
+                <span>{(parseMutation.error as Error)?.message || 'Failed to parse CSV file'}</span>
               </div>
             )}
 
@@ -375,7 +372,7 @@ export function CsvImportModal({
 
             {validateMutation.isError && (
               <div className="rounded-[var(--radius-button)] border border-rose-200 bg-rose-50 dark:bg-rose-950/30 p-3 text-xs text-rose-700 dark:text-rose-300">
-                {(validateMutation.error as any)?.message || 'Validation request failed'}
+                {(validateMutation.error as Error)?.message || 'Validation request failed'}
               </div>
             )}
 
@@ -623,7 +620,7 @@ export function CsvImportModal({
 
             {executeMutation.isError && (
               <div className="rounded-[var(--radius-button)] border border-rose-200 bg-rose-50 dark:bg-rose-950/30 p-3 text-xs text-rose-700 dark:text-rose-300">
-                {(executeMutation.error as any)?.message || 'Import execution failed'}
+                {(executeMutation.error as Error)?.message || 'Import execution failed'}
               </div>
             )}
 

@@ -15,15 +15,12 @@ import { useAuth } from '@/shared/context/AuthContext';
 import { CreateProjectDialog } from '@/features/projects/components/CreateProjectDialog';
 import type { OrganizationRole } from '../types';
 import {
-  Building2,
   Users,
   Folder,
   Settings as SettingsIcon,
-  Shield,
   UserPlus,
   Trash2,
   Check,
-  AlertCircle,
   Loader2,
   Copy,
 } from 'lucide-react';
@@ -38,8 +35,8 @@ export function OrganizationSettingsView({ organizationId }: OrganizationSetting
 
   // Queries
   const { data: organization, isLoading: isOrgLoading } = useOrganization(organizationId);
-  const { data: members = [], isLoading: isMembersLoading } = useOrgMembers(organizationId);
-  const { data: projects = [], isLoading: isProjectsLoading } = useOrgProjects(organizationId);
+  const { data: members = [] } = useOrgMembers(organizationId);
+  const { data: projects = [] } = useOrgProjects(organizationId);
 
   // Mutations
   const updateOrgMutation = useUpdateOrganization(organizationId);
@@ -48,10 +45,18 @@ export function OrganizationSettingsView({ organizationId }: OrganizationSetting
   const removeMemberMutation = useRemoveOrgMember(organizationId);
 
   // Form states
-  const [name, setName] = useState(organization?.name || '');
-  const [description, setDescription] = useState(organization?.description || '');
+  const [prevOrgId, setPrevOrgId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
+
+  // Sync form when org data loads (pure state adjustment pattern)
+  if (organization && organization.id !== prevOrgId) {
+    setPrevOrgId(organization.id);
+    setName(organization.name);
+    setDescription(organization.description || '');
+  }
 
   // Add member modal state
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -61,14 +66,6 @@ export function OrganizationSettingsView({ organizationId }: OrganizationSetting
 
   // Create project modal state
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
-
-  // Sync form when org data loads
-  React.useEffect(() => {
-    if (organization) {
-      setName(organization.name);
-      setDescription(organization.description || '');
-    }
-  }, [organization]);
 
   const isOwner = organization?.role === 'OWNER';
   const isAdmin = organization?.role === 'ADMIN' || isOwner;
@@ -86,8 +83,9 @@ export function OrganizationSettingsView({ organizationId }: OrganizationSetting
       });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err: any) {
-      setSaveError(err?.message || 'Failed to update organization');
+    } catch (err: unknown) {
+      const errorObj = err as Error;
+      setSaveError(errorObj?.message || 'Failed to update organization');
     }
   };
 
@@ -104,16 +102,18 @@ export function OrganizationSettingsView({ organizationId }: OrganizationSetting
       setInviteEmail('');
       setInviteRole('MEMBER');
       setIsAddMemberOpen(false);
-    } catch (err: any) {
-      setAddMemberError(err?.message || 'Failed to add member');
+    } catch (err: unknown) {
+      const errorObj = err as Error;
+      setAddMemberError(errorObj?.message || 'Failed to add member');
     }
   };
 
   const handleRoleChange = async (memberUserId: string, newRole: OrganizationRole) => {
     try {
       await updateRoleMutation.mutateAsync({ userId: memberUserId, role: newRole });
-    } catch (err: any) {
-      alert(err?.message || 'Failed to update role');
+    } catch (err: unknown) {
+      const errorObj = err as Error;
+      alert(errorObj?.message || 'Failed to update role');
     }
   };
 
@@ -127,8 +127,9 @@ export function OrganizationSettingsView({ organizationId }: OrganizationSetting
 
     try {
       await removeMemberMutation.mutateAsync(memberUserId);
-    } catch (err: any) {
-      alert(err?.message || 'Failed to remove member');
+    } catch (err: unknown) {
+      const errorObj = err as Error;
+      alert(errorObj?.message || 'Failed to remove member');
     }
   };
 

@@ -1,4 +1,4 @@
--- apps/api/src/db/migrations/036_create_dashboard_layouts.sql
+-- db/migrations/036_create_dashboard_layouts.sql
 -- Worklane Phase 20 — Dashboard Widget System Layout Persistence
 
 CREATE TABLE IF NOT EXISTS dashboard_layouts (

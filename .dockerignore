@@ -1,0 +1,41 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Version Control
+.git
+.gitignore
+.github
+
+# Build Artifacts
+apps/api/dist
+apps/web/.next
+apps/web/out
+dist
+build
+
+# Test & Coverage Outputs
+coverage
+.nyc_output
+playwright-report
+test-results
+.testcontainers
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env.local
+.env.*.local
+
+# Operating System & IDE Files
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+*.swp
+*.swo

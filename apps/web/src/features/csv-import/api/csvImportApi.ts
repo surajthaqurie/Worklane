@@ -1,4 +1,4 @@
-import { apiClient, request } from '@/shared/utils/apiClient';
+import { apiClient } from '@/shared/utils/apiClient';
 import type {
   CsvImportMode,
   CsvImportResult,
@@ -48,6 +48,6 @@ export const csvImportApi = {
   },
 
   getJobStatus: (jobId: string) => {
-    return apiClient.get<{ job: any }>(`/background-jobs/${jobId}`);
+    return apiClient.get<{ job: import('../types').CsvJobStatus }>(`/background-jobs/${jobId}`);
   },
 };

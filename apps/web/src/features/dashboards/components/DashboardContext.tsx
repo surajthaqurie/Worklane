@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext } from 'react';
+import { createContext, useContext } from 'react';
 import type { DashboardData, WidgetLayout } from '@/shared/types/dashboard';
 
 export interface DashboardContextValue {

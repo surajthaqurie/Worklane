@@ -71,7 +71,6 @@ export function OrganizationProvider({
     if (effectiveOrgId && typeof window !== 'undefined') {
       try {
         localStorage.setItem(STORAGE_KEY, effectiveOrgId);
-        setStoredOrgId(effectiveOrgId);
       } catch {
         // ignore localStorage errors
       }
@@ -88,7 +87,8 @@ export function OrganizationProvider({
   // Check if user is unauthorized for this org (403 Forbidden or 404 from API)
   const isUnauthorized = useMemo(() => {
     if (!orgError) return false;
-    const status = (orgError as any)?.status || (orgError as any)?.statusCode;
+    const err = orgError as { status?: number; statusCode?: number } | null;
+    const status = err?.status || err?.statusCode;
     return status === 403 || status === 404;
   }, [orgError]);
 

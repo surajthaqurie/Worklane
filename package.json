@@ -9,7 +9,12 @@
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "seed": "pnpm --filter api seed"
+    "seed": "pnpm --filter api seed",
+    "migrate": "pnpm --filter api migrate",
+    "worker": "pnpm --filter api worker",
+    "benchmark": "pnpm --filter api exec tsx src/benchmark/scale-benchmark.ts",
+    "test:load": "pnpm --filter api exec tsx src/benchmark/load-test-flows.ts",
+    "test:e2e": "pnpm --filter web test:e2e"
   },
   "keywords": [],
   "author": "",

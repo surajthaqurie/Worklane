@@ -1,4 +1,4 @@
--- apps/api/src/db/migrations/037_create_organization_members.sql
+-- db/migrations/037_create_organization_members.sql
 -- Worklane Phase 22 — Multi-Organization UX
 
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE SET NULL;

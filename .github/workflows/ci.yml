@@ -11,6 +11,38 @@ jobs:
     name: Lint, Typecheck, Test & Build
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: todoapp
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:root@localhost:5434/todoapp
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_SECRET: ci-test-jwt-secret-key-32-chars-minimum
+      JWT_REFRESH_SECRET: ci-test-jwt-refresh-secret-key-32-chars
+      CI: true
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -35,8 +67,20 @@ jobs:
       - name: Check TypeScript Types
         run: pnpm typecheck
 
-      - name: Run Unit Tests
+      - name: Apply Database Migrations
+        run: pnpm migrate
+
+      - name: Run Unit & Integration Tests
         run: pnpm test
+
+      - name: Install Playwright Browsers
+        run: pnpm --filter web exec playwright install --with-deps chromium
+
+      - name: Run E2E Tests
+        run: pnpm --filter web test:e2e
+        env:
+          E2E_API_URL: http://localhost:4000
+          E2E_WEB_URL: http://localhost:3000
 
       - name: Build Monorepo Applications
         run: pnpm build

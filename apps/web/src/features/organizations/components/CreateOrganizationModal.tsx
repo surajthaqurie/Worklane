@@ -39,8 +39,9 @@ export function CreateOrganizationModal({ isOpen, onClose }: CreateOrganizationM
       setDescription('');
       onClose();
       switchOrganization(created.id);
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Failed to create organization');
+    } catch (err: unknown) {
+      const e = err as Error;
+      setErrorMessage(e?.message || 'Failed to create organization');
     }
   };
 

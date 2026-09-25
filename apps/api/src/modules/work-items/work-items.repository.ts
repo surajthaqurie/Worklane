@@ -241,9 +241,11 @@ export class WorkItemsRepository {
       });
     }
 
-    // Minimal pagination representation
-    const limit = filters.limit ? parseInt(filters.limit) : 50;
-    const offset = filters.offset ? parseInt(filters.offset) : 0;
+    // Safe pagination bounds: default 50, maximum 200 items per page
+    const parsedLimit = filters.limit ? parseInt(filters.limit, 10) : 50;
+    const limit = Math.min(Math.max(1, isNaN(parsedLimit) ? 50 : parsedLimit), 200);
+    const parsedOffset = filters.offset ? parseInt(filters.offset, 10) : 0;
+    const offset = Math.max(0, isNaN(parsedOffset) ? 0 : parsedOffset);
 
     // Lean list: `description` and `points` are payload-heavy and only needed
     // on detail views, so they are excluded by default. Callers that render

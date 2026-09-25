@@ -7,7 +7,7 @@ import { useProjects } from '@/features/projects/hooks/useProjects';
 import { CreateProjectDialog } from '@/features/projects/components/CreateProjectDialog';
 import { PageHeader } from '@/components/layout/page-header';
 import { Spinner, ErrorState, EmptyState } from '@/shared/components/ui';
-import { Folder, Plus, ArrowRight, Layers } from 'lucide-react';
+import { Folder, Plus, ArrowRight } from 'lucide-react';
 import { DashboardGrid } from '@/features/dashboards';
 import { WorkItemDrawer } from '@/features/work-items/components/WorkItemDrawer';
 import { useWorkItemDetail } from '@/features/work-items/hooks/useWorkItems';

@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { attachmentsApi } from '../api/attachmentsApi';
-import { WorkItemAttachment } from '@/shared/types/work-items';
 import { useToast } from '@/shared/hooks/useToast';
 import { formatApiError } from '@/shared/utils/error';
 
@@ -114,8 +113,9 @@ export function useUploadAttachments(projectId: string, workItemId: string) {
         queryClient.invalidateQueries({
           queryKey: ['projects', projectId, 'work-items', workItemId, 'attachments'],
         });
-      } catch (err: any) {
-        if (err.message === 'Upload cancelled') {
+      } catch (err: unknown) {
+        const errorObj = err as Error;
+        if (errorObj?.message === 'Upload cancelled') {
           setTasks((prev) =>
             prev.map((t) => (t.id === task.id ? { ...t, status: 'cancelled', progress: 0 } : t)),
           );

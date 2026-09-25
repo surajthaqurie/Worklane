@@ -27,8 +27,10 @@ export function ActivityWidget({ widget }: { widget: WidgetLayout }) {
     }
   };
 
+  const [now] = React.useState(() => Date.now());
+
   const formatRelativeTime = (isoString: string) => {
-    const diffMs = Date.now() - new Date(isoString).getTime();
+    const diffMs = now - new Date(isoString).getTime();
     const diffMins = Math.floor(diffMs / (1000 * 60));
     if (diffMins < 1) return 'just now';
     if (diffMins < 60) return `${diffMins}m ago`;

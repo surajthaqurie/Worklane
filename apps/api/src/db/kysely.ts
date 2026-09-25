@@ -373,13 +373,21 @@ export interface Database {
   };
 }
 
+const pool = new Pool({
+  connectionString:
+    process.env.DATABASE_URL ||
+    'postgresql://postgres:root@localhost:5434/todoapp',
+  max: parseInt(process.env.DB_POOL_MAX || '20', 10),
+  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT_MS || '30000', 10),
+  connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONN_TIMEOUT_MS || '5000', 10),
+});
+
+pool.on('error', (err) => {
+  console.error('[PostgreSQL Pool] Unexpected error on idle client:', err);
+});
+
 const dialect = new PostgresDialect({
-  pool: new Pool({
-    connectionString:
-      process.env.DATABASE_URL ||
-      'postgresql://postgres:root@localhost:5434/todoapp',
-    max: 10,
-  }),
+  pool,
 });
 
 export const db = new Kysely<Database>({

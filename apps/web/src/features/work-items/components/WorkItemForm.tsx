@@ -1,10 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { WorkItemType, WorkItemPriority, SeverityLevel, CreateWorkItemDto, WorkItem } from '@/shared/types/work-items';
-import { useWorkItems } from '../hooks/useWorkItems';
+import { WorkItemType, WorkItemPriority, SeverityLevel, CreateWorkItemDto } from '@/shared/types/work-items';
 import { useWorkItemStates } from '../hooks/useWorkItemStates';
-import { useProjectMembers } from '@/features/projects/hooks/useProjects';
 
 export interface WorkItemFormProps {
   projectId?: string;
@@ -31,14 +29,12 @@ export function WorkItemForm({
   const [completedWork, setCompletedWork] = useState<number | undefined>(initialValues?.completedWork ?? undefined);
   const [startDate, setStartDate] = useState<string>(initialValues?.startDate ? initialValues.startDate.slice(0, 10) : '');
   const [targetDate, setTargetDate] = useState<string>(initialValues?.targetDate ? initialValues.targetDate.slice(0, 10) : '');
-  const [assignedTo, setAssignedTo] = useState<string | null>(initialValues?.assignedTo ?? null);
-  const [parentId, setParentId] = useState<string | null>(initialValues?.parentId ?? null);
+  const assignedTo = initialValues?.assignedTo ?? null;
+  const parentId = initialValues?.parentId ?? null;
   const [state, setState] = useState<string>(initialValues?.state || 'TODO');
   const [dateError, setDateError] = useState<string | null>(null);
 
   const { data: states = [] } = useWorkItemStates(projectId);
-  const { data: projectMembers = [] } = useProjectMembers(projectId);
-  const { data: allWorkItems = [] } = useWorkItems(projectId, initialValues?.teamId, { limit: '200' });
 
   const [prevInitialState, setPrevInitialState] = useState(initialValues?.state);
   if (initialValues?.state !== prevInitialState) {
@@ -47,20 +43,6 @@ export function WorkItemForm({
       setState(initialValues.state);
     }
   }
-
-  // Filter valid parent candidates based on selected type
-  const parentCandidates = allWorkItems.filter((item: WorkItem) => {
-    if (type === 'TASK' || type === 'BUG') {
-      return item.type === 'STORY' || item.type === 'FEATURE' || item.type === 'EPIC';
-    }
-    if (type === 'STORY') {
-      return item.type === 'FEATURE' || item.type === 'EPIC';
-    }
-    if (type === 'FEATURE') {
-      return item.type === 'EPIC';
-    }
-    return false;
-  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

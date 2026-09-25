@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkItemHistoryItem, WorkItemHistoryGroup } from '@/shared/types/history';
+import type { WorkItemHistoryItem } from '@/shared/types/history';
 
 function makeHistoryItem(overrides: Partial<WorkItemHistoryItem> = {}): WorkItemHistoryItem {
   return {

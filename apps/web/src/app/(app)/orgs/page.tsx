@@ -9,7 +9,7 @@ import { AppShell } from '@/components/layout/app-shell';
 
 export default function OrgsRootPage() {
   const router = useRouter();
-  const { activeOrgId, isNoOrganizations, isLoading } = useOrganizationContext();
+  const { activeOrgId, isLoading } = useOrganizationContext();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   useEffect(() => {

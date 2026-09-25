@@ -33,7 +33,7 @@ export function CreateProjectDialog({
         key: key.trim().toUpperCase(),
         description: description.trim() || undefined,
         organizationId: defaultOrganizationId,
-      } as any,
+      },
       {
         onSuccess: () => {
           toast.showSuccess('Project created successfully');

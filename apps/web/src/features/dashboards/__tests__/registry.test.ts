@@ -49,6 +49,6 @@ describe('Widget Registry', () => {
 
   it('getWidgetDefinition returns definition for valid type and undefined otherwise', () => {
     expect(getWidgetDefinition('BURNDOWN')?.name).toBe('Burndown');
-    expect(getWidgetDefinition('NON_EXISTENT' as any)).toBeUndefined();
+    expect(getWidgetDefinition('NON_EXISTENT' as never)).toBeUndefined();
   });
 });

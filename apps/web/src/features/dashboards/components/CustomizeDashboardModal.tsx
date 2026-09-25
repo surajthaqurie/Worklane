@@ -1,7 +1,6 @@
 'use client';
 
-import React from 'react';
-import { X, RotateCcw, Check, Plus, Eye, EyeOff } from 'lucide-react';
+import { RotateCcw, Check, Plus, EyeOff } from 'lucide-react';
 import { Modal } from '@/shared/components/ui';
 import { getAllWidgetDefinitions } from '../registry';
 import { useDashboardContext } from './DashboardContext';

@@ -110,7 +110,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <ThemeProvider defaultTheme="system" storageKey="taskforge-theme">
+    <ThemeProvider defaultTheme="system" storageKey="worklane-theme">
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <ToastProvider>

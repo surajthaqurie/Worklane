@@ -5,9 +5,19 @@ import { SprintBoard } from '@/shared/types/boards';
 import { useToast } from '@/shared/hooks/useToast';
 import { formatApiError } from '@/shared/utils/error';
 
+export const iterationKeys = {
+  all: (projectId: string) => ['projects', projectId, 'iterations'] as const,
+  list: (projectId: string, teamId?: string | null) =>
+    ['projects', projectId, 'iterations', { teamId: teamId ?? null }] as const,
+  detail: (projectId: string, iterationId: string) =>
+    ['projects', projectId, 'iterations', iterationId] as const,
+  board: (projectId: string, iterationId: string) =>
+    ['projects', projectId, 'iterations', iterationId, 'board'] as const,
+};
+
 export function useIterations(projectId: string, teamId?: string | null) {
   return useQuery<Iteration[]>({
-    queryKey: ['projects', projectId, 'iterations', { teamId: teamId ?? null }],
+    queryKey: iterationKeys.list(projectId, teamId),
     queryFn: ({ signal }) => iterationsApi.getIterations(projectId, teamId, signal),
     enabled: !!projectId,
   });
@@ -15,7 +25,7 @@ export function useIterations(projectId: string, teamId?: string | null) {
 
 export function useIteration(projectId: string, iterationId: string) {
   return useQuery<Iteration>({
-    queryKey: ['projects', projectId, 'iterations', iterationId],
+    queryKey: iterationKeys.detail(projectId, iterationId),
     queryFn: () => iterationsApi.getIteration(projectId, iterationId),
     enabled: !!projectId && !!iterationId,
   });
@@ -29,7 +39,7 @@ export function useCreateIteration(projectId: string) {
     mutationFn: (data: CreateIterationDto) => iterationsApi.createIteration(projectId, data),
     onSuccess: (newIteration) => {
       toast.showSuccess('Iteration created', newIteration.name);
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'iterations'] });
+      queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
     },
     onError: (err) => {
       toast.showError('Failed to create iteration', formatApiError(err));
@@ -46,7 +56,7 @@ export function useUpdateIteration(projectId: string) {
       iterationsApi.updateIteration(projectId, iterationId, data),
     onSuccess: () => {
       toast.showSuccess('Iteration updated');
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'iterations'] });
+      queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
     },
     onError: (err) => {
       toast.showError('Failed to update iteration', formatApiError(err));
@@ -62,7 +72,7 @@ export function useDeleteIteration(projectId: string) {
     mutationFn: (iterationId: string) => iterationsApi.deleteIteration(projectId, iterationId),
     onSuccess: () => {
       toast.showSuccess('Iteration deleted');
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'iterations'] });
+      queryClient.invalidateQueries({ queryKey: iterationKeys.all(projectId) });
     },
     onError: (err) => {
       toast.showError('Failed to delete iteration', formatApiError(err));
@@ -72,7 +82,7 @@ export function useDeleteIteration(projectId: string) {
 
 export function useSprintBoard(projectId: string, iterationId: string) {
   return useQuery<SprintBoard>({
-    queryKey: ['projects', projectId, 'iterations', iterationId, 'board'],
+    queryKey: iterationKeys.board(projectId, iterationId),
     queryFn: () => iterationsApi.getSprintBoard(projectId, iterationId),
     enabled: !!projectId && !!iterationId,
   });

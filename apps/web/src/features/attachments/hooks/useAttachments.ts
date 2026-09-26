@@ -13,9 +13,14 @@ export interface FileUploadTask {
   abortController?: AbortController;
 }
 
+export const attachmentKeys = {
+  list: (projectId?: string, workItemId?: string) =>
+    ['projects', projectId, 'work-items', workItemId, 'attachments'] as const,
+};
+
 export function useWorkItemAttachments(projectId: string | undefined, workItemId: string | undefined) {
   return useQuery({
-    queryKey: ['projects', projectId, 'work-items', workItemId, 'attachments'],
+    queryKey: attachmentKeys.list(projectId, workItemId),
     queryFn: () => attachmentsApi.getAttachments(projectId!, workItemId!),
     enabled: !!projectId && !!workItemId,
   });
@@ -30,7 +35,7 @@ export function useDeleteAttachment(projectId: string, workItemId: string) {
       attachmentsApi.deleteAttachment(projectId, workItemId, attachmentId),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ['projects', projectId, 'work-items', workItemId, 'attachments'],
+        queryKey: attachmentKeys.list(projectId, workItemId),
       });
       toast.showSuccess('Attachment deleted');
     },

@@ -6,10 +6,15 @@ import type {
   WidgetLayout,
 } from '@/shared/types/dashboard';
 
+export const dashboardKeys = {
+  layout: (projectId?: string | null) => ['dashboard-layout', projectId || 'global'] as const,
+  data: (projectId?: string | null, teamId?: string | null) =>
+    ['dashboard-data', projectId || 'global', teamId || 'all'] as const,
+};
+
 export function useDashboardLayout(projectId?: string | null) {
-  const scopeKey = projectId || 'global';
   return useQuery<DashboardLayoutResponse>({
-    queryKey: ['dashboard-layout', scopeKey],
+    queryKey: dashboardKeys.layout(projectId),
     queryFn: () => dashboardsApi.getLayout(projectId),
     staleTime: 60_000,
   });
@@ -17,20 +22,18 @@ export function useDashboardLayout(projectId?: string | null) {
 
 export function useUpdateDashboardLayout(projectId?: string | null) {
   const queryClient = useQueryClient();
-  const scopeKey = projectId || 'global';
 
   return useMutation({
     mutationFn: (widgets: WidgetLayout[]) =>
       dashboardsApi.updateLayout({ projectId: projectId || null, widgets }),
     onMutate: async (newWidgets: WidgetLayout[]) => {
-      await queryClient.cancelQueries({ queryKey: ['dashboard-layout', scopeKey] });
-      const previous = queryClient.getQueryData<DashboardLayoutResponse>([
-        'dashboard-layout',
-        scopeKey,
-      ]);
+      await queryClient.cancelQueries({ queryKey: dashboardKeys.layout(projectId) });
+      const previous = queryClient.getQueryData<DashboardLayoutResponse>(
+        dashboardKeys.layout(projectId),
+      );
 
       queryClient.setQueryData<DashboardLayoutResponse>(
-        ['dashboard-layout', scopeKey],
+        dashboardKeys.layout(projectId),
         {
           projectId: projectId || null,
           widgets: newWidgets,
@@ -41,36 +44,32 @@ export function useUpdateDashboardLayout(projectId?: string | null) {
     },
     onError: (_err, _variables, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(['dashboard-layout', scopeKey], context.previous);
+        queryClient.setQueryData(dashboardKeys.layout(projectId), context.previous);
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard-layout', scopeKey] });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.layout(projectId) });
     },
   });
 }
 
 export function useResetDashboardLayout(projectId?: string | null) {
   const queryClient = useQueryClient();
-  const scopeKey = projectId || 'global';
 
   return useMutation({
     mutationFn: () => dashboardsApi.resetLayout(projectId),
     onSuccess: (data) => {
-      queryClient.setQueryData(['dashboard-layout', scopeKey], data);
+      queryClient.setQueryData(dashboardKeys.layout(projectId), data);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard-layout', scopeKey] });
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.layout(projectId) });
     },
   });
 }
 
 export function useDashboardData(projectId?: string | null, teamId?: string | null) {
-  const scopeKey = projectId || 'global';
-  const teamKey = teamId || 'all';
-
   return useQuery<DashboardData>({
-    queryKey: ['dashboard-data', scopeKey, teamKey],
+    queryKey: dashboardKeys.data(projectId, teamId),
     queryFn: () => dashboardsApi.getDashboardData(projectId, teamId),
     staleTime: 30_000, // 30s cache prevents duplicate queries across widgets
     refetchOnWindowFocus: false,

@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           id="theme-hydration"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("taskforge-theme");var resolved=t==="light"||t==="dark"?t:(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");var root=document.documentElement;root.classList.remove("light","dark");root.classList.add(resolved)}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem("worklane-theme")||localStorage.getItem("taskforge-theme");var resolved=t==="light"||t==="dark"?t:(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");var root=document.documentElement;root.classList.remove("light","dark");root.classList.add(resolved)}catch(e){}})()`,
           }}
         />
       </head>

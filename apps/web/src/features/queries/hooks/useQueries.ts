@@ -11,9 +11,15 @@ export const DEFAULT_DEFINITION: QueryDefinition = {
   limit: 100,
 };
 
+export const queryKeys = {
+  all: (projectId: string) => ['projects', projectId, 'queries'] as const,
+  list: (projectId: string) => ['projects', projectId, 'queries', 'list'] as const,
+  recent: (projectId: string) => ['projects', projectId, 'queries', 'recent'] as const,
+};
+
 export function useQueries(projectId: string) {
   return useQuery<SavedQuery[]>({
-    queryKey: ['projects', projectId, 'queries'],
+    queryKey: queryKeys.list(projectId),
     queryFn: () => queriesApi.getQueries(projectId),
     enabled: !!projectId,
   });
@@ -21,7 +27,7 @@ export function useQueries(projectId: string) {
 
 export function useRecentQueries(projectId: string) {
   return useQuery<SavedQuery[]>({
-    queryKey: ['projects', projectId, 'queries', 'recent'],
+    queryKey: queryKeys.recent(projectId),
     queryFn: () => queriesApi.getRecentQueries(projectId),
     enabled: !!projectId,
   });
@@ -35,7 +41,7 @@ export function useRunQuery(projectId: string) {
     mutationFn: ({ id, definition }: { id?: string; definition?: QueryDefinition }) =>
       queriesApi.runQuery(projectId, id, definition),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'queries', 'recent'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.recent(projectId) });
     },
     onError: (err) => {
       toast.showError('Failed to run query', formatApiError(err));
@@ -52,7 +58,7 @@ export function useCreateQuery(projectId: string) {
       queriesApi.createQuery(projectId, data),
     onSuccess: () => {
       toast.showSuccess('Query saved');
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'queries'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.all(projectId) });
     },
     onError: (err) => {
       toast.showError('Failed to save query', formatApiError(err));
@@ -69,7 +75,7 @@ export function useUpdateQuery(projectId: string) {
       queriesApi.updateQuery(projectId, id, data),
     onSuccess: () => {
       toast.showSuccess('Query updated');
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'queries'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.all(projectId) });
     },
     onError: (err) => {
       toast.showError('Failed to update query', formatApiError(err));
@@ -85,7 +91,7 @@ export function useDeleteQuery(projectId: string) {
     mutationFn: (id: string) => queriesApi.deleteQuery(projectId, id),
     onSuccess: () => {
       toast.showSuccess('Query deleted');
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'queries'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.all(projectId) });
     },
     onError: (err) => {
       toast.showError('Failed to delete query', formatApiError(err));
@@ -101,7 +107,7 @@ export function useDuplicateQuery(projectId: string) {
     mutationFn: (id: string) => queriesApi.duplicateQuery(projectId, id),
     onSuccess: (newQuery) => {
       toast.showSuccess('Query duplicated', `Created "${newQuery.name}"`);
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'queries'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.all(projectId) });
     },
     onError: (err) => {
       toast.showError('Failed to duplicate query', formatApiError(err));

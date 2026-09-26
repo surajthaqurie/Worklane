@@ -4,10 +4,23 @@ import { NotificationsResponse, NotificationPreferences, UnreadCountResponse } f
 import { useToast } from '@/shared/hooks/useToast';
 import { formatApiError } from '@/shared/utils/error';
 
+export const notificationKeys = {
+  all: () => ['notifications'] as const,
+  list: (params: GetNotificationsParams = {}) => ['notifications', 'list', params] as const,
+  infinite: (unreadOnly: boolean, limit: number) =>
+    ['notifications', 'infinite', { unreadOnly, limit }] as const,
+  unreadCount: () => ['notifications', 'unread-count'] as const,
+  followStatus: (projectId?: string, workItemId?: string) =>
+    ['work-item-follow-status', projectId, workItemId] as const,
+  followers: (projectId?: string, workItemId?: string) =>
+    ['work-item-followers', projectId, workItemId] as const,
+  preferences: () => ['notification-preferences'] as const,
+};
+
 export function useNotifications(options: GetNotificationsParams = {}) {
   const { limit = 20, unreadOnly = false, cursor = null } = options;
   return useQuery<NotificationsResponse>({
-    queryKey: ['notifications', { limit, unreadOnly, cursor }],
+    queryKey: notificationKeys.list(options),
     queryFn: () => notificationsApi.getNotifications({ limit, unreadOnly, cursor }),
   });
 }
@@ -15,7 +28,7 @@ export function useNotifications(options: GetNotificationsParams = {}) {
 /** Cursor-paginated feed for the notification center (accumulates pages). */
 export function useNotificationsInfinite(unreadOnly = false, limit = 25) {
   return useInfiniteQuery<NotificationsResponse>({
-    queryKey: ['notifications', 'infinite', { unreadOnly, limit }],
+    queryKey: notificationKeys.infinite(unreadOnly, limit),
     queryFn: ({ pageParam }) =>
       notificationsApi.getNotifications({
         limit,
@@ -29,7 +42,7 @@ export function useNotificationsInfinite(unreadOnly = false, limit = 25) {
 
 export function useUnreadCount() {
   return useQuery<UnreadCountResponse>({
-    queryKey: ['notifications', 'unread-count'],
+    queryKey: notificationKeys.unreadCount(),
     queryFn: () => notificationsApi.getUnreadCount(),
   });
 }

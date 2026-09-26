@@ -33,6 +33,14 @@ export const AnalyticsSnapshotKind = {
   CUMULATIVE_FLOW: 'cumulative-flow',
   CYCLE_TIME: 'cycle-time',
   LEAD_TIME: 'lead-time',
+  THROUGHPUT: 'throughput',
+  PROJECT_HEALTH: 'project-health',
+  TEAM_ANALYTICS: 'team-analytics',
+  AGING: 'aging',
+  OVERDUE: 'overdue',
+  BLOCKED: 'blocked',
+  WORK_DISTRIBUTION: 'work-distribution',
+  STATE_TRANSITIONS: 'state-transitions',
 } as const;
 
 export type AnalyticsSnapshotKind = (typeof AnalyticsSnapshotKind)[keyof typeof AnalyticsSnapshotKind];
@@ -43,8 +51,8 @@ const teamId = z.string().min(1).optional();
 
 const dateRange = z
   .object({
-    from: z.string().date('from must be a YYYY-MM-DD date').optional(),
-    to: z.string().date('to must be a YYYY-MM-DD date').optional(),
+    from: z.string().optional(),
+    to: z.string().optional(),
   })
   .refine((v) => !v.from || !v.to || v.from <= v.to, {
     message: 'from cannot be after to',
@@ -71,25 +79,57 @@ export const timeToDoneQuerySchema = dateRange.extend({
 
 export const summaryQuerySchema = dateRange.extend({ teamId });
 
+export const analyticsFiltersSchema = dateRange.extend({
+  teamId,
+  iterationId: z.string().optional(),
+  areaId: z.string().optional(),
+  workItemTypes: z.union([z.string(), z.array(z.string())]).optional(),
+  states: z.union([z.string(), z.array(z.string())]).optional(),
+  priorities: z.union([z.string(), z.array(z.string())]).optional(),
+  assignedTo: z.union([z.string(), z.array(z.string())]).optional(),
+  tags: z.union([z.string(), z.array(z.string())]).optional(),
+  status: z.enum(['active', 'completed', 'overdue', 'blocked', 'all']).optional(),
+  groupBy: z.enum(['day', 'week', 'month', 'category', 'state', 'type', 'priority', 'area', 'assignee']).optional(),
+  limit: z.coerce.number().int().min(1).max(5000).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(200).optional(),
+});
+
+export const throughputQuerySchema = dateRange.extend({
+  groupBy: z.enum(['day', 'week', 'month']).default('week'),
+  teamId,
+});
+
 export const snapshotListQuerySchema = z.object({
-  kind: z
-    .enum([
-      AnalyticsSnapshotKind.VELOCITY,
-      AnalyticsSnapshotKind.CUMULATIVE_FLOW,
-      AnalyticsSnapshotKind.CYCLE_TIME,
-      AnalyticsSnapshotKind.LEAD_TIME,
-    ])
-    .optional(),
+  kind: z.string().optional(),
 });
 
 export const recomputeQuerySchema = dateRange;
-export const recomputeBodySchema = z.object({ from: z.string().date().optional(), to: z.string().date().optional() }).passthrough();
+export const recomputeBodySchema = z.object({ from: z.string().optional(), to: z.string().optional() }).passthrough();
+
+export const createSavedReportSchema = z.object({
+  name: z.string().min(1).max(255),
+  description: z.string().max(1000).optional(),
+  reportType: z.string().min(1),
+  filters: z.record(z.string(), z.unknown()).default({}),
+  isShared: z.boolean().default(true),
+});
+
+export class CreateSavedReportDto {
+  name!: string;
+  description?: string;
+  reportType!: string;
+  filters!: Record<string, unknown>;
+  isShared?: boolean;
+}
 
 export type BurndownQueryDto = z.infer<typeof burndownQuerySchema>;
 export type VelocityQueryDto = z.infer<typeof velocityQuerySchema>;
 export type CumulativeFlowQueryDto = z.infer<typeof cumulativeFlowQuerySchema>;
 export type TimeToDoneQueryDto = z.infer<typeof timeToDoneQuerySchema>;
 export type SummaryQueryDto = z.infer<typeof summaryQuerySchema>;
+export type AnalyticsFiltersDto = z.infer<typeof analyticsFiltersSchema>;
+export type ThroughputQueryDto = z.infer<typeof throughputQuerySchema>;
 export type SnapshotListQueryDto = z.infer<typeof snapshotListQuerySchema>;
 export type RecomputeQueryDto = z.infer<typeof recomputeBodySchema>;
 
@@ -124,7 +164,12 @@ export interface AnalyticsWorkItem {
   type: 'EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG';
   title: string;
   state: string;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   points: number | null;
+  assignedTo: string | null;
+  assignedToName?: string | null;
+  targetDate: Date | null;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | null;
   createdAt: Date;
   completedAt: Date | null;
   closedAt: Date | null;
@@ -151,7 +196,7 @@ export interface AnalyticsDataset {
 
 // ─── Metadata attached to every live/replayed result ────────────────────────
 
-interface SnapshotMeta {
+export interface SnapshotMeta {
   source: 'snapshot' | 'live';
   computedAt: string | null;
 }
@@ -297,11 +342,306 @@ export interface FlowTimeDto {
   meta: SnapshotMeta;
 }
 
+// ─── Throughput ─────────────────────────────────────────────────────────────
+
+export interface ThroughputPeriodDto {
+  periodKey: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  count: number;
+  points: number;
+}
+
+export interface ThroughputDto {
+  from: string;
+  to: string;
+  groupBy: 'day' | 'week' | 'month';
+  totalCompleted: number;
+  totalPoints: number;
+  avgPerPeriod: number;
+  periods: ThroughputPeriodDto[];
+  meta: SnapshotMeta;
+}
+
+// ─── Project Health ─────────────────────────────────────────────────────────
+
+export interface CategoryBreakdownDto {
+  key: string;
+  label: string;
+  count: number;
+  percentage: number;
+  points: number;
+}
+
+export interface ProjectHealthDto {
+  projectId: string;
+  totalWorkItems: number;
+  completedCount: number;
+  inProgressCount: number;
+  notStartedCount: number;
+  blockedCount: number;
+  overdueCount: number;
+  completionPercentage: number;
+  totalPoints: number;
+  completedPoints: number;
+  byState: CategoryBreakdownDto[];
+  byType: CategoryBreakdownDto[];
+  byPriority: CategoryBreakdownDto[];
+  byArea: CategoryBreakdownDto[];
+  byIteration: CategoryBreakdownDto[];
+  meta: SnapshotMeta;
+}
+
+// ─── Team Analytics ─────────────────────────────────────────────────────────
+
+export interface TeamMemberProgressDto {
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  assignedCount: number;
+  inProgressCount: number;
+  doneCount: number;
+  totalPoints: number;
+  completedPoints: number;
+  throughput: number;
+}
+
+export interface TeamAnalyticsDto {
+  teamId: string | null;
+  teamName: string;
+  totalWork: number;
+  completed: number;
+  remaining: number;
+  throughput: number;
+  velocity: number;
+  avgCycleTimeDays: number;
+  overdue: number;
+  blocked: number;
+  members: TeamMemberProgressDto[];
+  meta: SnapshotMeta;
+}
+
+// ─── Iteration Report ───────────────────────────────────────────────────────
+
+export interface IterationReportDto {
+  iterationId: string;
+  iterationName: string;
+  startDate: string;
+  endDate: string;
+  state: string;
+  committedItems: number;
+  committedPoints: number;
+  completedItems: number;
+  completedPoints: number;
+  remainingItems: number;
+  remainingPoints: number;
+  addedAfterStartItems: number;
+  addedAfterStartPoints: number;
+  removedItems: number;
+  removedPoints: number;
+  blockedItems: number;
+  overdueItems: number;
+  burndown: BurndownDto | null;
+  meta: SnapshotMeta;
+}
+
+// ─── Work Item Aging ────────────────────────────────────────────────────────
+
+export interface AgingBucketDto {
+  key: string;
+  label: string;
+  minDays: number;
+  maxDays: number | null;
+  count: number;
+  items: Array<{
+    id: string;
+    seqNo: number;
+    title: string;
+    type: string;
+    state: string;
+    priority: string;
+    assignedTo: string | null;
+    assignedToName?: string | null;
+    ageDays: number;
+    createdAt: string;
+  }>;
+}
+
+export interface WorkItemAgingDto {
+  totalActiveItems: number;
+  avgAgeDays: number;
+  medianAgeDays: number;
+  buckets: AgingBucketDto[];
+  meta: SnapshotMeta;
+}
+
+// ─── Overdue Report ─────────────────────────────────────────────────────────
+
+export interface OverdueWorkItemDto {
+  id: string;
+  seqNo: number;
+  title: string;
+  type: string;
+  state: string;
+  priority: string;
+  assignedTo: string | null;
+  assignedToName?: string | null;
+  targetDate: string;
+  daysOverdue: number;
+  iterationName: string | null;
+}
+
+export interface OverdueReportDto {
+  totalOverdue: number;
+  items: OverdueWorkItemDto[];
+  meta: SnapshotMeta;
+}
+
+// ─── Blocked Report ─────────────────────────────────────────────────────────
+
+export interface BlockedWorkItemDto {
+  id: string;
+  seqNo: number;
+  title: string;
+  type: string;
+  state: string;
+  priority: string;
+  assignedTo: string | null;
+  assignedToName?: string | null;
+  reason: string;
+  blockedBy: {
+    id: string;
+    seqNo: number;
+    title: string;
+    state: string;
+  } | null;
+}
+
+export interface BlockedReportDto {
+  totalBlocked: number;
+  items: BlockedWorkItemDto[];
+  meta: SnapshotMeta;
+}
+
+// ─── Work Distribution ──────────────────────────────────────────────────────
+
+export interface DistributionGroupDto {
+  name: string;
+  count: number;
+  percentage: number;
+  points: number;
+}
+
+export interface WorkDistributionDto {
+  totalItems: number;
+  byType: DistributionGroupDto[];
+  byState: DistributionGroupDto[];
+  byPriority: DistributionGroupDto[];
+  byArea: DistributionGroupDto[];
+  byAssignee: DistributionGroupDto[];
+  meta: SnapshotMeta;
+}
+
+// ─── State Transitions & Time in State ──────────────────────────────────────
+
+export interface StateTimeDto {
+  stateKey: string;
+  stateName: string;
+  category: AnalyticsCategory;
+  avgDays: number;
+  medianDays: number;
+  p85Days: number;
+  totalTransitions: number;
+  isBottleneck: boolean;
+}
+
+export interface TransitionPairDto {
+  fromState: string;
+  toState: string;
+  count: number;
+}
+
+export interface StateTransitionsDto {
+  from: string;
+  to: string;
+  states: StateTimeDto[];
+  transitions: TransitionPairDto[];
+  meta: SnapshotMeta;
+}
+
+// ─── Trends Analytics ───────────────────────────────────────────────────────
+
+export interface TrendPointDto {
+  date: string;
+  label: string;
+  completedItems: number;
+  openItems: number;
+  avgCycleTimeDays: number;
+  throughput: number;
+}
+
+export interface TrendsAnalyticsDto {
+  from: string;
+  to: string;
+  groupBy: 'day' | 'week' | 'month';
+  points: TrendPointDto[];
+  meta: SnapshotMeta;
+}
+
+// ─── Saved Reports ──────────────────────────────────────────────────────────
+
+export interface SavedReportDto {
+  id: string;
+  projectId: string;
+  createdBy: string;
+  name: string;
+  description: string | null;
+  reportType: string;
+  filters: Record<string, unknown>;
+  isShared: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Organization Analytics Overview ────────────────────────────────────────
+
+export interface ProjectOverviewSummaryDto {
+  projectId: string;
+  projectName: string;
+  projectKey: string;
+  totalWorkItems: number;
+  completedCount: number;
+  inProgressCount: number;
+  overdueCount: number;
+  blockedCount: number;
+  completionPercentage: number;
+}
+
+export interface OrgAnalyticsOverviewDto {
+  organizationId: string;
+  totalProjects: number;
+  totalWorkItems: number;
+  completedCount: number;
+  inProgressCount: number;
+  overdueCount: number;
+  blockedCount: number;
+  avgCompletionPercentage: number;
+  projects: ProjectOverviewSummaryDto[];
+  meta: SnapshotMeta;
+}
+
 // ─── Summary ────────────────────────────────────────────────────────────────
 
 export interface AnalyticsSummaryDto {
   from: string;
   to: string;
+  totalWorkItems: number;
+  openItems: number;
+  completedItems: number;
+  overdueItems: number;
+  blockedItems: number;
+  completionRate: number;
   velocity: {
     iterations: number;
     totalCompletedPoints: number;
@@ -325,7 +665,7 @@ export interface AnalyticsSummaryDto {
 
 export interface AnalyticsSnapshotInfoDto {
   id: string;
-  kind: AnalyticsSnapshotKind;
+  kind: string;
   scope: Record<string, unknown>;
   itemCount: number;
   computedAt: string;

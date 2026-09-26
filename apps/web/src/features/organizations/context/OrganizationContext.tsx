@@ -41,10 +41,14 @@ export function OrganizationProvider({
     refetch: refetchOrgs,
   } = useOrganizations();
 
-  const [storedOrgId, setStoredOrgId] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem(STORAGE_KEY);
-  });
+  const [storedOrgId, setStoredOrgId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const val = localStorage.getItem(STORAGE_KEY);
+      if (val) setStoredOrgId(val);
+    }
+  }, []);
 
   // Effective org ID resolution:
   // 1. URL parameter if within /orgs/[orgId]

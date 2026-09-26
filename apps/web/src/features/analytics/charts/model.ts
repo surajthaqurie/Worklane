@@ -170,7 +170,8 @@ export function formatDaysCompact(days: number): string {
   return `${round2(days)}d`;
 }
 
-export function formatHoursCompact(hours: number): string {
+export function formatHoursCompact(hours?: number | null): string {
+  if (hours === null || hours === undefined || Number.isNaN(hours)) return 'N/A';
   if (hours < 24) return `${round2(hours)}h`;
   return formatDaysCompact(hours / 24);
 }

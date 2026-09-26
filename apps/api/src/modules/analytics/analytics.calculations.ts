@@ -13,6 +13,21 @@ import {
   FlowTimeStatsDto,
   VelocityDto,
   VelocityIterationDto,
+  ThroughputDto,
+  ThroughputPeriodDto,
+  ProjectHealthDto,
+  CategoryBreakdownDto,
+  WorkItemAgingDto,
+  AgingBucketDto,
+  OverdueReportDto,
+  OverdueWorkItemDto,
+  WorkDistributionDto,
+  DistributionGroupDto,
+  StateTransitionsDto,
+  StateTimeDto,
+  TransitionPairDto,
+  TrendsAnalyticsDto,
+  TrendPointDto,
 } from './dto/analytics.dto.js';
 
 /**
@@ -652,16 +667,7 @@ export function computeSummary(
   dataset: AnalyticsDataset,
   fromMs: number,
   toMs: number,
-): {
-  from: string;
-  to: string;
-  velocity: { iterations: number; totalCompletedPoints: number; avgCompletedPoints: number; lastCompletedPoints: number };
-  cycleTime: FlowTimeStatsDto;
-  leadTime: FlowTimeStatsDto;
-  flow: { proposed: number; inProgress: number; resolved: number; completed: number };
-  completedInRange: number;
-  createdInRange: number;
-} {
+) {
   const velocity = computeVelocity(dataset, fromMs, toMs);
   const cycle = computeTimeToDone(dataset, { kind: 'cycle', fromMs, toMs });
   const lead = computeTimeToDone(dataset, { kind: 'lead', fromMs, toMs });
@@ -672,9 +678,22 @@ export function computeSummary(
   const completedInRange = models.filter((m) => m.doneTime !== null && m.doneTime >= fromMs && m.doneTime <= toMs).length;
   const createdInRange = models.filter((m) => m.item.createdAt.getTime() >= fromMs && m.item.createdAt.getTime() <= toMs).length;
 
+  const totalWorkItems = models.length;
+  const completedItems = models.filter((m) => m.doneTime !== null && m.doneTime <= toMs).length;
+  const openItems = models.filter((m) => m.doneTime === null || m.doneTime > toMs).length;
+  const now = Date.now();
+  const overdueItems = models.filter((m) => (m.doneTime === null || m.doneTime > now) && m.item.targetDate && m.item.targetDate.getTime() < now).length;
+  const completionRate = totalWorkItems > 0 ? round2((completedItems / totalWorkItems) * 100) : 0;
+
   return {
     from: toDateLabel(new Date(fromMs)),
     to: toDateLabel(new Date(toMs)),
+    totalWorkItems,
+    openItems,
+    completedItems,
+    overdueItems,
+    blockedItems: 0,
+    completionRate,
     velocity: {
       iterations: velocity.iterations.length,
       totalCompletedPoints: velocity.summary.totalCompletedPoints,
@@ -691,6 +710,437 @@ export function computeSummary(
     },
     completedInRange,
     createdInRange,
+  };
+}
+
+// ─── Throughput ─────────────────────────────────────────────────────────────
+
+export function computeThroughput(
+  dataset: AnalyticsDataset,
+  fromMs: number,
+  toMs: number,
+  groupBy: 'day' | 'week' | 'month' = 'week',
+): ThroughputDto {
+  const models = buildModels(dataset);
+  const doneItems = models.filter((m) => m.doneTime !== null && m.doneTime >= fromMs && m.doneTime <= toMs);
+
+  const periods: ThroughputPeriodDto[] = [];
+  const start = startOfUtcDay(new Date(fromMs));
+  const end = new Date(toMs);
+
+  let cur = new Date(start);
+  while (cur.getTime() <= end.getTime()) {
+    let pEnd: Date;
+    if (groupBy === 'day') {
+      pEnd = new Date(cur.getTime() + DAY_MS - 1);
+    } else if (groupBy === 'week') {
+      pEnd = new Date(cur.getTime() + 7 * DAY_MS - 1);
+    } else {
+      pEnd = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+    }
+    const pStartMs = cur.getTime();
+    const pEndMs = pEnd.getTime();
+
+    const periodDone = doneItems.filter((m) => (m.doneTime as number) >= pStartMs && (m.doneTime as number) <= pEndMs);
+    const count = periodDone.length;
+    const points = periodDone.reduce((acc, m) => acc + pointsAt(m.pointSeries, m.doneTime as number), 0);
+    const dateLabel = toDateLabel(cur);
+
+    periods.push({
+      periodKey: dateLabel,
+      label: groupBy === 'month' ? cur.toISOString().slice(0, 7) : cur.toISOString().slice(5, 10),
+      startDate: dateLabel,
+      endDate: toDateLabel(pEndMs),
+      count,
+      points: round2(points),
+    });
+
+    if (groupBy === 'day') {
+      cur = new Date(cur.getTime() + DAY_MS);
+    } else if (groupBy === 'week') {
+      cur = new Date(cur.getTime() + 7 * DAY_MS);
+    } else {
+      cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1));
+    }
+  }
+
+  const totalCompleted = doneItems.length;
+  const totalPoints = round2(doneItems.reduce((acc, m) => acc + pointsAt(m.pointSeries, m.doneTime as number), 0));
+  const avgPerPeriod = periods.length > 0 ? round2(totalCompleted / periods.length) : 0;
+
+  return {
+    from: toDateLabel(new Date(fromMs)),
+    to: toDateLabel(new Date(toMs)),
+    groupBy,
+    totalCompleted,
+    totalPoints,
+    avgPerPeriod,
+    periods,
+    meta: { source: 'live', computedAt: null },
+  };
+}
+
+// ─── Project Health ─────────────────────────────────────────────────────────
+
+export function computeProjectHealth(
+  dataset: AnalyticsDataset,
+  projectId: string,
+): ProjectHealthDto {
+  const models = buildModels(dataset);
+  const now = Date.now();
+
+  const totalWorkItems = models.length;
+  let completedCount = 0;
+  let inProgressCount = 0;
+  let notStartedCount = 0;
+  let overdueCount = 0;
+  let totalPoints = 0;
+  let completedPoints = 0;
+
+  const stateCounts = new Map<string, { count: number; points: number }>();
+  const typeCounts = new Map<string, { count: number; points: number }>();
+  const priorityCounts = new Map<string, { count: number; points: number }>();
+  const areaCounts = new Map<string, { count: number; points: number }>();
+  const iterationCounts = new Map<string, { count: number; points: number }>();
+
+  for (const m of models) {
+    const pts = m.item.points ?? 0;
+    totalPoints += pts;
+
+    const cat = groupAt(m.categorySegments, now);
+    if (cat === 'COMPLETED') {
+      completedCount++;
+      completedPoints += pts;
+    } else if (cat === 'IN_PROGRESS' || cat === 'RESOLVED') {
+      inProgressCount++;
+    } else {
+      notStartedCount++;
+    }
+
+    if (cat !== 'COMPLETED' && m.item.targetDate && m.item.targetDate.getTime() < now) {
+      overdueCount++;
+    }
+
+    const st = m.item.state;
+    const stPrev = stateCounts.get(st) || { count: 0, points: 0 };
+    stateCounts.set(st, { count: stPrev.count + 1, points: stPrev.points + pts });
+
+    const tp = m.item.type;
+    const tpPrev = typeCounts.get(tp) || { count: 0, points: 0 };
+    typeCounts.set(tp, { count: tpPrev.count + 1, points: tpPrev.points + pts });
+
+    const pr = m.item.priority;
+    const prPrev = priorityCounts.get(pr) || { count: 0, points: 0 };
+    priorityCounts.set(pr, { count: prPrev.count + 1, points: prPrev.points + pts });
+
+    const ar = m.item.areaId;
+    const arPrev = areaCounts.get(ar) || { count: 0, points: 0 };
+    areaCounts.set(ar, { count: arPrev.count + 1, points: arPrev.points + pts });
+
+    const itr = m.item.iterationId || 'unassigned';
+    const itrPrev = iterationCounts.get(itr) || { count: 0, points: 0 };
+    iterationCounts.set(itr, { count: itrPrev.count + 1, points: itrPrev.points + pts });
+  }
+
+  const completionPercentage = totalWorkItems > 0 ? round2((completedCount / totalWorkItems) * 100) : 0;
+
+  const toCategoryBreakdown = (map: Map<string, { count: number; points: number }>): CategoryBreakdownDto[] =>
+    Array.from(map.entries()).map(([key, val]) => ({
+      key,
+      label: key,
+      count: val.count,
+      percentage: totalWorkItems > 0 ? round2((val.count / totalWorkItems) * 100) : 0,
+      points: round2(val.points),
+    }));
+
+  return {
+    projectId,
+    totalWorkItems,
+    completedCount,
+    inProgressCount,
+    notStartedCount,
+    blockedCount: 0,
+    overdueCount,
+    completionPercentage,
+    totalPoints: round2(totalPoints),
+    completedPoints: round2(completedPoints),
+    byState: toCategoryBreakdown(stateCounts),
+    byType: toCategoryBreakdown(typeCounts),
+    byPriority: toCategoryBreakdown(priorityCounts),
+    byArea: toCategoryBreakdown(areaCounts),
+    byIteration: toCategoryBreakdown(iterationCounts),
+    meta: { source: 'live', computedAt: null },
+  };
+}
+
+// ─── Work Item Aging ────────────────────────────────────────────────────────
+
+const AGING_DEFINITIONS = [
+  { key: '0-3', label: '0–3 days', minDays: 0, maxDays: 3 },
+  { key: '4-7', label: '4–7 days', minDays: 4, maxDays: 7 },
+  { key: '8-14', label: '8–14 days', minDays: 8, maxDays: 14 },
+  { key: '15-30', label: '15–30 days', minDays: 15, maxDays: 30 },
+  { key: '30+', label: '30+ days', minDays: 30, maxDays: null },
+];
+
+export function computeAging(
+  dataset: AnalyticsDataset,
+  nowMs: number = Date.now(),
+): WorkItemAgingDto {
+  const models = buildModels(dataset);
+  const activeModels = models.filter((m) => {
+    if (m.deletedAt !== null && m.deletedAt <= nowMs) return false;
+    const cat = groupAt(m.categorySegments, nowMs);
+    return cat !== 'COMPLETED';
+  });
+
+  const totalActiveItems = activeModels.length;
+  const agesDays: number[] = activeModels.map((m) =>
+    round2(Math.max(0, nowMs - m.item.createdAt.getTime()) / DAY_MS),
+  );
+
+  const sortedAges = [...agesDays].sort((a, b) => a - b);
+  const sumAges = sortedAges.reduce((a, b) => a + b, 0);
+  const avgAgeDays = totalActiveItems > 0 ? round2(sumAges / totalActiveItems) : 0;
+  const medianAgeDays = percentile(sortedAges, 50);
+
+  const buckets: AgingBucketDto[] = AGING_DEFINITIONS.map((def) => {
+    const matching = activeModels.filter((m) => {
+      const age = round2(Math.max(0, nowMs - m.item.createdAt.getTime()) / DAY_MS);
+      if (def.maxDays === null) return age >= def.minDays;
+      return age >= def.minDays && age <= def.maxDays;
+    });
+
+    return {
+      key: def.key,
+      label: def.label,
+      minDays: def.minDays,
+      maxDays: def.maxDays,
+      count: matching.length,
+      items: matching.map((m) => ({
+        id: m.item.id,
+        seqNo: m.item.seqNo,
+        title: m.item.title,
+        type: m.item.type,
+        state: m.item.state,
+        priority: m.item.priority,
+        assignedTo: m.item.assignedTo,
+        assignedToName: m.item.assignedToName,
+        ageDays: round2(Math.max(0, nowMs - m.item.createdAt.getTime()) / DAY_MS),
+        createdAt: m.item.createdAt.toISOString(),
+      })),
+    };
+  });
+
+  return {
+    totalActiveItems,
+    avgAgeDays,
+    medianAgeDays,
+    buckets,
+    meta: { source: 'live', computedAt: null },
+  };
+}
+
+// ─── Overdue Report ─────────────────────────────────────────────────────────
+
+export function computeOverdue(
+  dataset: AnalyticsDataset,
+  nowMs: number = Date.now(),
+): OverdueReportDto {
+  const models = buildModels(dataset);
+  const iterationsById = new Map(dataset.iterations.map((it) => [it.id, it.name]));
+
+  const overdueItems: OverdueWorkItemDto[] = [];
+  for (const m of models) {
+    if (m.deletedAt !== null && m.deletedAt <= nowMs) continue;
+    const cat = groupAt(m.categorySegments, nowMs);
+    if (cat === 'COMPLETED') continue;
+
+    if (m.item.targetDate && m.item.targetDate.getTime() < nowMs) {
+      const daysOverdue = Math.ceil((nowMs - m.item.targetDate.getTime()) / DAY_MS);
+      overdueItems.push({
+        id: m.item.id,
+        seqNo: m.item.seqNo,
+        title: m.item.title,
+        type: m.item.type,
+        state: m.item.state,
+        priority: m.item.priority,
+        assignedTo: m.item.assignedTo,
+        assignedToName: m.item.assignedToName,
+        targetDate: m.item.targetDate.toISOString().slice(0, 10),
+        daysOverdue,
+        iterationName: m.item.iterationId ? iterationsById.get(m.item.iterationId) ?? null : null,
+      });
+    }
+  }
+
+  overdueItems.sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+  return {
+    totalOverdue: overdueItems.length,
+    items: overdueItems,
+    meta: { source: 'live', computedAt: null },
+  };
+}
+
+// ─── Work Distribution ──────────────────────────────────────────────────────
+
+export function computeWorkDistribution(
+  dataset: AnalyticsDataset,
+): WorkDistributionDto {
+  const models = buildModels(dataset);
+  const totalItems = models.length;
+
+  const countAndPoints = (keyGetter: (m: ItemModel) => string): DistributionGroupDto[] => {
+    const map = new Map<string, { count: number; points: number }>();
+    for (const m of models) {
+      const key = keyGetter(m) || 'Unassigned';
+      const pts = m.item.points ?? 0;
+      const prev = map.get(key) || { count: 0, points: 0 };
+      map.set(key, { count: prev.count + 1, points: prev.points + pts });
+    }
+    return Array.from(map.entries())
+      .map(([name, val]) => ({
+        name,
+        count: val.count,
+        percentage: totalItems > 0 ? round2((val.count / totalItems) * 100) : 0,
+        points: round2(val.points),
+      }))
+      .sort((a, b) => b.count - a.count);
+  };
+
+  return {
+    totalItems,
+    byType: countAndPoints((m) => m.item.type),
+    byState: countAndPoints((m) => m.item.state),
+    byPriority: countAndPoints((m) => m.item.priority),
+    byArea: countAndPoints((m) => m.item.areaId),
+    byAssignee: countAndPoints((m) => m.item.assignedToName || m.item.assignedTo || 'Unassigned'),
+    meta: { source: 'live', computedAt: null },
+  };
+}
+
+// ─── State Transitions & Time in State ──────────────────────────────────────
+
+export function computeStateTransitions(
+  dataset: AnalyticsDataset,
+  fromMs: number,
+  toMs: number,
+): StateTransitionsDto {
+  const models = buildModels(dataset);
+
+  const stateDurations = new Map<string, number[]>();
+  const transitionCounts = new Map<string, number>();
+
+  for (const m of models) {
+    const segs = m.stateSegments;
+    for (let i = 0; i < segs.length; i++) {
+      const cur = segs[i];
+      const nextTime = segs[i + 1] ? segs[i + 1].time : (m.doneTime ?? toMs);
+      const durationMs = Math.max(0, nextTime - cur.time);
+
+      const durList = stateDurations.get(cur.group) || [];
+      durList.push(durationMs);
+      stateDurations.set(cur.group, durList);
+
+      if (segs[i + 1]) {
+        const nextState = segs[i + 1].group;
+        const pairKey = `${cur.group}->${nextState}`;
+        transitionCounts.set(pairKey, (transitionCounts.get(pairKey) || 0) + 1);
+      }
+    }
+  }
+
+  const statesResult: StateTimeDto[] = dataset.states.map((s) => {
+    const durations = stateDurations.get(s.key) || [];
+    const sorted = [...durations].sort((a, b) => a - b);
+    const count = sorted.length;
+    const sum = sorted.reduce((a, b) => a + b, 0);
+    const days = (ms: number) => round2(ms / DAY_MS);
+
+    return {
+      stateKey: s.key,
+      stateName: s.name,
+      category: s.category,
+      avgDays: count > 0 ? days(sum / count) : 0,
+      medianDays: days(percentile(sorted, 50)),
+      p85Days: days(percentile(sorted, 85)),
+      totalTransitions: count,
+      isBottleneck: false,
+    };
+  });
+
+  let maxAvgDays = 0;
+  let bottleneckStateKey: string | null = null;
+  for (const s of statesResult) {
+    if (s.category === 'IN_PROGRESS' || s.category === 'PROPOSED') {
+      if (s.avgDays > maxAvgDays && s.totalTransitions > 0) {
+        maxAvgDays = s.avgDays;
+        bottleneckStateKey = s.stateKey;
+      }
+    }
+  }
+  if (bottleneckStateKey) {
+    const target = statesResult.find((s) => s.stateKey === bottleneckStateKey);
+    if (target) target.isBottleneck = true;
+  }
+
+  const transitionsResult: TransitionPairDto[] = Array.from(transitionCounts.entries()).map(([pair, count]) => {
+    const [fromState, toState] = pair.split('->');
+    return { fromState, toState, count };
+  });
+
+  return {
+    from: toDateLabel(new Date(fromMs)),
+    to: toDateLabel(new Date(toMs)),
+    states: statesResult,
+    transitions: transitionsResult,
+    meta: { source: 'live', computedAt: null },
+  };
+}
+
+// ─── Trends Analytics ───────────────────────────────────────────────────────
+
+export function computeTrends(
+  dataset: AnalyticsDataset,
+  fromMs: number,
+  toMs: number,
+  groupBy: 'day' | 'week' | 'month' = 'week',
+): TrendsAnalyticsDto {
+  const models = buildModels(dataset);
+  const throughput = computeThroughput(dataset, fromMs, toMs, groupBy);
+
+  const points: TrendPointDto[] = throughput.periods.map((p) => {
+    const pEndMs = new Date(`${p.endDate}T23:59:59.999Z`).getTime();
+    const openCount = models.filter((m) => {
+      if (m.item.createdAt.getTime() > pEndMs) return false;
+      if (m.deletedAt !== null && m.deletedAt <= pEndMs) return false;
+      const cat = groupAt(m.categorySegments, pEndMs);
+      return cat !== 'COMPLETED';
+    }).length;
+
+    const cycleTimeWindow = computeTimeToDone(dataset, {
+      kind: 'cycle',
+      fromMs: new Date(`${p.startDate}T00:00:00.000Z`).getTime(),
+      toMs: pEndMs,
+    });
+
+    return {
+      date: p.periodKey,
+      label: p.label,
+      completedItems: p.count,
+      openItems: openCount,
+      avgCycleTimeDays: cycleTimeWindow.stats.avgDays,
+      throughput: p.count,
+    };
+  });
+
+  return {
+    from: toDateLabel(new Date(fromMs)),
+    to: toDateLabel(new Date(toMs)),
+    groupBy,
+    points,
+    meta: { source: 'live', computedAt: null },
   };
 }
 

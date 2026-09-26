@@ -371,6 +371,18 @@ export interface Database {
     created_at: ColumnType<Date, string | undefined, never>;
     updated_at: ColumnType<Date, string | undefined, string | Date>;
   };
+  saved_reports: {
+    id: Generated<string>;
+    project_id: string;
+    created_by: string;
+    name: string;
+    description: string | null;
+    report_type: string;
+    filters: ColumnType<Record<string, unknown>, Record<string, unknown> | string, Record<string, unknown> | string>;
+    is_shared: Generated<boolean>;
+    created_at: ColumnType<Date, string | undefined, never>;
+    updated_at: ColumnType<Date, string | undefined, string | Date>;
+  };
 }
 
 const pool = new Pool({

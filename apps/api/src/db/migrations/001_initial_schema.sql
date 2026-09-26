@@ -530,3 +530,26 @@ CREATE TABLE IF NOT EXISTS dashboard_layouts (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dashboard_layouts_user_global ON dashboard_layouts(user_id) WHERE project_id IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dashboard_layouts_user_project ON dashboard_layouts(user_id, project_id) WHERE project_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_dashboard_layouts_project_id ON dashboard_layouts(project_id);
+
+-- 29. Saved Reports & Analytics Performance Indexes
+CREATE TABLE IF NOT EXISTS saved_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    report_type VARCHAR(100) NOT NULL,
+    filters JSONB NOT NULL DEFAULT '{}'::jsonb,
+    is_shared BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_saved_reports_project_id ON saved_reports(project_id);
+CREATE INDEX IF NOT EXISTS idx_saved_reports_created_by ON saved_reports(created_by);
+
+CREATE INDEX IF NOT EXISTS idx_work_items_analytics_composite 
+    ON work_items(project_id, iteration_id, area_id, state, type, priority, assigned_to, created_at, completed_at);
+
+CREATE INDEX IF NOT EXISTS idx_work_item_history_analytics 
+    ON work_item_history(work_item_id, action, inserted_at);

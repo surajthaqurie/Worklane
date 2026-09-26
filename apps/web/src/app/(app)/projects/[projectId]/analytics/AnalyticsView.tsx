@@ -1,252 +1,204 @@
 'use client';
 
 import React, { useState } from 'react';
-import { format, subDays } from 'date-fns';
-import { RefreshCw, CalendarRange } from 'lucide-react';
-import { useProjectContext } from '../project-layout-client';
-import { useIterations } from '@/features/iterations/hooks/useIterations';
 import {
-  useAnalyticsSummary,
-  useBurndown,
-  useCumulativeFlow,
-  useCycleTime,
-  useLeadTime,
-  useRecomputeAnalytics,
-  useVelocity,
-} from '@/features/analytics/hooks/useAnalytics';
-import { SprintBurndownChart } from '@/features/analytics/components/SprintBurndownChart';
-import { VelocityChart } from '@/features/analytics/components/VelocityChart';
-import { CumulativeFlowChart } from '@/features/analytics/components/CumulativeFlowChart';
-import { FlowTimeChart } from '@/features/analytics/components/FlowTimeChart';
-import { SummaryCards } from '@/features/analytics/components/SummaryCards';
-import { Spinner, ErrorState } from '@/shared/components/ui';
+  LayoutDashboard,
+  Activity,
+  Users,
+  Layers,
+  TrendingUp,
+  BarChart2,
+  Clock,
+  Hourglass,
+  AlertTriangle,
+  Ban,
+  PieChart,
+  GitCommit,
+  LineChart,
+  RefreshCw,
+} from 'lucide-react';
+import { useProjectContext } from '../project-layout-client';
+import { useTeams } from '@/features/teams/hooks/useTeams';
+import { useIterations } from '@/features/iterations/hooks/useIterations';
+import { useAnalyticsFilters, useRecomputeAnalytics } from '@/features/analytics/hooks/useAnalytics';
+import { ReportFilterBar } from '@/features/analytics/components/ReportFilterBar';
+import { SavedReportsModal } from '@/features/analytics/components/SavedReportsModal';
 
-const PRESETS = [
-  { label: '7d', days: 7 },
-  { label: '30d', days: 30 },
-  { label: '90d', days: 90 },
-  { label: '180d', days: 180 },
+// Specialized Report Views
+import { OverviewReportView } from '@/features/analytics/components/OverviewReportView';
+import { ProjectHealthView } from '@/features/analytics/components/ProjectHealthView';
+import { TeamAnalyticsView } from '@/features/analytics/components/TeamAnalyticsView';
+import { IterationReportView } from '@/features/analytics/components/IterationReportView';
+import { VelocityView } from '@/features/analytics/components/VelocityView';
+import { ThroughputView } from '@/features/analytics/components/ThroughputView';
+import { CycleAndLeadTimeView } from '@/features/analytics/components/CycleAndLeadTimeView';
+import { AgingReportView } from '@/features/analytics/components/AgingReportView';
+import { OverdueReportView } from '@/features/analytics/components/OverdueReportView';
+import { BlockedReportView } from '@/features/analytics/components/BlockedReportView';
+import { WorkDistributionView } from '@/features/analytics/components/WorkDistributionView';
+import { StateTransitionsView } from '@/features/analytics/components/StateTransitionsView';
+import { TrendsReportView } from '@/features/analytics/components/TrendsReportView';
+
+const REPORT_TABS = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'project-health', label: 'Project Health', icon: Activity },
+  { id: 'team', label: 'Team Analytics', icon: Users },
+  { id: 'iteration', label: 'Iteration / Sprint', icon: Layers },
+  { id: 'velocity', label: 'Velocity', icon: TrendingUp },
+  { id: 'throughput', label: 'Throughput', icon: BarChart2 },
+  { id: 'cycle-time', label: 'Cycle & Lead Time', icon: Clock },
+  { id: 'aging', label: 'Work Item Aging', icon: Hourglass },
+  { id: 'overdue', label: 'Overdue Work', icon: AlertTriangle },
+  { id: 'blocked', label: 'Blocked Work', icon: Ban },
+  { id: 'work-distribution', label: 'Work Distribution', icon: PieChart },
+  { id: 'state-transitions', label: 'State Transitions', icon: GitCommit },
+  { id: 'trends', label: 'Trends Over Time', icon: LineChart },
 ] as const;
 
 export function AnalyticsView({ projectId }: { projectId: string }) {
   const { selectedTeamId } = useProjectContext();
-  const [from, setFrom] = useState(() => format(subDays(new Date(), 90), 'yyyy-MM-dd'));
-  const [to, setTo] = useState(() => format(new Date(), 'yyyy-MM-dd'));
-  const [groupBy, setGroupBy] = useState<'category' | 'state'>('category');
-  const [bucketSizeDays, setBucketSizeDays] = useState<number>(1);
-  const [selectedIterationId, setSelectedIterationId] = useState<string | undefined>(undefined);
-  const [cycleType, setCycleType] = useState<string | undefined>(undefined);
-  const [leadType, setLeadType] = useState<string | undefined>(undefined);
+  const { filters, updateFilters } = useAnalyticsFilters();
+  const [isSavedReportsOpen, setIsSavedReportsOpen] = useState(false);
 
-  const iterations = useIterations(projectId, selectedTeamId);
-  const activeIteration =
-    iterations.data?.find((it) => (it.status ?? it.state ?? '') === 'ACTIVE') ?? iterations.data?.[iterations.data.length - 1];
-  const iterationId = selectedIterationId ?? activeIteration?.id;
-
-  const range = { from, to };
-  const summary = useAnalyticsSummary(projectId, range, selectedTeamId);
-  const burndown = useBurndown(projectId, iterationId, selectedTeamId);
-  const velocity = useVelocity(projectId, range, selectedTeamId);
-  const cumulativeFlow = useCumulativeFlow(projectId, range, groupBy, selectedTeamId, bucketSizeDays);
-  const cycleTime = useCycleTime(projectId, range, selectedTeamId, cycleType);
-  const leadTime = useLeadTime(projectId, range, selectedTeamId, leadType);
+  const teams = useTeams(projectId);
+  const iterations = useIterations(projectId, selectedTeamId || filters.teamId);
   const recompute = useRecomputeAnalytics(projectId);
 
-  const applyPreset = (days: number) => {
-    setFrom(format(subDays(new Date(), days), 'yyyy-MM-dd'));
-    setTo(format(new Date(), 'yyyy-MM-dd'));
+  const activeTab = filters.view || 'overview';
+
+  const queryParams = {
+    from: filters.from,
+    to: filters.to,
+    teamId: filters.teamId || selectedTeamId,
+    iterationId: filters.iterationId,
+    areaId: filters.areaId,
+    workItemTypes: filters.workItemTypes,
+    states: filters.states,
+    priorities: filters.priorities,
+    assignedTo: filters.assignedTo,
+    status: filters.status,
   };
 
-  const formattedRange = `${from} → ${to}`;
-  const iterationOptions = iterations.data?.map((it) => ({ id: it.id, name: it.name })) ?? [];
+  const teamOptions = teams.data?.map((t) => ({ id: t.id, name: t.name })) || [];
+  const iterationOptions = iterations.data?.map((it) => ({ id: it.id, name: it.name })) || [];
+
+  const handleTabChange = (tabId: string) => {
+    updateFilters({ tab: tabId });
+  };
 
   return (
-    <div className="flex flex-col w-full h-full p-6 overflow-y-auto">
-      <div className="pb-5 mb-5 border-b border-[var(--border-subtle)] shrink-0">
-        <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
+    <div className="flex flex-col w-full h-full p-6 overflow-y-auto bg-[var(--bg-canvas)]">
+      {/* Analytics Hub Header */}
+      <div className="pb-4 mb-4 border-b border-[var(--border-subtle)] shrink-0">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div>
-            <h1 className="text-[22px] font-semibold text-[var(--text-primary)] flex items-center gap-2">
-              <CalendarRange className="w-5 h-5 text-[var(--text-secondary)]" aria-hidden="true" />
-              Analytics
+            <h1 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
+              <Activity className="w-5 h-5 text-[var(--brand-primary)]" aria-hidden />
+              Reports &amp; Analytics Hub
             </h1>
-            <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
-              Historical project metrics replayed from immutable event logs — sprint burndown, velocity, cumulative flow, cycle &amp; lead time.
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+              Production project management analytics replayed from PostgreSQL history — burndown, velocity, throughput, cycle time, aging, and state transitions.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded-[var(--radius-button)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-1 py-1">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.days}
-                  onClick={() => applyPreset(p.days)}
-                  className={`px-2.5 py-1 rounded text-[12px] font-medium transition-colors ${
-                    from === format(subDays(new Date(), p.days), 'yyyy-MM-dd')
-                      ? 'bg-[var(--brand-primary)] text-white'
-                      : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)]'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <label className="flex items-center gap-1.5 text-[12px] text-[var(--text-secondary)]">
-              From
-              <input
-                type="date"
-                value={from}
-                max={to}
-                onChange={(e) => setFrom(e.target.value)}
-                className="rounded-[var(--radius-button)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 py-1.5 text-[12px] text-[var(--text-primary)]"
-                aria-label="Start date filter"
-              />
-            </label>
-            <label className="flex items-center gap-1.5 text-[12px] text-[var(--text-secondary)]">
-              To
-              <input
-                type="date"
-                value={to}
-                min={from}
-                onChange={(e) => setTo(e.target.value)}
-                className="rounded-[var(--radius-button)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 py-1.5 text-[12px] text-[var(--text-primary)]"
-                aria-label="End date filter"
-              />
-            </label>
+
+          <div className="flex items-center gap-2">
             <button
               onClick={() => recompute.mutate()}
               disabled={recompute.isPending}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-[var(--radius-button)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)] disabled:opacity-60 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-button)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)] disabled:opacity-60 transition-colors focus-ring"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${recompute.isPending ? 'animate-spin' : ''}`} aria-hidden="true" />
-              Recompute snapshots
+              <RefreshCw className={`w-3.5 h-3.5 ${recompute.isPending ? 'animate-spin' : ''}`} aria-hidden />
+              <span>Recompute Snapshots</span>
             </button>
           </div>
         </div>
       </div>
 
-      {summary.isLoading ? (
-        <div className="flex items-center justify-center p-12" role="status" aria-label="Loading summary analytics">
-          <Spinner size="lg" />
-        </div>
-      ) : summary.isError || !summary.data ? (
-        <ErrorState error={summary.error as Error} onRetry={() => summary.refetch()} title="Failed to load analytics" />
-      ) : (
-        <div className="flex flex-col gap-5">
-          <SummaryCards summary={summary.data} />
+      {/* Centralized Filter Bar */}
+      <ReportFilterBar
+        projectId={projectId}
+        teams={teamOptions}
+        iterations={iterationOptions}
+        onRefresh={() => recompute.mutate()}
+      />
 
-          <section className="grid grid-cols-1 xl:grid-cols-3 gap-5" aria-label="Analytics charts">
-            <div className="xl:col-span-2 grid grid-cols-1 lg:grid-cols-2 gap-5">
-              <SprintBurndownChart
-                data={burndown.data}
-                isLoading={burndown.isLoading || iterations.isLoading}
-                error={burndown.error}
-                onRetry={() => burndown.refetch()}
-                iterations={iterationOptions}
-                selectedIterationId={iterationId}
-                onSelectIteration={setSelectedIterationId}
-              />
+      {/* Navigation Tabs Bar */}
+      <div className="flex items-center gap-1 overflow-x-auto pb-2 mb-6 border-b border-[var(--border-subtle)] no-scrollbar shrink-0">
+        {REPORT_TABS.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => handleTabChange(tab.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-[var(--radius-button)] whitespace-nowrap transition-colors border-b-2 ${
+                isActive
+                  ? 'border-[var(--brand-primary)] text-[var(--brand-primary)] bg-[var(--bg-surface-hover)] font-semibold'
+                  : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]/50'
+              }`}
+            >
+              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[var(--brand-primary)]' : 'text-[var(--text-muted)]'}`} aria-hidden />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
-              <VelocityChart
-                data={velocity.data}
-                isLoading={velocity.isLoading}
-                error={velocity.error}
-                onRetry={() => velocity.refetch()}
-                dateRange={formattedRange}
-              />
+      {/* Main Tab View Rendering */}
+      <main className="flex-1 min-h-0">
+        {activeTab === 'overview' && (
+          <OverviewReportView projectId={projectId} queryParams={queryParams} onNavigateTab={handleTabChange} />
+        )}
+        {activeTab === 'project-health' && (
+          <ProjectHealthView projectId={projectId} queryParams={queryParams} />
+        )}
+        {activeTab === 'team' && (
+          <TeamAnalyticsView projectId={projectId} queryParams={queryParams} />
+        )}
+        {activeTab === 'iteration' && (
+          <IterationReportView
+            projectId={projectId}
+            iterationId={filters.iterationId || iterations.data?.[0]?.id}
+            teamId={queryParams.teamId}
+            iterations={iterationOptions}
+            onSelectIteration={(id) => updateFilters({ iteration: id })}
+          />
+        )}
+        {activeTab === 'velocity' && (
+          <VelocityView projectId={projectId} queryParams={queryParams} />
+        )}
+        {activeTab === 'throughput' && (
+          <ThroughputView projectId={projectId} queryParams={queryParams} />
+        )}
+        {activeTab === 'cycle-time' && (
+          <CycleAndLeadTimeView projectId={projectId} queryParams={queryParams} />
+        )}
+        {activeTab === 'aging' && (
+          <AgingReportView projectId={projectId} queryParams={queryParams} />
+        )}
+        {activeTab === 'overdue' && (
+          <OverdueReportView projectId={projectId} queryParams={queryParams} />
+        )}
+        {activeTab === 'blocked' && (
+          <BlockedReportView projectId={projectId} queryParams={queryParams} />
+        )}
+        {activeTab === 'work-distribution' && (
+          <WorkDistributionView projectId={projectId} queryParams={queryParams} />
+        )}
+        {activeTab === 'state-transitions' && (
+          <StateTransitionsView projectId={projectId} queryParams={queryParams} />
+        )}
+        {activeTab === 'trends' && (
+          <TrendsReportView projectId={projectId} queryParams={queryParams} />
+        )}
+      </main>
 
-              <CumulativeFlowChart
-                data={cumulativeFlow.data}
-                isLoading={cumulativeFlow.isLoading}
-                error={cumulativeFlow.error}
-                onRetry={() => cumulativeFlow.refetch()}
-                groupBy={groupBy}
-                onGroupByChange={setGroupBy}
-                bucketSizeDays={bucketSizeDays}
-                onBucketSizeChange={setBucketSizeDays}
-                dateRange={formattedRange}
-              />
-
-              <FlowTimeChart
-                title="Cycle Time"
-                data={cycleTime.data}
-                isLoading={cycleTime.isLoading}
-                error={cycleTime.error}
-                onRetry={() => cycleTime.refetch()}
-                selectedType={cycleType}
-                onSelectType={setCycleType}
-                dateRange={formattedRange}
-              />
-
-              <div className="lg:col-span-2">
-                <FlowTimeChart
-                  title="Lead Time"
-                  data={leadTime.data}
-                  isLoading={leadTime.isLoading}
-                  error={leadTime.error}
-                  onRetry={() => leadTime.refetch()}
-                  selectedType={leadType}
-                  onSelectType={setLeadType}
-                  dateRange={formattedRange}
-                />
-              </div>
-            </div>
-
-            <aside className="flex flex-col gap-4">
-              <div className="rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
-                <h2 className="text-[14px] font-semibold text-[var(--text-primary)] mb-2">Burndown sprint</h2>
-                {iterations.isLoading ? (
-                  <div className="h-8 animate-pulse rounded bg-[var(--bg-surface-raised)]" role="status" aria-label="Loading iterations" />
-                ) : iterationOptions.length > 0 ? (
-                  <select
-                    value={iterationId ?? ''}
-                    onChange={(e) => setSelectedIterationId(e.target.value || undefined)}
-                    className="w-full rounded-[var(--radius-button)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[13px] text-[var(--text-primary)]"
-                    aria-label="Burndown sprint filter"
-                  >
-                    {iterationOptions.map((it) => (
-                      <option key={it.id} value={it.id}>
-                        {it.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <p className="text-[12px] text-[var(--text-muted)]">No sprints found for this project/team.</p>
-                )}
-              </div>
-
-              <div className="rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
-                <h2 className="text-[14px] font-semibold text-[var(--text-primary)] mb-2">Cumulative flow grouping</h2>
-                <div className="flex gap-1 rounded-[var(--radius-button)] border border-[var(--border-subtle)] p-1">
-                  {(['category', 'state'] as const).map((g) => (
-                    <button
-                      key={g}
-                      onClick={() => setGroupBy(g)}
-                      className={`flex-1 px-2 py-1.5 rounded text-[12px] font-medium capitalize transition-colors ${
-                        groupBy === g
-                          ? 'bg-[var(--brand-primary)] text-white'
-                          : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)]'
-                      }`}
-                      aria-pressed={groupBy === g}
-                    >
-                      {g}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 text-[12px] text-[var(--text-muted)] leading-relaxed">
-                <p>
-                  <span className="font-medium text-[var(--text-secondary)]">Historical metrics integrity.</span>{' '}
-                  Burndown, velocity, CFD, cycle time, and lead time are computed by replaying immutable state transitions,
-                  iteration assignments, point changes, and timestamps — never by inspecting the live board state alone.
-                </p>
-                <p className="mt-2">
-                  Click <span className="font-medium text-[var(--text-secondary)]">Recompute snapshots</span> to trigger a background BullMQ aggregation job.
-                </p>
-              </div>
-            </aside>
-          </section>
-        </div>
-      )}
+      {/* Saved Reports Modal */}
+      <SavedReportsModal
+        projectId={projectId}
+        isOpen={isSavedReportsOpen}
+        onClose={() => setIsSavedReportsOpen(false)}
+      />
     </div>
   );
 }

@@ -9,21 +9,10 @@ import {
   AnalyticsStateDef,
   AnalyticsWorkItem,
   AnalyticsSnapshotKind,
+  SavedReportDto,
+  CreateSavedReportDto,
+  BlockedWorkItemDto,
 } from './dto/analytics.dto.js';
-
-/**
- * Analytics data access.
- *
- * History-driven metrics need more than the current work-item rows: they need
- * the iteration calendar, the workflow states (for category / done semantics)
- * and the immutable event log the metric can be replayed from. Loading is
- * scoped to exactly the items a metric needs so calculations stay efficient:
- *
- *  - Burndown loads items that EVER belonged to the iteration (current
- *    assignment OR an ITERATION_CHANGED event touching it).
- *  - Range metrics (velocity / CFD / cycle / lead) load items whose lifecycle
- *    overlaps the requested window.
- */
 
 export interface AnalyticsTeamScope {
   areaIds: string[];
@@ -34,6 +23,12 @@ export interface RangeDatasetOptions {
   from: Date;
   to: Date;
   type?: string | null;
+  types?: string[] | null;
+  states?: string[] | null;
+  priorities?: string[] | null;
+  assignedTo?: string[] | null;
+  areaId?: string | null;
+  iterationId?: string | null;
   teamScope?: AnalyticsTeamScope | null;
 }
 
@@ -90,7 +85,12 @@ function mapWorkItem(row: {
   type: AnalyticsWorkItem['type'];
   title: string;
   state: string;
+  priority?: AnalyticsWorkItem['priority'];
   points: number | null;
+  assigned_to?: string | null;
+  assigned_to_name?: string | null;
+  target_date?: Date | null;
+  severity?: AnalyticsWorkItem['severity'];
   created_at: Date;
   completed_at: Date | null;
   closed_at: Date | null;
@@ -104,7 +104,12 @@ function mapWorkItem(row: {
     type: row.type,
     title: row.title,
     state: row.state,
+    priority: row.priority ?? 'MEDIUM',
     points: row.points === null || row.points === undefined ? null : Number(row.points),
+    assignedTo: row.assigned_to ?? null,
+    assignedToName: row.assigned_to_name ?? null,
+    targetDate: row.target_date ? toDate(row.target_date) : null,
+    severity: row.severity ?? null,
     createdAt: toDate(row.created_at),
     completedAt: row.completed_at ? toDate(row.completed_at) : null,
     closedAt: row.closed_at ? toDate(row.closed_at) : null,
@@ -190,9 +195,7 @@ export class AnalyticsRepository {
   }
 
   /**
-   * Loads the dataset for one iteration: the iteration row, workflow states,
-   * every item that EVER belonged to the iteration (current assignment or a
-   * historical ITERATION_CHANGED event), and their full event logs.
+   * Loads the dataset for one iteration.
    */
   async loadIterationDataset(
     projectId: string,
@@ -204,18 +207,19 @@ export class AnalyticsRepository {
       this.loadIterations(projectId),
       this.loadStates(projectId),
       db
-        .selectFrom('work_items')
-        .where('project_id', '=', projectId)
+        .selectFrom('work_items as w')
+        .leftJoin('users as u', 'u.id', 'w.assigned_to')
+        .where('w.project_id', '=', projectId)
         .where((eb) =>
           eb.or([
-            eb('iteration_id', '=', iterationId),
+            eb('w.iteration_id', '=', iterationId),
             eb(
-              'id',
+              'w.id',
               'in',
               db
                 .selectFrom('work_item_history as h')
-                .innerJoin('work_items as w', 'w.id', 'h.work_item_id')
-                .where('w.project_id', '=', projectId)
+                .innerJoin('work_items as w2', 'w2.id', 'h.work_item_id')
+                .where('w2.project_id', '=', projectId)
                 .where('h.action', '=', 'ITERATION_CHANGED')
                 .where((eb2) =>
                   eb2.or([
@@ -228,18 +232,23 @@ export class AnalyticsRepository {
           ]),
         )
         .select([
-          'id',
-          'project_id',
-          'seq_no',
-          'iteration_id',
-          'area_id',
-          'type',
-          'title',
-          'state',
-          'points',
-          'created_at',
-          'completed_at',
-          'closed_at',
+          'w.id',
+          'w.project_id',
+          'w.seq_no',
+          'w.iteration_id',
+          'w.area_id',
+          'w.type',
+          'w.title',
+          'w.state',
+          'w.priority',
+          'w.points',
+          'w.assigned_to',
+          'u.name as assigned_to_name',
+          'w.target_date',
+          'w.severity',
+          'w.created_at',
+          'w.completed_at',
+          'w.closed_at',
         ])
         .execute()
         .then((rows) => rows.map(mapWorkItem)),
@@ -267,8 +276,7 @@ export class AnalyticsRepository {
   }
 
   /**
-   * Loads the dataset for a date-range metric: every item whose lifecycle
-   * overlaps [from, to] plus their event logs.
+   * Loads the dataset for a date-range metric with flexible filtering.
    */
   async loadRangeDataset(
     projectId: string,
@@ -278,27 +286,39 @@ export class AnalyticsRepository {
       this.loadIterations(projectId),
       this.loadStates(projectId),
       db
-        .selectFrom('work_items')
-        .where('project_id', '=', projectId)
-        .where('created_at', '<=', opts.to)
+        .selectFrom('work_items as w')
+        .leftJoin('users as u', 'u.id', 'w.assigned_to')
+        .where('w.project_id', '=', projectId)
+        .where('w.created_at', '<=', opts.to)
         .where((eb) =>
-          eb.or([eb('completed_at', 'is', null), eb('completed_at', '>=', opts.from)]),
+          eb.or([eb('w.completed_at', 'is', null), eb('w.completed_at', '>=', opts.from)]),
         )
-        .$call((q) => (opts.type ? q.where('type', '=', opts.type as AnalyticsWorkItem['type']) : q))
+        .$call((q) => (opts.type ? q.where('w.type', '=', opts.type as AnalyticsWorkItem['type']) : q))
+        .$call((q) => (opts.types && opts.types.length > 0 ? q.where('w.type', 'in', opts.types as AnalyticsWorkItem['type'][]) : q))
+        .$call((q) => (opts.states && opts.states.length > 0 ? q.where('w.state', 'in', opts.states) : q))
+        .$call((q) => (opts.priorities && opts.priorities.length > 0 ? q.where('w.priority', 'in', opts.priorities as AnalyticsWorkItem['priority'][]) : q))
+        .$call((q) => (opts.assignedTo && opts.assignedTo.length > 0 ? q.where('w.assigned_to', 'in', opts.assignedTo) : q))
+        .$call((q) => (opts.areaId ? q.where('w.area_id', '=', opts.areaId) : q))
+        .$call((q) => (opts.iterationId ? q.where('w.iteration_id', '=', opts.iterationId) : q))
         .$call((q) => this.applyTeamScope(q, opts.teamScope))
         .select([
-          'id',
-          'project_id',
-          'seq_no',
-          'iteration_id',
-          'area_id',
-          'type',
-          'title',
-          'state',
-          'points',
-          'created_at',
-          'completed_at',
-          'closed_at',
+          'w.id',
+          'w.project_id',
+          'w.seq_no',
+          'w.iteration_id',
+          'w.area_id',
+          'w.type',
+          'w.title',
+          'w.state',
+          'w.priority',
+          'w.points',
+          'w.assigned_to',
+          'u.name as assigned_to_name',
+          'w.target_date',
+          'w.severity',
+          'w.created_at',
+          'w.completed_at',
+          'w.closed_at',
         ])
         .execute()
         .then((rows) => rows.map(mapWorkItem)),
@@ -323,10 +343,196 @@ export class AnalyticsRepository {
         : ['00000000-0000-0000-0000-000000000000'];
     return (query as any).where((eb: any) =>
       eb.and([
-        eb('area_id', 'in', areaIds),
-        eb.or([eb('iteration_id', 'is', null), eb('iteration_id', 'in', iterationIds)]),
+        eb('w.area_id', 'in', areaIds),
+        eb.or([eb('w.iteration_id', 'is', null), eb('w.iteration_id', 'in', iterationIds)]),
       ]),
     ) as T;
+  }
+
+  /**
+   * Loads blocked work items for a project (dependency links + critical/urgent blockers).
+   */
+  async loadBlockedItems(projectId: string, limit = 50): Promise<BlockedWorkItemDto[]> {
+    const depRows = await db
+      .selectFrom('work_item_links')
+      .innerJoin('work_items as source_item', 'source_item.id', 'work_item_links.source_work_item_id')
+      .leftJoin('users as source_user', 'source_user.id', 'source_item.assigned_to')
+      .innerJoin('work_items as target_item', 'target_item.id', 'work_item_links.target_work_item_id')
+      .innerJoin('work_item_states as target_state', (join) =>
+        join.onRef('target_state.key', '=', 'target_item.state')
+            .onRef('target_state.project_id', '=', 'target_item.project_id')
+      )
+      .innerJoin('projects as source_proj', 'source_proj.id', 'source_item.project_id')
+      .innerJoin('projects as target_proj', 'target_proj.id', 'target_item.project_id')
+      .where('work_item_links.link_type', '=', 'DEPENDS_ON')
+      .where('target_state.is_done', '=', false)
+      .where('work_item_links.project_id', '=', projectId)
+      .select([
+        'source_item.id as sourceId',
+        'source_item.seq_no as sourceSeqNo',
+        'source_item.title as sourceTitle',
+        'source_item.type as sourceType',
+        'source_item.state as sourceState',
+        'source_item.priority as sourcePriority',
+        'source_item.assigned_to as sourceAssignedTo',
+        'source_user.name as sourceAssignedToName',
+        'target_item.id as targetId',
+        'target_item.seq_no as targetSeqNo',
+        'target_proj.key as targetKey',
+        'target_item.title as targetTitle',
+        'target_item.state as targetState',
+      ])
+      .limit(limit)
+      .execute();
+
+    const items: BlockedWorkItemDto[] = depRows.map((r) => ({
+      id: r.sourceId,
+      seqNo: r.sourceSeqNo,
+      title: r.sourceTitle,
+      type: r.sourceType,
+      state: r.sourceState,
+      priority: r.sourcePriority,
+      assignedTo: r.sourceAssignedTo,
+      assignedToName: r.sourceAssignedToName,
+      reason: `Blocked by ${r.targetKey}-${r.targetSeqNo} (${r.targetTitle})`,
+      blockedBy: {
+        id: r.targetId,
+        seqNo: r.targetSeqNo,
+        title: r.targetTitle,
+        state: r.targetState,
+      },
+    }));
+
+    if (items.length < limit) {
+      const seenIds = new Set(items.map((i) => i.id));
+      const critRows = await db
+        .selectFrom('work_items as w')
+        .leftJoin('users as u', 'u.id', 'w.assigned_to')
+        .innerJoin('work_item_states as s', (join) =>
+          join.onRef('s.key', '=', 'w.state').onRef('s.project_id', '=', 'w.project_id')
+        )
+        .where('w.project_id', '=', projectId)
+        .where('s.is_done', '=', false)
+        .where((eb) =>
+          eb.or([eb('w.priority', '=', 'URGENT'), eb('w.severity', '=', 'CRITICAL')])
+        )
+        .select([
+          'w.id',
+          'w.seq_no as seqNo',
+          'w.title',
+          'w.type',
+          'w.state',
+          'w.priority',
+          'w.assigned_to as assignedTo',
+          'u.name as assignedToName',
+          'w.severity',
+        ])
+        .limit((limit - items.length) * 2)
+        .execute();
+
+      for (const r of critRows) {
+        if (!seenIds.has(r.id)) {
+          seenIds.add(r.id);
+          items.push({
+            id: r.id,
+            seqNo: r.seqNo,
+            title: r.title,
+            type: r.type,
+            state: r.state,
+            priority: r.priority,
+            assignedTo: r.assignedTo,
+            assignedToName: r.assignedToName,
+            reason: r.severity === 'CRITICAL' ? 'Critical severity blocker' : 'Urgent priority blocker',
+            blockedBy: null,
+          });
+          if (items.length >= limit) break;
+        }
+      }
+    }
+
+    return items;
+  }
+
+  // ─── Saved Reports ────────────────────────────────────────────────────────
+
+  async listSavedReports(projectId: string): Promise<SavedReportDto[]> {
+    const rows = await db
+      .selectFrom('saved_reports')
+      .where('project_id', '=', projectId)
+      .selectAll()
+      .orderBy('created_at', 'desc')
+      .execute();
+
+    return rows.map((r) => ({
+      id: r.id,
+      projectId: r.project_id,
+      createdBy: r.created_by,
+      name: r.name,
+      description: r.description,
+      reportType: r.report_type,
+      filters: (r.filters as Record<string, unknown>) ?? {},
+      isShared: r.is_shared,
+      createdAt: toDate(r.created_at).toISOString(),
+      updatedAt: toDate(r.updated_at).toISOString(),
+    }));
+  }
+
+  async createSavedReport(
+    projectId: string,
+    userId: string,
+    dto: CreateSavedReportDto,
+  ): Promise<SavedReportDto> {
+    const row = await db
+      .insertInto('saved_reports')
+      .values({
+        project_id: projectId,
+        created_by: userId,
+        name: dto.name,
+        description: dto.description ?? null,
+        report_type: dto.reportType,
+        filters: dto.filters as any,
+        is_shared: dto.isShared,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      createdBy: row.created_by,
+      name: row.name,
+      description: row.description,
+      reportType: row.report_type,
+      filters: (row.filters as Record<string, unknown>) ?? {},
+      isShared: row.is_shared,
+      createdAt: toDate(row.created_at).toISOString(),
+      updatedAt: toDate(row.updated_at).toISOString(),
+    };
+  }
+
+  async deleteSavedReport(projectId: string, reportId: string): Promise<void> {
+    await db
+      .deleteFrom('saved_reports')
+      .where('id', '=', reportId)
+      .where('project_id', '=', projectId)
+      .execute();
+  }
+
+  // ─── Organization Aggregations ───────────────────────────────────────────
+
+  async loadOrgProjects(orgId: string, userId: string): Promise<Array<{ id: string; name: string; key: string }>> {
+    // Return projects in org where user is member or creator
+    return await db
+      .selectFrom('projects as p')
+      .leftJoin('project_members as pm', (jb) =>
+        jb.onRef('pm.project_id', '=', 'p.id').on('pm.user_id', '=', userId)
+      )
+      .where('p.organization_id', '=', orgId)
+      .where('p.archived', '=', false)
+      .where((eb) => eb.or([eb('p.created_by', '=', userId), eb('pm.user_id', '=', userId)]))
+      .select(['p.id', 'p.name', 'p.key'])
+      .distinct()
+      .execute();
   }
 
   // ─── Snapshot persistence ─────────────────────────────────────────────────
@@ -337,7 +543,7 @@ export class AnalyticsRepository {
 
   async upsertSnapshot(
     projectId: string,
-    kind: AnalyticsSnapshotKind,
+    kind: AnalyticsSnapshotKind | string,
     scope: Record<string, unknown>,
     data: Record<string, unknown>,
     itemCount: number,
@@ -368,7 +574,7 @@ export class AnalyticsRepository {
 
   async getSnapshot(
     projectId: string,
-    kind: AnalyticsSnapshotKind,
+    kind: AnalyticsSnapshotKind | string,
     scope: Record<string, unknown>,
   ): Promise<{
     data: Record<string, any>;
@@ -394,7 +600,7 @@ export class AnalyticsRepository {
 
   async listSnapshots(
     projectId: string,
-    kind?: AnalyticsSnapshotKind,
+    kind?: string,
   ): Promise<AnalyticsSnapshotInfoDto[]> {
     let query = db
       .selectFrom('analytics_snapshots')
@@ -405,7 +611,7 @@ export class AnalyticsRepository {
     const rows = await query.limit(50).execute();
     return rows.map((r) => ({
       id: r.id,
-      kind: r.kind as AnalyticsSnapshotKind,
+      kind: r.kind,
       scope: (r.scope as Record<string, unknown>) ?? {},
       itemCount: r.item_count,
       computedAt: toDate(r.computed_at).toISOString(),

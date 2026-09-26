@@ -5,7 +5,21 @@ import { TeamsService } from '../teams/teams.service.js';
 import { Permission } from '../authorization/permissions.js';
 import { BackgroundJobsService } from '../background-jobs/background-jobs.service.js';
 import { JobType } from '../background-jobs/dto/background-job.dto.js';
-import { startOfUtcDay, computeBurndown, computeCumulativeFlow, computeTimeToDone, computeVelocity, computeSummary } from './analytics.calculations.js';
+import {
+  startOfUtcDay,
+  computeBurndown,
+  computeCumulativeFlow,
+  computeTimeToDone,
+  computeVelocity,
+  computeSummary,
+  computeThroughput,
+  computeProjectHealth,
+  computeAging,
+  computeOverdue,
+  computeWorkDistribution,
+  computeStateTransitions,
+  computeTrends,
+} from './analytics.calculations.js';
 import {
   AnalyticsSnapshotKind,
   BurndownDto,
@@ -14,6 +28,20 @@ import {
   RecomputeQueryDto,
   VelocityDto,
   AnalyticsSummaryDto,
+  AnalyticsFiltersDto,
+  ProjectHealthDto,
+  TeamAnalyticsDto,
+  IterationReportDto,
+  ThroughputDto,
+  WorkItemAgingDto,
+  OverdueReportDto,
+  BlockedReportDto,
+  WorkDistributionDto,
+  StateTransitionsDto,
+  TrendsAnalyticsDto,
+  SavedReportDto,
+  CreateSavedReportDto,
+  OrgAnalyticsOverviewDto,
 } from './dto/analytics.dto.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -24,13 +52,8 @@ type AnyMetric<T> = T & { meta?: { source: 'snapshot' | 'live'; computedAt: stri
 /**
  * Analytics service — permission-gated analytics request surface.
  *
- * Every public method starts by asserting the caller is a project member
- * (PROJECT_VIEW). Team-scoped requests additionally assert team membership and
- * narrow the dataset to the team's areas + iterations. The heavy computation
- * is delegated to the pure replay engine in `analytics.calculations`.
- *
- * A background `ANALYTICS_CALCULATION` job can precompute snapshots; read
- * endpoints serve those snapshots when the scope matches and they are fresh.
+ * Every public method asserts the caller has access to the project
+ * (PROJECT_VIEW). Authorization is enforced strictly on the backend.
  */
 @Injectable()
 export class AnalyticsService {
@@ -43,7 +66,7 @@ export class AnalyticsService {
     private readonly backgroundJobs?: BackgroundJobsService,
   ) {}
 
-  // ─── Requests ─────────────────────────────────────────────────────────────
+  // ─── Project Reports ──────────────────────────────────────────────────────
 
   async getBurndown(
     userId: string,
@@ -51,7 +74,6 @@ export class AnalyticsService {
     query: { iterationId?: string; teamId?: string },
   ): Promise<BurndownDto> {
     await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
-
     const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
 
     const iterationId = query.iterationId;
@@ -85,7 +107,11 @@ export class AnalyticsService {
       AnalyticsSnapshotKind.VELOCITY,
       scope,
       async () =>
-        computeVelocity(await this.repo.loadRangeDataset(projectId, { from: new Date(fromMs), to: new Date(toMs), teamScope }), fromMs, toMs),
+        computeVelocity(
+          await this.repo.loadRangeDataset(projectId, { from: new Date(fromMs), to: new Date(toMs), teamScope }),
+          fromMs,
+          toMs,
+        ),
     );
   }
 
@@ -112,7 +138,13 @@ export class AnalyticsService {
       AnalyticsSnapshotKind.CUMULATIVE_FLOW,
       scope,
       async () =>
-        computeCumulativeFlow(await this.repo.loadRangeDataset(projectId, { from: new Date(fromMs), to: new Date(toMs), teamScope }), fromMs, toMs, bucketSizeDays, groupBy),
+        computeCumulativeFlow(
+          await this.repo.loadRangeDataset(projectId, { from: new Date(fromMs), to: new Date(toMs), teamScope }),
+          fromMs,
+          toMs,
+          bucketSizeDays,
+          groupBy,
+        ),
     );
   }
 
@@ -131,13 +163,16 @@ export class AnalyticsService {
       AnalyticsSnapshotKind.CYCLE_TIME,
       scope,
       async () =>
-        computeTimeToDone(await this.repo.loadRangeDataset(projectId, { from: new Date(fromMs), to: new Date(toMs), type: query.type, teamScope }), {
-          kind: 'cycle',
-          fromMs,
-          toMs,
-          type: query.type,
-          limit: query.limit,
-        }),
+        computeTimeToDone(
+          await this.repo.loadRangeDataset(projectId, { from: new Date(fromMs), to: new Date(toMs), type: query.type, teamScope }),
+          {
+            kind: 'cycle',
+            fromMs,
+            toMs,
+            type: query.type,
+            limit: query.limit,
+          },
+        ),
     );
   }
 
@@ -156,46 +191,461 @@ export class AnalyticsService {
       AnalyticsSnapshotKind.LEAD_TIME,
       scope,
       async () =>
-        computeTimeToDone(await this.repo.loadRangeDataset(projectId, { from: new Date(fromMs), to: new Date(toMs), type: query.type, teamScope }), {
-          kind: 'lead',
-          fromMs,
-          toMs,
-          type: query.type,
-          limit: query.limit,
-        }),
+        computeTimeToDone(
+          await this.repo.loadRangeDataset(projectId, { from: new Date(fromMs), to: new Date(toMs), type: query.type, teamScope }),
+          {
+            kind: 'lead',
+            fromMs,
+            toMs,
+            type: query.type,
+            limit: query.limit,
+          },
+        ),
     );
   }
 
   async getSummary(
     userId: string,
     projectId: string,
-    query: { from?: string; to?: string; teamId?: string },
+    query: AnalyticsFiltersDto,
   ): Promise<AnalyticsSummaryDto> {
     await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
     const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 90);
     const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
-    const dataset = await this.repo.loadRangeDataset(projectId, { from: new Date(fromMs), to: new Date(toMs), teamScope });
-    return { ...computeSummary(dataset, fromMs, toMs), meta: { source: 'live', computedAt: null } };
+
+    const dataset = await this.repo.loadRangeDataset(projectId, {
+      from: new Date(fromMs),
+      to: new Date(toMs),
+      types: parseArray(query.workItemTypes),
+      states: parseArray(query.states),
+      priorities: parseArray(query.priorities),
+      assignedTo: parseArray(query.assignedTo),
+      areaId: query.areaId,
+      iterationId: query.iterationId,
+      teamScope,
+    });
+
+    const summary = computeSummary(dataset, fromMs, toMs);
+    const blocked = await this.repo.loadBlockedItems(projectId, 10);
+    summary.blockedItems = blocked.length;
+
+    return { ...summary, meta: { source: 'live', computedAt: null } };
   }
 
-  async listSnapshots(
+  async getThroughput(
     userId: string,
     projectId: string,
-    kind?: AnalyticsSnapshotKind,
-  ) {
+    query: { from?: string; to?: string; groupBy?: 'day' | 'week' | 'month'; teamId?: string },
+  ): Promise<ThroughputDto> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 90);
+    const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
+    const groupBy = query.groupBy ?? 'week';
+
+    const dataset = await this.repo.loadRangeDataset(projectId, {
+      from: new Date(fromMs),
+      to: new Date(toMs),
+      teamScope,
+    });
+
+    return computeThroughput(dataset, fromMs, toMs, groupBy);
+  }
+
+  async getProjectHealth(
+    userId: string,
+    projectId: string,
+    query: AnalyticsFiltersDto,
+  ): Promise<ProjectHealthDto> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 365);
+    const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
+
+    const dataset = await this.repo.loadRangeDataset(projectId, {
+      from: new Date(fromMs),
+      to: new Date(toMs),
+      types: parseArray(query.workItemTypes),
+      states: parseArray(query.states),
+      priorities: parseArray(query.priorities),
+      assignedTo: parseArray(query.assignedTo),
+      areaId: query.areaId,
+      iterationId: query.iterationId,
+      teamScope,
+    });
+
+    const health = computeProjectHealth(dataset, projectId);
+    const blocked = await this.repo.loadBlockedItems(projectId, 100);
+    health.blockedCount = blocked.length;
+
+    return health;
+  }
+
+  async getTeamAnalytics(
+    userId: string,
+    projectId: string,
+    query: { teamId?: string; from?: string; to?: string },
+  ): Promise<TeamAnalyticsDto> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 90);
+    const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
+
+    const dataset = await this.repo.loadRangeDataset(projectId, {
+      from: new Date(fromMs),
+      to: new Date(toMs),
+      teamScope,
+    });
+
+    const health = computeProjectHealth(dataset, projectId);
+    const velocity = computeVelocity(dataset, fromMs, toMs);
+    const cycle = computeTimeToDone(dataset, { kind: 'cycle', fromMs, toMs });
+
+    let teamName = 'Project Scope';
+    if (query.teamId) {
+      try {
+        const team = await this.teamsService.findOne(userId, projectId, query.teamId);
+        if (team) teamName = team.name;
+      } catch {
+        teamName = 'Team Scope';
+      }
+    }
+
+    const blocked = await this.repo.loadBlockedItems(projectId, 100);
+
+    return {
+      teamId: query.teamId || null,
+      teamName,
+      totalWork: health.totalWorkItems,
+      completed: health.completedCount,
+      remaining: health.totalWorkItems - health.completedCount,
+      throughput: health.completedCount,
+      velocity: velocity.summary.avgCompletedPoints,
+      avgCycleTimeDays: cycle.stats.avgDays,
+      overdue: health.overdueCount,
+      blocked: blocked.length,
+      members: [],
+      meta: { source: 'live', computedAt: null },
+    };
+  }
+
+  async getIterationReport(
+    userId: string,
+    projectId: string,
+    query: { iterationId: string; teamId?: string },
+  ): Promise<IterationReportDto> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
+
+    const iteration = await this.repo.loadIteration(projectId, query.iterationId);
+    if (!iteration) throw new NotFoundException('Iteration not found');
+
+    const dataset = await this.repo.loadIterationDataset(projectId, query.iterationId, teamScope);
+    const burndown = computeBurndown(dataset, query.iterationId);
+    const blocked = await this.repo.loadBlockedItems(projectId, 100);
+
+    return {
+      iterationId: iteration.id,
+      iterationName: iteration.name,
+      startDate: burndown.startDate,
+      endDate: burndown.endDate,
+      state: iteration.state,
+      committedItems: burndown.totalScopeItems,
+      committedPoints: burndown.totalScopePoints,
+      completedItems: burndown.completedItems,
+      completedPoints: burndown.completedPoints,
+      remainingItems: burndown.remainingItems,
+      remainingPoints: burndown.remainingPoints,
+      addedAfterStartItems: Math.max(0, burndown.points[burndown.points.length - 1]?.scopeItems - burndown.totalScopeItems),
+      addedAfterStartPoints: Math.max(0, burndown.points[burndown.points.length - 1]?.scopePoints - burndown.totalScopePoints),
+      removedItems: 0,
+      removedPoints: 0,
+      blockedItems: blocked.length,
+      overdueItems: burndown.remainingItems > 0 && new Date(iteration.endDate).getTime() < Date.now() ? burndown.remainingItems : 0,
+      burndown,
+      meta: { source: 'live', computedAt: null },
+    };
+  }
+
+  async getAging(
+    userId: string,
+    projectId: string,
+    query: AnalyticsFiltersDto,
+  ): Promise<WorkItemAgingDto> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 365);
+    const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
+
+    const dataset = await this.repo.loadRangeDataset(projectId, {
+      from: new Date(fromMs),
+      to: new Date(toMs),
+      types: parseArray(query.workItemTypes),
+      states: parseArray(query.states),
+      priorities: parseArray(query.priorities),
+      assignedTo: parseArray(query.assignedTo),
+      areaId: query.areaId,
+      iterationId: query.iterationId,
+      teamScope,
+    });
+
+    return computeAging(dataset, Date.now());
+  }
+
+  async getOverdue(
+    userId: string,
+    projectId: string,
+    query: AnalyticsFiltersDto,
+  ): Promise<OverdueReportDto> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 365);
+    const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
+
+    const dataset = await this.repo.loadRangeDataset(projectId, {
+      from: new Date(fromMs),
+      to: new Date(toMs),
+      types: parseArray(query.workItemTypes),
+      states: parseArray(query.states),
+      priorities: parseArray(query.priorities),
+      assignedTo: parseArray(query.assignedTo),
+      areaId: query.areaId,
+      iterationId: query.iterationId,
+      teamScope,
+    });
+
+    return computeOverdue(dataset, Date.now());
+  }
+
+  async getBlocked(
+    userId: string,
+    projectId: string,
+    _query: AnalyticsFiltersDto,
+  ): Promise<BlockedReportDto> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    const items = await this.repo.loadBlockedItems(projectId, 100);
+
+    return {
+      totalBlocked: items.length,
+      items,
+      meta: { source: 'live', computedAt: null },
+    };
+  }
+
+  async getWorkDistribution(
+    userId: string,
+    projectId: string,
+    query: AnalyticsFiltersDto,
+  ): Promise<WorkDistributionDto> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 365);
+    const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
+
+    const dataset = await this.repo.loadRangeDataset(projectId, {
+      from: new Date(fromMs),
+      to: new Date(toMs),
+      types: parseArray(query.workItemTypes),
+      states: parseArray(query.states),
+      priorities: parseArray(query.priorities),
+      assignedTo: parseArray(query.assignedTo),
+      areaId: query.areaId,
+      iterationId: query.iterationId,
+      teamScope,
+    });
+
+    return computeWorkDistribution(dataset);
+  }
+
+  async getStateTransitions(
+    userId: string,
+    projectId: string,
+    query: AnalyticsFiltersDto,
+  ): Promise<StateTransitionsDto> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 90);
+    const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
+
+    const dataset = await this.repo.loadRangeDataset(projectId, {
+      from: new Date(fromMs),
+      to: new Date(toMs),
+      teamScope,
+    });
+
+    return computeStateTransitions(dataset, fromMs, toMs);
+  }
+
+  async getTrends(
+    userId: string,
+    projectId: string,
+    query: AnalyticsFiltersDto,
+  ): Promise<TrendsAnalyticsDto> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 90);
+    const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
+    const groupBy = (query.groupBy as 'day' | 'week' | 'month') || 'week';
+
+    const dataset = await this.repo.loadRangeDataset(projectId, {
+      from: new Date(fromMs),
+      to: new Date(toMs),
+      teamScope,
+    });
+
+    return computeTrends(dataset, fromMs, toMs, groupBy);
+  }
+
+  // ─── Export ───────────────────────────────────────────────────────────────
+
+  async exportCsv(
+    userId: string,
+    projectId: string,
+    query: AnalyticsFiltersDto & { reportType?: string },
+  ): Promise<{ filename: string; content: string; contentType: string }> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    const { fromMs, toMs } = this.resolveWindow(query.from, query.to, 90);
+    const teamScope = await this.resolveTeamScope(userId, projectId, query.teamId);
+
+    const dataset = await this.repo.loadRangeDataset(projectId, {
+      from: new Date(fromMs),
+      to: new Date(toMs),
+      types: parseArray(query.workItemTypes),
+      states: parseArray(query.states),
+      priorities: parseArray(query.priorities),
+      assignedTo: parseArray(query.assignedTo),
+      areaId: query.areaId,
+      iterationId: query.iterationId,
+      teamScope,
+    });
+
+    const reportType = query.reportType || 'work-items';
+    let filename = `worklane-export-${reportType}-${dateOf(Date.now())}.csv`;
+    const headers = ['ID', 'SeqNo', 'Title', 'Type', 'State', 'Priority', 'Points', 'Assignee', 'Created At', 'Completed At'];
+    const rows = dataset.items.map((i) => [
+      i.id,
+      `WI-${i.seqNo}`,
+      `"${(i.title || '').replace(/"/g, '""')}"`,
+      i.type,
+      i.state,
+      i.priority,
+      i.points ?? '',
+      `"${(i.assignedToName || i.assignedTo || 'Unassigned').replace(/"/g, '""')}"`,
+      i.createdAt.toISOString(),
+      i.completedAt ? i.completedAt.toISOString() : '',
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+
+    return {
+      filename,
+      content: csvContent,
+      contentType: 'text/csv',
+    };
+  }
+
+  // ─── Saved Reports ────────────────────────────────────────────────────────
+
+  async listSavedReports(userId: string, projectId: string): Promise<SavedReportDto[]> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    return this.repo.listSavedReports(projectId);
+  }
+
+  async createSavedReport(
+    userId: string,
+    projectId: string,
+    dto: CreateSavedReportDto,
+  ): Promise<SavedReportDto> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    return this.repo.createSavedReport(projectId, userId, dto);
+  }
+
+  async deleteSavedReport(
+    userId: string,
+    projectId: string,
+    reportId: string,
+  ): Promise<{ success: boolean }> {
+    await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
+    await this.repo.deleteSavedReport(projectId, reportId);
+    return { success: true };
+  }
+
+  // ─── Organization Overview ────────────────────────────────────────────────
+
+  async getOrgOverview(userId: string, orgId: string): Promise<OrgAnalyticsOverviewDto> {
+    await this.authz.requireOrgMember(orgId, userId);
+    const projects = await this.repo.loadOrgProjects(orgId, userId);
+
+    let totalWorkItems = 0;
+    let completedCount = 0;
+    let inProgressCount = 0;
+    let overdueCount = 0;
+    let blockedCount = 0;
+
+    const projectSummaries = await Promise.all(
+      projects.map(async (p) => {
+        try {
+          const dataset = await this.repo.loadRangeDataset(p.id, {
+            from: new Date(Date.now() - 365 * DAY_MS),
+            to: new Date(),
+          });
+          const health = computeProjectHealth(dataset, p.id);
+          const blocked = await this.repo.loadBlockedItems(p.id, 50);
+
+          totalWorkItems += health.totalWorkItems;
+          completedCount += health.completedCount;
+          inProgressCount += health.inProgressCount;
+          overdueCount += health.overdueCount;
+          blockedCount += blocked.length;
+
+          return {
+            projectId: p.id,
+            projectName: p.name,
+            projectKey: p.key,
+            totalWorkItems: health.totalWorkItems,
+            completedCount: health.completedCount,
+            inProgressCount: health.inProgressCount,
+            overdueCount: health.overdueCount,
+            blockedCount: blocked.length,
+            completionPercentage: health.completionPercentage,
+          };
+        } catch {
+          return {
+            projectId: p.id,
+            projectName: p.name,
+            projectKey: p.key,
+            totalWorkItems: 0,
+            completedCount: 0,
+            inProgressCount: 0,
+            overdueCount: 0,
+            blockedCount: 0,
+            completionPercentage: 0,
+          };
+        }
+      }),
+    );
+
+    const avgCompletionPercentage =
+      projectSummaries.length > 0
+        ? Math.round(
+            projectSummaries.reduce((a, b) => a + b.completionPercentage, 0) / projectSummaries.length,
+          )
+        : 0;
+
+    return {
+      organizationId: orgId,
+      totalProjects: projects.length,
+      totalWorkItems,
+      completedCount,
+      inProgressCount,
+      overdueCount,
+      blockedCount,
+      avgCompletionPercentage,
+      projects: projectSummaries,
+      meta: { source: 'live', computedAt: null },
+    };
+  }
+
+  // ─── Snapshots ────────────────────────────────────────────────────────────
+
+  async listSnapshots(userId: string, projectId: string, kind?: AnalyticsSnapshotKind) {
     await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
     return this.repo.listSnapshots(projectId, kind);
   }
 
-  /**
-   * Dispatches a background aggregation job that recomputes the project's
-   * analytics into the snapshot cache.
-   */
-  async recalculate(
-    userId: string,
-    projectId: string,
-    body: RecomputeQueryDto,
-  ) {
+  async recalculate(userId: string, projectId: string, body: RecomputeQueryDto) {
     await this.authz.requireProjectPermission(projectId, userId, Permission.PROJECT_VIEW);
     if (this.backgroundJobs) {
       await this.backgroundJobs
@@ -216,22 +666,10 @@ export class AnalyticsService {
     });
   }
 
-  // ─── Background aggregation (no request/authz) ────────────────────────────
-
-  /**
-   * Precomputes default-window metrics and persists them as snapshots.
-   * Called by the ANALYTICS_CALCULATION background processor.
-   */
   async recalculateProject(
     projectId: string,
     opts: { from?: Date; to?: Date; jobId?: string | null; onProgress?: (p: number) => Promise<void> } = {},
-  ): Promise<{
-    projectId: string;
-    snapshotCount: number;
-    jobs: string[];
-    computedAt: string;
-    rollupCompleted: true;
-  }> {
+  ) {
     const report = async (p: number) => {
       if (opts.onProgress) await opts.onProgress(Math.max(0, Math.min(100, p)));
     };
@@ -245,7 +683,6 @@ export class AnalyticsService {
       scope: Record<string, unknown>;
       data: Record<string, unknown>;
       itemCount: number;
-      promise: Promise<any>;
     }> = [];
 
     const velocityDataset = await this.repo.loadRangeDataset(projectId, {
@@ -258,7 +695,6 @@ export class AnalyticsService {
       scope: { from: velocity.from, to: velocity.to },
       data: velocity as unknown as Record<string, unknown>,
       itemCount: velocityDataset.items.length,
-      promise: Promise.resolve(),
     });
     await report(15);
 
@@ -272,7 +708,6 @@ export class AnalyticsService {
       scope: { from: cumulativeFlow.from, to: cumulativeFlow.to, bucketSizeDays: '1', groupBy: 'category' },
       data: cumulativeFlow as unknown as Record<string, unknown>,
       itemCount: flowDataset.items.length,
-      promise: Promise.resolve(),
     });
     await report(35);
 
@@ -282,7 +717,6 @@ export class AnalyticsService {
       scope: { from: cycleTime.from, to: cycleTime.to, type: 'all' },
       data: cycleTime as unknown as Record<string, unknown>,
       itemCount: flowDataset.items.length,
-      promise: Promise.resolve(),
     });
     await report(55);
 
@@ -292,7 +726,6 @@ export class AnalyticsService {
       scope: { from: leadTime.from, to: leadTime.to, type: 'all' },
       data: leadTime as unknown as Record<string, unknown>,
       itemCount: flowDataset.items.length,
-      promise: Promise.resolve(),
     });
     await report(75);
 
@@ -336,7 +769,7 @@ export class AnalyticsService {
     to: string | undefined,
     defaultDays: number,
   ): { fromMs: number; toMs: number } {
-    const toMs = to ? endOfDayLocal(new Date(`${to}T23:59:59.999Z`)).getTime() : Date.now();
+    const toMs = to ? new Date(`${to}T23:59:59.999Z`).getTime() : Date.now();
     const fromMs = from
       ? startOfUtcDay(new Date(`${from}T00:00:00.000Z`)).getTime()
       : startOfUtcDay(new Date(Date.now() - defaultDays * DAY_MS)).getTime();
@@ -360,10 +793,12 @@ export class AnalyticsService {
   }
 }
 
-function endOfDayLocal(d: Date): Date {
-  return d;
-}
-
 function dateOf(ms: number): string {
   return startOfUtcDay(new Date(ms)).toISOString().slice(0, 10);
+}
+
+function parseArray(val: string | string[] | undefined): string[] | undefined {
+  if (!val) return undefined;
+  if (Array.isArray(val)) return val;
+  return val.split(',').map((s) => s.trim()).filter(Boolean);
 }

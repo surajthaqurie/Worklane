@@ -17,8 +17,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => authTokens.getUser());
-  const [isLoading, setIsLoading] = useState<boolean>(() => !authTokens.getUser());
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const router = useRouter();
 
   const fetchCurrentUser = useCallback(async () => {
@@ -44,7 +44,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- state only updates after the async /auth/me request resolves
+    const cachedUser = authTokens.getUser();
+    if (cachedUser) {
+      setUser(cachedUser);
+    }
     void fetchCurrentUser();
   }, [fetchCurrentUser]);
 

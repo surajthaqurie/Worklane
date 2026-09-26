@@ -53,11 +53,15 @@ describe('analytics calculations (deterministic fixtures)', () => {
       type: 'STORY',
       title: partial.id,
       state: 'TODO',
+      priority: 'MEDIUM',
       points: 0,
       createdAt: new Date('2026-06-01T00:00:00Z'),
       completedAt: null,
       closedAt: null,
       deletedAt: null,
+      targetDate: null,
+      severity: null,
+      assignedTo: null,
       ...partial,
     };
   }

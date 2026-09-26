@@ -256,13 +256,17 @@ export class AuthService {
       void this.auditLogger.logEvent('LOGIN', user.id, null, { email: user.email });
     }
 
-    const userOrg = await db
+    let userOrg = await db
       .selectFrom('organization_members as om')
       .innerJoin('organizations as o', 'o.id', 'om.organization_id')
       .where('om.user_id', '=', user.id)
       .select(['o.id', 'o.name', 'om.role'])
       .orderBy('om.created_at', 'asc')
       .executeTakeFirst();
+
+    if (!userOrg) {
+      userOrg = await this.ensureUserHasDefaultOrganization(user.id, user.name);
+    }
 
     const { password_hash: _password_hash, ...userProfile } = user;
 
@@ -274,6 +278,48 @@ export class AuthService {
       accessToken,
       refreshToken,
     };
+  }
+
+  async ensureUserHasDefaultOrganization(userId: string, userName: string) {
+    const userOrg = await db
+      .selectFrom('organization_members as om')
+      .innerJoin('organizations as o', 'o.id', 'om.organization_id')
+      .where('om.user_id', '=', userId)
+      .select(['o.id', 'o.name', 'om.role'])
+      .orderBy('om.created_at', 'asc')
+      .executeTakeFirst();
+
+    if (userOrg) {
+      return { id: userOrg.id, name: userOrg.name, role: userOrg.role };
+    }
+
+    const orgName = generateDefaultOrganizationName(userName);
+    return await db.transaction().execute(async (trx) => {
+      const insertedOrg = await trx
+        .insertInto('organizations')
+        .values({
+          name: orgName,
+          created_by: userId,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      await trx
+        .insertInto('organization_members')
+        .values({
+          organization_id: insertedOrg.id,
+          user_id: userId,
+          role: 'OWNER',
+        })
+        .onConflict((oc) => oc.columns(['organization_id', 'user_id']).doNothing())
+        .execute();
+
+      return {
+        id: insertedOrg.id,
+        name: insertedOrg.name,
+        role: 'OWNER' as const,
+      };
+    });
   }
 
   async refresh(dto: RefreshDto) {

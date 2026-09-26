@@ -39,6 +39,35 @@ export class OrganizationsRepository {
       .orderBy('o.name', 'asc')
       .execute();
 
+    if (rows.length === 0) {
+      const user = await db
+        .selectFrom('users')
+        .where('id', '=', userId)
+        .select(['name'])
+        .executeTakeFirst();
+
+      if (user) {
+        const orgName = user.name?.trim() ? `${user.name}'s Organization` : 'Default Organization';
+        const createdOrg = await this.createOrganization({
+          name: orgName,
+          created_by: userId,
+        });
+
+        return [
+          {
+            id: createdOrg.id,
+            name: createdOrg.name,
+            description: createdOrg.description,
+            role: 'OWNER' as OrganizationRole,
+            memberCount: 1,
+            projectCount: 0,
+            createdAt: createdOrg.created_at ? new Date(createdOrg.created_at).toISOString() : new Date().toISOString(),
+            updatedAt: createdOrg.updated_at ? new Date(createdOrg.updated_at).toISOString() : undefined,
+          },
+        ];
+      }
+    }
+
     return rows.map((r) => ({
       id: r.id,
       name: r.name,

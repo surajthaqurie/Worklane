@@ -18,10 +18,15 @@ import { useAreas, useProjectMembers } from '@/features/projects';
 import { useIterations } from '@/features/iterations';
 import { Team, TeamRole, TeamMember, TeamSettings, Iteration } from '@/shared/types';
 import { Users, Plus, ShieldCheck, UserCircle2, Trash2, Save, X, Check } from 'lucide-react';
+import { ConfirmationDialog } from '@/components/feedback/ConfirmationDialog';
+import { useDisclosure } from '@/shared/hooks/useDisclosure';
+import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
+import { AccessDenied } from '@/features/authorization/components/AccessDenied';
 
 export default function TeamSettingsPage() {
   const params = useParams();
   const projectId = params.projectId as string;
+  const { can } = useProjectContext();
 
   const { data: teams = [], isLoading: teamsLoading } = useTeams(projectId);
   const [pickedTeamId, setPickedTeamId] = useState<string | null>(null);
@@ -30,8 +35,17 @@ export default function TeamSettingsPage() {
 
   const selectedTeamId = pickedTeamId ?? teams[0]?.id ?? null;
   const selectedTeam = teams.find((t: Team) => t.id === selectedTeamId) ?? null;
-
   const createTeam = useCreateTeam(projectId);
+
+  if (!can('project:manage_teams')) {
+    return (
+      <AccessDenied
+        title="Team Management Required"
+        message="You do not have permission to manage teams for this project."
+        backHref={`/projects/${projectId}`}
+      />
+    );
+  }
 
   const handleCreate = () => {
     if (!newTeamName.trim()) return;
@@ -327,6 +341,8 @@ function MembersCard({
 
   const [newUserId, setNewUserId] = useState('');
   const [newRole, setNewRole] = useState<TeamRole>('MEMBER');
+  const removeDialog = useDisclosure();
+  const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null);
 
   const existingIds = useMemo(() => new Set(members.map((m: TeamMember) => m.userId)), [members]);
   const candidates = (projectMembers as ProjectMemberLite[]).filter(
@@ -339,6 +355,19 @@ function MembersCard({
       { userId: newUserId, role: newRole },
       { onSuccess: () => setNewUserId('') },
     );
+  };
+
+  const handlePromptRemove = (m: TeamMember) => {
+    setMemberToRemove(m);
+    removeDialog.onOpen();
+  };
+
+  const confirmRemoveMember = () => {
+    if (memberToRemove) {
+      removeMember.mutate(memberToRemove.userId);
+      setMemberToRemove(null);
+    }
+    removeDialog.onClose();
   };
 
   return (
@@ -377,11 +406,7 @@ function MembersCard({
                     <option value="ADMIN">Admin</option>
                   </select>
                   <button
-                    onClick={() => {
-                      if (window.confirm(`Remove ${m.name} from this team?`)) {
-                        removeMember.mutate(m.userId);
-                      }
-                    }}
+                    onClick={() => handlePromptRemove(m)}
                     className="p-1.5 text-[var(--text-muted)] hover:text-[var(--priority-high)] rounded-[var(--radius-button)] transition-colors"
                     aria-label="Remove member"
                   >
@@ -434,6 +459,17 @@ function MembersCard({
               {(addMember.error?.message || updateRole.error?.message || removeMember.error?.message) as string}
             </p>
           )}
+
+          <ConfirmationDialog
+            isOpen={removeDialog.isOpen}
+            onClose={removeDialog.onClose}
+            onConfirm={confirmRemoveMember}
+            title="Remove Team Member"
+            description={memberToRemove ? `Remove ${memberToRemove.name ?? 'this member'} from the team?` : ''}
+            confirmText="Remove"
+            variant="danger"
+            isLoading={removeMember.isPending}
+          />
         </div>
       )}
     </section>
@@ -662,6 +698,12 @@ function ScopeForm({
 
 function DangerCard({ projectId, team }: { projectId: string; team: Team }) {
   const deleteTeam = useDeleteTeam(projectId);
+  const deleteDialog = useDisclosure();
+
+  const confirmDeleteTeam = () => {
+    deleteTeam.mutate(team.id);
+    deleteDialog.onClose();
+  };
 
   return (
     <section className="border border-[var(--priority-high)]/30 rounded-[var(--radius-card)] bg-[var(--bg-surface)] p-5">
@@ -670,11 +712,7 @@ function DangerCard({ projectId, team }: { projectId: string; team: Team }) {
         Deleting a team removes its members and scope configuration. Work items are not deleted.
       </p>
       <button
-        onClick={() => {
-          if (window.confirm(`Delete team "${team.name}"? This cannot be undone.`)) {
-            deleteTeam.mutate(team.id);
-          }
-        }}
+        onClick={() => deleteDialog.onOpen()}
         disabled={deleteTeam.isPending}
         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--priority-high)]/10 hover:bg-[var(--priority-high)]/20 text-[var(--priority-high)] text-[13px] font-medium rounded-[var(--radius-button)] disabled:opacity-50 transition-colors border border-[var(--priority-high)]/30"
       >
@@ -685,6 +723,17 @@ function DangerCard({ projectId, team }: { projectId: string; team: Team }) {
           {(deleteTeam.error as Error).message}
         </span>
       )}
+
+      <ConfirmationDialog
+        isOpen={deleteDialog.isOpen}
+        onClose={deleteDialog.onClose}
+        onConfirm={confirmDeleteTeam}
+        title="Delete Team"
+        description={`Delete team "${team.name}"? This removes all members and scope configuration. Work items are not deleted. This cannot be undone.`}
+        confirmText="Delete Team"
+        variant="danger"
+        isLoading={deleteTeam.isPending}
+      />
     </section>
   );
 }

@@ -24,6 +24,20 @@ export interface TokenPayload {
   name: string;
 }
 
+export function generateDefaultOrganizationName(name: string): string {
+  const trimmed = name?.trim();
+  if (!trimmed) {
+    return 'Default Organization';
+  }
+  if (trimmed.endsWith("'s") || trimmed.endsWith("’s")) {
+    return `${trimmed} Organization`;
+  }
+  if (trimmed.endsWith('s') || trimmed.endsWith('S')) {
+    return `${trimmed}' Organization`;
+  }
+  return `${trimmed}'s Organization`;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -89,24 +103,134 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    const inserted = await db
-      .insertInto('users')
-      .values({
-        name: dto.name.trim(),
-        email: dto.email.toLowerCase().trim(),
-        password_hash: passwordHash,
-      })
-      .returning(['id', 'name', 'email', 'avatar_url', 'created_at'])
-      .executeTakeFirstOrThrow();
+    return await db.transaction().execute(async (trx) => {
+      // 1. Create User
+      const insertedUser = await trx
+        .insertInto('users')
+        .values({
+          name: dto.name.trim(),
+          email: dto.email.toLowerCase().trim(),
+          password_hash: passwordHash,
+        })
+        .returning(['id', 'name', 'email', 'avatar_url', 'created_at'])
+        .executeTakeFirstOrThrow();
 
-    const accessToken = this.generateAccessToken(inserted);
-    const { rawToken: refreshToken } = await this.generateRefreshToken(inserted.id);
+      // 2. Generate Default Organization Name & Create Organization
+      const orgName = generateDefaultOrganizationName(insertedUser.name);
+      const insertedOrg = await trx
+        .insertInto('organizations')
+        .values({
+          name: orgName,
+          created_by: insertedUser.id,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
 
-    return {
-      user: inserted,
-      accessToken,
-      refreshToken,
-    };
+      // 3. Create Organization Membership with OWNER role (Super Admin)
+      await trx
+        .insertInto('organization_members')
+        .values({
+          organization_id: insertedOrg.id,
+          user_id: insertedUser.id,
+          role: 'OWNER',
+        })
+        .execute();
+
+      // 4. Create Default Project
+      const project = await trx
+        .insertInto('projects')
+        .values({
+          name: 'My First Project',
+          key: 'MYP',
+          description: 'Default project created during onboarding',
+          created_by: insertedUser.id,
+          organization_id: insertedOrg.id,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      // 5. Create Default Work Item States
+      await trx
+        .insertInto('work_item_states')
+        .values([
+          { project_id: project.id, name: 'To Do', key: 'TODO', color: '#94A3B8', sort_order: 0, is_done: false, category: 'PROPOSED', is_default: true },
+          { project_id: project.id, name: 'In Progress', key: 'IN_PROGRESS', color: '#3B82F6', sort_order: 1, is_done: false, category: 'IN_PROGRESS', is_default: true },
+          { project_id: project.id, name: 'Done', key: 'DONE', color: '#22C55E', sort_order: 2, is_done: true, category: 'COMPLETED', is_default: true },
+        ])
+        .execute();
+
+      // 6. Create Default Area, Team, and Team Configuration
+      const area = await trx
+        .insertInto('areas')
+        .values({ project_id: project.id, name: project.name, parent_id: null })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      const team = await trx
+        .insertInto('teams')
+        .values({
+          project_id: project.id,
+          name: `${project.name} Team`,
+          description: `Default team for ${project.name}`,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      await trx
+        .insertInto('team_configurations')
+        .values({
+          team_id: team.id,
+          board_config: { collapsedCategories: false, hideEmptyColumns: false },
+          backlog_config: { showInProgressItems: false },
+          default_area_id: area.id,
+          default_iteration_id: null,
+        })
+        .execute();
+
+      await trx
+        .insertInto('team_areas')
+        .values({ team_id: team.id, area_id: area.id })
+        .execute();
+
+      await trx
+        .insertInto('team_members')
+        .values({ team_id: team.id, user_id: insertedUser.id, role: 'ADMIN' })
+        .execute();
+
+      // Creator automatically becomes OWNER in project_members
+      await trx
+        .insertInto('project_members')
+        .values({ project_id: project.id, user_id: insertedUser.id, role: 'OWNER' })
+        .execute();
+
+      // 7. Tokens
+      const accessToken = this.generateAccessToken(insertedUser);
+      const rawRefreshToken = crypto.randomBytes(40).toString('hex');
+      const tokenHash = this.hashToken(rawRefreshToken);
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
+
+      await trx
+        .insertInto('refresh_tokens')
+        .values({
+          user_id: insertedUser.id,
+          token_hash: tokenHash,
+          expires_at: expiresAt.toISOString(),
+          revoked: false,
+        })
+        .execute();
+
+      return {
+        user: insertedUser,
+        organization: {
+          id: insertedOrg.id,
+          name: insertedOrg.name,
+          role: 'OWNER' as const,
+        },
+        accessToken,
+        refreshToken: rawRefreshToken,
+      };
+    });
   }
 
   async login(dto: LoginDto) {
@@ -132,10 +256,21 @@ export class AuthService {
       void this.auditLogger.logEvent('LOGIN', user.id, null, { email: user.email });
     }
 
+    const userOrg = await db
+      .selectFrom('organization_members as om')
+      .innerJoin('organizations as o', 'o.id', 'om.organization_id')
+      .where('om.user_id', '=', user.id)
+      .select(['o.id', 'o.name', 'om.role'])
+      .orderBy('om.created_at', 'asc')
+      .executeTakeFirst();
+
     const { password_hash: _password_hash, ...userProfile } = user;
 
     return {
       user: userProfile,
+      organization: userOrg
+        ? { id: userOrg.id, name: userOrg.name, role: userOrg.role }
+        : null,
       accessToken,
       refreshToken,
     };

@@ -10,6 +10,8 @@ import {
 } from '@/features/work-items/hooks/useWorkItemStates';
 import { WorkItemState } from '@/shared/types/work-items';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmationDialog } from '@/components/feedback/ConfirmationDialog';
+import { useDisclosure } from '@/shared/hooks/useDisclosure';
 import { Settings2, Plus, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 
 export function StatesTabContent({ projectId }: { projectId: string }) {
@@ -43,18 +45,27 @@ export function StatesTabContent({ projectId }: { projectId: string }) {
     await reorderStates.mutateAsync(next.map((s) => s.id));
   };
 
-  const handleDelete = async (state: WorkItemState) => {
+  const deleteDialog = useDisclosure();
+  const [stateToDelete, setStateToDelete] = useState<WorkItemState | null>(null);
+
+  const handleDelete = (state: WorkItemState) => {
     if (states.length <= 1) {
       alert('A project must keep at least one state.');
       return;
     }
-    if (!window.confirm(`Delete state "${state.name}"? Work items in it will move to the first remaining state.`)) {
-      return;
-    }
+    setStateToDelete(state);
+    deleteDialog.onOpen();
+  };
+
+  const confirmDeleteState = async () => {
+    if (!stateToDelete) return;
     try {
-      await deleteState.mutateAsync(state.id);
+      await deleteState.mutateAsync(stateToDelete.id);
+      setStateToDelete(null);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to delete state');
+    } finally {
+      deleteDialog.onClose();
     }
   };
 
@@ -187,6 +198,17 @@ export function StatesTabContent({ projectId }: { projectId: string }) {
             <Plus className="w-3.5 h-3.5" /> Add State
           </button>
         </div>
+
+        <ConfirmationDialog
+          isOpen={deleteDialog.isOpen}
+          onClose={deleteDialog.onClose}
+          onConfirm={confirmDeleteState}
+          title="Delete State"
+          description={`Delete state "${stateToDelete?.name}"? Work items in it will move to the first remaining state.`}
+          confirmText="Delete State"
+          variant="danger"
+          isLoading={deleteState.isPending}
+        />
       </div>
     </div>
   );

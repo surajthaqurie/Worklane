@@ -116,7 +116,7 @@ export function OrganizationSwitcher({ compact = false }: OrganizationSwitcherPr
                     </span>
                     {activeRole && (
                       <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-medium">
-                        {activeRole}
+                        {activeRole === 'OWNER' ? 'Super Admin' : activeRole}
                       </span>
                     )}
                   </div>
@@ -195,7 +195,7 @@ export function OrganizationSwitcher({ compact = false }: OrganizationSwitcherPr
                               org.role,
                             )}`}
                           >
-                            {org.role}
+                            {org.role === 'OWNER' ? 'Super Admin' : org.role}
                           </span>
                         )}
                         {isSelected && <Check className="w-3.5 h-3.5 text-[var(--brand-primary)]" />}

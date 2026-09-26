@@ -51,25 +51,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     const data = await apiClient.post<{
       user: User;
+      organization?: { id: string; name: string; role: string } | null;
       accessToken: string;
       refreshToken: string;
     }>('/auth/login', { email, password });
 
     authTokens.setAuthData(data.accessToken, data.refreshToken, data.user);
+    if (data.organization?.id && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('worklane:active_org_id', data.organization.id);
+      } catch {
+        // ignore
+      }
+    }
     setUser(data.user);
-    router.push('/projects');
+    if (data.organization?.id) {
+      router.push(`/orgs/${data.organization.id}/projects`);
+    } else {
+      router.push('/projects');
+    }
   };
 
   const register = async (name: string, email: string, password: string) => {
     const data = await apiClient.post<{
       user: User;
+      organization?: { id: string; name: string; role: string } | null;
       accessToken: string;
       refreshToken: string;
     }>('/auth/register', { name, email, password });
 
     authTokens.setAuthData(data.accessToken, data.refreshToken, data.user);
+    if (data.organization?.id && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('worklane:active_org_id', data.organization.id);
+      } catch {
+        // ignore
+      }
+    }
     setUser(data.user);
-    router.push('/projects');
+    if (data.organization?.id) {
+      router.push(`/orgs/${data.organization.id}/projects`);
+    } else {
+      router.push('/projects');
+    }
   };
 
   const logout = async () => {

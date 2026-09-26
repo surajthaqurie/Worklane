@@ -12,6 +12,38 @@ import { BacklogResponse } from '@/shared/types/backlogs';
 import { SprintBoard } from '@/shared/types/boards';
 import { formatApiError } from '@/shared/utils/error';
 import { useToast } from '@/shared/hooks/useToast';
+import { ApiError } from '@/shared/types/api';
+import { projectKeys } from '@/features/projects/hooks/useProjects';
+
+// ─── Structured query key factory ────────────────────────────────────────────
+
+export const workItemKeys = {
+  /** All work-item lists under a project */
+  all: (projectId: string) => ['projects', projectId, 'work-items'] as const,
+  /** A filtered/parameterized list of work items */
+  list: (projectId: string, params: Record<string, unknown>) =>
+    ['projects', projectId, 'work-items', params] as const,
+  /** Detail view for a single item */
+  detail: (id: string) => ['work-items', id, 'detail'] as const,
+  /** Activity feed for a single item */
+  activity: (id: string) => ['work-items', id, 'activity'] as const,
+  /** Change history for a single item */
+  history: (id: string, params: HistoryQueryParams = {}) =>
+    ['work-items', id, 'history', params] as const,
+  /** Comment thread for a single item */
+  comments: (id: string) => ['work-items', id, 'comments'] as const,
+  /** Hierarchy info for a single item */
+  hierarchy: (projectId: string, id: string) =>
+    ['projects', projectId, 'work-items', id, 'hierarchy'] as const,
+  /** Rollup totals for a single item */
+  rollup: (projectId: string, id: string) =>
+    ['projects', projectId, 'work-items', id, 'rollup'] as const,
+  /** Batch rollup totals */
+  batchRollups: (projectId: string, ids: string[]) =>
+    ['projects', projectId, 'work-items', 'batch-rollups', [...ids].sort().join(',')] as const,
+} as const;
+
+// ─── Cache helpers ────────────────────────────────────────────────────────────
 
 export function updateWorkItemInCache(
   queryClient: QueryClient,
@@ -48,7 +80,9 @@ export function updateWorkItemInCache(
         });
 
         if (movedItem) {
-          const targetGroupIndex = newGroups.findIndex((g) => g.state.key === (movedItem as WorkItem).state);
+          const targetGroupIndex = newGroups.findIndex(
+            (g) => g.state.key === (movedItem as WorkItem).state,
+          );
           if (targetGroupIndex !== -1) {
             newGroups[targetGroupIndex] = {
               ...newGroups[targetGroupIndex],
@@ -62,7 +96,7 @@ export function updateWorkItemInCache(
     return old;
   });
 
-  queryClient.setQueryData(['work-items', id, 'detail'], (old: WorkItem | undefined) => {
+  queryClient.setQueryData(workItemKeys.detail(id), (old: WorkItem | undefined) => {
     return old ? updater(old) : old;
   });
 }
@@ -72,55 +106,68 @@ export function updateWorkItemInCache(
 // scopes keeps boards config, members, areas, tags, overview, and other
 // project queries from refetching on every edit.
 export function invalidateWorkItemScopes(queryClient: QueryClient, projectId: string) {
-  queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'work-items'] });
+  queryClient.invalidateQueries({ queryKey: workItemKeys.all(projectId) });
   queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'backlog'] });
   queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'iterations'] });
 }
 
 export function cancelWorkItemScopes(queryClient: QueryClient, projectId: string) {
-  queryClient.cancelQueries({ queryKey: ['projects', projectId, 'work-items'] });
+  queryClient.cancelQueries({ queryKey: workItemKeys.all(projectId) });
   queryClient.cancelQueries({ queryKey: ['projects', projectId, 'backlog'] });
   queryClient.cancelQueries({ queryKey: ['projects', projectId, 'iterations'] });
 }
+
+// ─── Query parameter builder ──────────────────────────────────────────────────
 
 export interface WorkItemsQuery {
   search?: string;
   tags?: string;
   assignedTo?: string;
   types?: string;
+  states?: string;
+  /** Alias for `states` — accepted for backward-compatibility with existing callers */
   state?: string;
-  iterationId?: string;
-  areaId?: string;
-  parentId?: string;
   priority?: string;
-  limit?: string;
-  offset?: string;
+  areaId?: string;
+  iterationId?: string;
+  parentId?: string;
+  /** Accepts both number and string for compatibility with existing callers */
+  limit?: number | string;
+  /** Accepts both number and string for compatibility with existing callers */
+  offset?: number | string;
   fields?: string;
 }
 
-function buildWorkItemsParams(teamId?: string | null, filters?: WorkItemsQuery): Record<string, string> {
+function buildWorkItemsParams(
+  teamId?: string | null,
+  filters?: WorkItemsQuery,
+): Record<string, string> {
   const params: Record<string, string> = {};
-  if (teamId) params.teamId = teamId;
-  if (!filters) return params;
-  const entries: Array<[string, string | undefined]> = [
-    ['search', filters.search],
-    ['tags', filters.tags],
-    ['assignedTo', filters.assignedTo],
-    ['types', filters.types],
-    ['state', filters.state],
-    ['iterationId', filters.iterationId],
-    ['areaId', filters.areaId],
-    ['parentId', filters.parentId],
-    ['priority', filters.priority],
-    ['limit', filters.limit],
-    ['offset', filters.offset],
-    ['fields', filters.fields],
+  if (teamId) params['teamId'] = teamId;
+  const entries: [string, string | number | undefined][] = [
+    ['search', filters?.search],
+    ['tags', filters?.tags],
+    ['assignedTo', filters?.assignedTo],
+    ['types', filters?.types],
+    // Support both 'states' and the legacy 'state' alias
+    ['states', filters?.states ?? filters?.state],
+    ['priority', filters?.priority],
+    ['areaId', filters?.areaId],
+    ['iterationId', filters?.iterationId],
+    ['parentId', filters?.parentId],
+    ['limit', filters?.limit],
+    ['offset', filters?.offset],
+    ['fields', filters?.fields],
   ];
   for (const [key, value] of entries) {
-    if (value) params[key] = value;
+    if (value !== undefined && value !== null && value !== '') {
+      params[key] = String(value);
+    }
   }
   return params;
 }
+
+// ─── Query hooks ──────────────────────────────────────────────────────────────
 
 export function useWorkItems(
   projectId: string,
@@ -130,7 +177,7 @@ export function useWorkItems(
 ) {
   const params = buildWorkItemsParams(teamId, filters);
   return useQuery<WorkItem[]>({
-    queryKey: ['projects', projectId, 'work-items', params],
+    queryKey: workItemKeys.list(projectId, params),
     queryFn: () => workItemsApi.getWorkItems(projectId, params),
     enabled: !!projectId && (options?.enabled ?? true),
   });
@@ -138,11 +185,13 @@ export function useWorkItems(
 
 export function useWorkItemDetail(id: string) {
   return useQuery<WorkItem>({
-    queryKey: ['work-items', id, 'detail'],
+    queryKey: workItemKeys.detail(id),
     queryFn: () => workItemsApi.getWorkItemDetail(id),
     enabled: !!id,
   });
 }
+
+// ─── Mutation hooks ───────────────────────────────────────────────────────────
 
 export function useCreateWorkItem(projectId: string) {
   const queryClient = useQueryClient();
@@ -177,13 +226,18 @@ export function useUpdateWorkItem(projectId: string) {
       }));
     },
     onError: (err) => {
-      toast.showError('Failed to update work item', formatApiError(err));
+      if (err instanceof ApiError && err.statusCode === 403) {
+        toast.showError('Permission denied', 'You no longer have permission to edit this work item.');
+        queryClient.invalidateQueries({ queryKey: projectKeys.myPermissions(projectId) });
+      } else {
+        toast.showError('Failed to update work item', formatApiError(err));
+      }
       invalidateWorkItemScopes(queryClient, projectId);
     },
     onSettled: (_data, _err, { id }) => {
       invalidateWorkItemScopes(queryClient, projectId);
-      queryClient.invalidateQueries({ queryKey: ['work-items', id, 'history'] });
-      queryClient.invalidateQueries({ queryKey: ['work-items', id, 'activity'] });
+      queryClient.invalidateQueries({ queryKey: workItemKeys.history(id) });
+      queryClient.invalidateQueries({ queryKey: workItemKeys.activity(id) });
     },
   });
 }
@@ -204,13 +258,18 @@ export function useTransitionWorkItemState(projectId: string) {
       }));
     },
     onError: (err) => {
-      toast.showError('State transition failed', formatApiError(err));
+      if (err instanceof ApiError && err.statusCode === 403) {
+        toast.showError('Permission denied', "You no longer have permission to change this item's state.");
+        queryClient.invalidateQueries({ queryKey: projectKeys.myPermissions(projectId) });
+      } else {
+        toast.showError('State transition failed', formatApiError(err));
+      }
       invalidateWorkItemScopes(queryClient, projectId);
     },
     onSettled: (_data, _err, { id }) => {
       invalidateWorkItemScopes(queryClient, projectId);
-      queryClient.invalidateQueries({ queryKey: ['work-items', id, 'history'] });
-      queryClient.invalidateQueries({ queryKey: ['work-items', id, 'activity'] });
+      queryClient.invalidateQueries({ queryKey: workItemKeys.history(id) });
+      queryClient.invalidateQueries({ queryKey: workItemKeys.activity(id) });
     },
   });
 }
@@ -243,14 +302,21 @@ export function useDeleteWorkItem(projectId: string) {
       invalidateWorkItemScopes(queryClient, projectId);
     },
     onError: (err) => {
-      toast.showError('Failed to delete work item', formatApiError(err));
+      if (err instanceof ApiError && err.statusCode === 403) {
+        toast.showError('Permission denied', 'You no longer have permission to delete this work item.');
+        queryClient.invalidateQueries({ queryKey: projectKeys.myPermissions(projectId) });
+      } else {
+        toast.showError('Failed to delete work item', formatApiError(err));
+      }
     },
   });
 }
 
+// ─── Activity / History / Comments ───────────────────────────────────────────
+
 export function useWorkItemActivity(id: string) {
   return useQuery<WorkItemActivity[]>({
-    queryKey: ['work-items', id, 'activity'],
+    queryKey: workItemKeys.activity(id),
     queryFn: () => workItemsApi.getActivity(id),
     enabled: !!id,
   });
@@ -262,7 +328,7 @@ export function useWorkItemHistory(
   enabled = true,
 ) {
   return useQuery<PaginatedWorkItemHistory>({
-    queryKey: ['work-items', id, 'history', params],
+    queryKey: workItemKeys.history(id, params),
     queryFn: () => workItemsApi.getHistory(id, params),
     enabled: !!id && enabled,
     staleTime: 10 * 1000,
@@ -271,7 +337,7 @@ export function useWorkItemHistory(
 
 export function useWorkItemComments(id: string) {
   return useInfiniteQuery<WorkItemCommentPage>({
-    queryKey: ['work-items', id, 'comments'],
+    queryKey: workItemKeys.comments(id),
     queryFn: ({ pageParam }) => workItemsApi.getComments(id, pageParam as string | null),
     initialPageParam: null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
@@ -286,9 +352,9 @@ export function useAddComment(workItemId: string) {
   return useMutation({
     mutationFn: (content: string) => workItemsApi.addComment(workItemId, content),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'comments'] });
-      queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'activity'] });
-      queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'history'] });
+      queryClient.invalidateQueries({ queryKey: workItemKeys.comments(workItemId) });
+      queryClient.invalidateQueries({ queryKey: workItemKeys.activity(workItemId) });
+      queryClient.invalidateQueries({ queryKey: workItemKeys.history(workItemId) });
     },
     onError: (err) => {
       toast.showError('Failed to post comment', formatApiError(err));
@@ -301,10 +367,17 @@ export function useUpdateComment(workItemId: string) {
   const toast = useToast();
 
   return useMutation({
-    mutationFn: ({ commentId, content, version }: { commentId: string; content: string; version: number }) =>
-      workItemsApi.updateComment(workItemId, commentId, content, version),
+    mutationFn: ({
+      commentId,
+      content,
+      version,
+    }: {
+      commentId: string;
+      content: string;
+      version: number;
+    }) => workItemsApi.updateComment(workItemId, commentId, content, version),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'comments'] });
+      queryClient.invalidateQueries({ queryKey: workItemKeys.comments(workItemId) });
     },
     onError: (err) => {
       toast.showError('Failed to update comment', formatApiError(err));
@@ -320,7 +393,7 @@ export function useDeleteComment(workItemId: string) {
     mutationFn: ({ commentId, version }: { commentId: string; version: number }) =>
       workItemsApi.deleteComment(workItemId, commentId, version),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['work-items', workItemId, 'comments'] });
+      queryClient.invalidateQueries({ queryKey: workItemKeys.comments(workItemId) });
     },
     onError: (err) => {
       toast.showError('Failed to delete comment', formatApiError(err));
@@ -328,10 +401,11 @@ export function useDeleteComment(workItemId: string) {
   });
 }
 
-// Phase 12 - Rollup & Hierarchy Hooks
+// ─── Rollup & Hierarchy ───────────────────────────────────────────────────────
+
 export function useWorkItemRollup(projectId: string | undefined, itemId: string | undefined) {
   return useQuery({
-    queryKey: ['projects', projectId, 'work-items', itemId, 'rollup'],
+    queryKey: workItemKeys.rollup(projectId ?? '', itemId ?? ''),
     queryFn: () => workItemsApi.getWorkItemRollup(projectId!, itemId!),
     enabled: !!projectId && !!itemId,
   });
@@ -339,7 +413,7 @@ export function useWorkItemRollup(projectId: string | undefined, itemId: string 
 
 export function useBatchWorkItemRollups(projectId: string | undefined, itemIds: string[]) {
   return useQuery({
-    queryKey: ['projects', projectId, 'work-items', 'batch-rollups', itemIds.sort().join(',')],
+    queryKey: workItemKeys.batchRollups(projectId ?? '', itemIds),
     queryFn: () => workItemsApi.getBatchWorkItemRollups(projectId!, itemIds),
     enabled: !!projectId && itemIds.length > 0,
   });
@@ -347,7 +421,7 @@ export function useBatchWorkItemRollups(projectId: string | undefined, itemIds: 
 
 export function useWorkItemHierarchy(projectId: string | undefined, itemId: string | undefined) {
   return useQuery({
-    queryKey: ['projects', projectId, 'work-items', itemId, 'hierarchy'],
+    queryKey: workItemKeys.hierarchy(projectId ?? '', itemId ?? ''),
     queryFn: () => workItemsApi.getWorkItemHierarchy(projectId!, itemId!),
     enabled: !!projectId && !!itemId,
   });

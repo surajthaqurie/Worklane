@@ -13,6 +13,8 @@ import {
 } from '../hooks/useOrganizations';
 import { useAuth } from '@/shared/context/AuthContext';
 import { CreateProjectDialog } from '@/features/projects/components/CreateProjectDialog';
+import { ConfirmationDialog } from '@/components/feedback/ConfirmationDialog';
+import { useDisclosure } from '@/shared/hooks/useDisclosure';
 import type { OrganizationRole } from '../types';
 import {
   Users,
@@ -108,6 +110,9 @@ export function OrganizationSettingsView({ organizationId }: OrganizationSetting
     }
   };
 
+  const removeMemberDialog = useDisclosure();
+  const [memberToRemove, setMemberToRemove] = useState<{ id: string; name: string } | null>(null);
+
   const handleRoleChange = async (memberUserId: string, newRole: OrganizationRole) => {
     try {
       await updateRoleMutation.mutateAsync({ userId: memberUserId, role: newRole });
@@ -117,19 +122,21 @@ export function OrganizationSettingsView({ organizationId }: OrganizationSetting
     }
   };
 
-  const handleRemoveMember = async (memberUserId: string, memberName: string) => {
-    const isSelf = memberUserId === user?.id;
-    const confirmMsg = isSelf
-      ? 'Are you sure you want to leave this organization?'
-      : `Are you sure you want to remove ${memberName} from this organization?`;
+  const handleRemoveMember = (memberUserId: string, memberName: string) => {
+    setMemberToRemove({ id: memberUserId, name: memberName });
+    removeMemberDialog.onOpen();
+  };
 
-    if (!window.confirm(confirmMsg)) return;
-
+  const confirmRemoveMember = async () => {
+    if (!memberToRemove) return;
     try {
-      await removeMemberMutation.mutateAsync(memberUserId);
+      await removeMemberMutation.mutateAsync(memberToRemove.id);
+      setMemberToRemove(null);
     } catch (err: unknown) {
       const errorObj = err as Error;
       alert(errorObj?.message || 'Failed to remove member');
+    } finally {
+      removeMemberDialog.onClose();
     }
   };
 
@@ -552,6 +559,21 @@ export function OrganizationSettingsView({ organizationId }: OrganizationSetting
         isOpen={isCreateProjectOpen}
         onClose={() => setIsCreateProjectOpen(false)}
         defaultOrganizationId={organizationId}
+      />
+
+      <ConfirmationDialog
+        isOpen={removeMemberDialog.isOpen}
+        onClose={removeMemberDialog.onClose}
+        onConfirm={confirmRemoveMember}
+        title={memberToRemove?.id === user?.id ? 'Leave Organization' : 'Remove Member'}
+        description={
+          memberToRemove?.id === user?.id
+            ? 'Are you sure you want to leave this organization?'
+            : `Are you sure you want to remove ${memberToRemove?.name} from this organization?`
+        }
+        confirmText={memberToRemove?.id === user?.id ? 'Leave' : 'Remove'}
+        variant="danger"
+        isLoading={removeMemberMutation.isPending}
       />
     </div>
   );

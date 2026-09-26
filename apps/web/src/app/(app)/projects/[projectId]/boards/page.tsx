@@ -20,11 +20,13 @@ import { useToast } from '@/shared/hooks/useToast';
 export default function ProjectBoardPage() {
   const params = useParams();
   const projectId = (params.projectId as string) || '';
-  const { selectedTeamId } = useProjectContext();
+  const { selectedTeamId, can } = useProjectContext();
 
   const { data: boards = [], isLoading: isLoadingBoards } = useBoards(projectId, selectedTeamId);
   const { data: states = [] } = useWorkItemStates(projectId);
   const { data: members = [] } = useProjectMembers(projectId);
+  const canCreateWorkItem = can('work_item:create');
+  const canManageBoards = can('project:manage_settings');
 
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
@@ -185,16 +187,18 @@ export default function ProjectBoardPage() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              setQuickAddState(undefined);
-              setIsCreateModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-white bg-[var(--brand-primary)] hover:opacity-90 rounded-[var(--radius-button)] transition-colors"
-          >
-            <Plus className="w-4 h-4" /> New Work Item
-          </button>
-          {activeBoard && (
+          {canCreateWorkItem && (
+            <button
+              onClick={() => {
+                setQuickAddState(undefined);
+                setIsCreateModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-white bg-[var(--brand-primary)] hover:opacity-90 rounded-[var(--radius-button)] transition-colors"
+            >
+              <Plus className="w-4 h-4" /> New Work Item
+            </button>
+          )}
+          {canManageBoards && activeBoard && (
             <button
               onClick={() => handleOpenConfig(activeBoard)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-[var(--text-secondary)] bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-[var(--radius-button)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors"

@@ -112,7 +112,7 @@ function getEventBadge(eventType: string) {
 }
 
 export function AuditLogView({ projectId }: AuditLogViewProps) {
-  const { can, role, isLoading: isLoadingAuth } = useProjectPermissions(projectId);
+  const { can, isLoading: isLoadingAuth } = useProjectPermissions(projectId);
   const { data: members = [] } = useProjectMembers(projectId);
 
   const [selectedActor, setSelectedActor] = useState<string>('');
@@ -122,7 +122,7 @@ export function AuditLogView({ projectId }: AuditLogViewProps) {
   const [page, setPage] = useState<number>(1);
   const [limit, setLimit] = useState<number>(25);
 
-  const isAuthorized = can('audit_log:view') || role === 'ADMIN' || role === 'OWNER';
+  const isAuthorized = can('audit_log:view');
 
   const queryParams = useMemo(() => {
     return {

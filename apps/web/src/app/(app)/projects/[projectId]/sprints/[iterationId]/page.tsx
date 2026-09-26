@@ -22,6 +22,8 @@ import { WorkItemDrawer } from '@/features/work-items/components/WorkItemDrawer'
 import { CreateWorkItemModal } from '@/features/work-items/components/CreateWorkItemModal';
 import { CompleteSprintDialog } from '@/features/iterations/components/CompleteSprintDialog';
 import { BacklogSidebar } from '@/features/iterations/components/BacklogSidebar';
+import { ConfirmationDialog } from '@/components/feedback/ConfirmationDialog';
+import { useDisclosure } from '@/shared/hooks/useDisclosure';
 import { useProjectContext } from '@/app/(app)/projects/[projectId]/project-layout-client';
 import { Trash2, PanelRightOpen } from 'lucide-react';
 import { DndContext, DragEndEvent } from '@dnd-kit/core';
@@ -76,6 +78,10 @@ export default function IterationDetailPage() {
     return map;
   }, [workItems]);
 
+  const deleteDialog = useDisclosure();
+  const removeDialog = useDisclosure();
+  const [itemToRemove, setItemToRemove] = useState<WorkItem | null>(null);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -105,19 +111,32 @@ export default function IterationDetailPage() {
     activateIteration.mutate(iterationId);
   };
 
-  const handleDelete = async () => {
-    if (!window.confirm(`Delete iteration "${iteration.name}"?`)) return;
+  const handleDelete = () => {
+    deleteDialog.onOpen();
+  };
+
+  const confirmDelete = async () => {
     try {
       await deleteIteration.mutateAsync(iterationId);
       router.push(`/projects/${projectId}/sprints`);
     } catch {
       // handled by mutation toast
+    } finally {
+      deleteDialog.onClose();
     }
   };
 
-  const handleRemoveWorkItem = async (item: WorkItem) => {
-    if (!window.confirm('Remove this item from the iteration? It will move back to the backlog.')) return;
-    await removeWorkItem.mutateAsync(item.id);
+  const handleRemoveWorkItem = (item: WorkItem) => {
+    setItemToRemove(item);
+    removeDialog.onOpen();
+  };
+
+  const confirmRemove = async () => {
+    if (itemToRemove) {
+      await removeWorkItem.mutateAsync(itemToRemove.id);
+      setItemToRemove(null);
+    }
+    removeDialog.onClose();
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -355,6 +374,28 @@ export default function IterationDetailPage() {
           setIsCreateModalOpen(false);
           setQuickAddState(undefined);
         }}
+      />
+
+      <ConfirmationDialog
+        isOpen={deleteDialog.isOpen}
+        onClose={deleteDialog.onClose}
+        onConfirm={confirmDelete}
+        title="Delete Iteration"
+        description={`Are you sure you want to delete iteration "${iteration?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+        isLoading={deleteIteration.isPending}
+      />
+
+      <ConfirmationDialog
+        isOpen={removeDialog.isOpen}
+        onClose={removeDialog.onClose}
+        onConfirm={confirmRemove}
+        title="Remove from Iteration"
+        description={`Remove "${itemToRemove?.title || 'item'}" from the iteration? It will move back to the backlog.`}
+        confirmText="Remove"
+        variant="warning"
+        isLoading={removeWorkItem.isPending}
       />
     </div>
   );

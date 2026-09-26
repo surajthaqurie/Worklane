@@ -1,5 +1,6 @@
 import { ApiError } from '../types/api';
 import { authTokens, User } from './authTokens';
+import { authEventBus } from './authEventBus';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -23,6 +24,7 @@ async function refreshAccessToken(): Promise<{ accessToken: string; refreshToken
 
     const data = await res.json();
     authTokens.setAuthData(data.accessToken, data.refreshToken, data.user);
+    authEventBus.emit('token-refreshed');
     return data;
   } catch {
     authTokens.clearAuthData();
@@ -74,8 +76,14 @@ export async function request<T = unknown>(
         ...options,
         _isRetry: true,
       });
-    } else if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-      window.location.replace(new URL('/login', window.location.origin).toString());
+    } else {
+      // Emit the session-expired event so subscribers (e.g. AuthContext) can react
+      authEventBus.emit('session-expired');
+
+      // Redirect to login as a fallback for components that aren't listening
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+        window.location.replace(new URL('/login', window.location.origin).toString());
+      }
     }
   }
 

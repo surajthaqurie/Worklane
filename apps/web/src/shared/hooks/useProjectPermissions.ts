@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/shared/utils/apiClient';
 import { PermissionValue, ProjectRole } from '../../config/permissions';
+import { projectKeys } from '@/features/projects/hooks/useProjects';
 
 export interface ProjectPermissions {
   role: ProjectRole | null;
@@ -11,7 +12,7 @@ export interface ProjectPermissions {
 
 export function useProjectPermissions(projectId: string | null | undefined) {
   const { data, isLoading, error } = useQuery<ProjectPermissions>({
-    queryKey: ['projects', projectId, 'my-permissions'],
+    queryKey: projectId ? projectKeys.myPermissions(projectId) : ['projects', null, 'my-permissions'],
     queryFn: async () => {
       try {
         return await apiClient.get<ProjectPermissions>(`/projects/${projectId}/my-permissions`);

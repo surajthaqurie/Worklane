@@ -10,6 +10,21 @@ import {
   cancelWorkItemScopes,
 } from '@/features/work-items/hooks/useWorkItems';
 
+// ─── Structured query key factory ────────────────────────────────────────────
+
+export const boardKeys = {
+  /** All boards under a project (optionally scoped to a team) */
+  list: (projectId: string, teamId?: string | null) =>
+    ['projects', projectId, 'boards', { teamId: teamId ?? null }] as const,
+  /** A single board */
+  detail: (projectId: string, boardId: string) =>
+    ['projects', projectId, 'boards', boardId] as const,
+  /** All boards root for broad invalidation */
+  all: (projectId: string) => ['projects', projectId, 'boards'] as const,
+} as const;
+
+// ─── WIP helpers ─────────────────────────────────────────────────────────────
+
 /** Structured WIP rejection details, mirrored from the API's WipLimitExceededException. */
 export interface WipBlockDetails extends WipBlockInfo {
   code: 'WIP_LIMIT_EXCEEDED';
@@ -48,9 +63,11 @@ export function wipBlockMessage(info: WipBlockInfo): string {
   return `"${info.columnName}" is at its WIP limit (${info.currentCount}/${info.wipLimit}). Move an item out of that column first, or use the override in the move.`;
 }
 
+// ─── Query hooks ──────────────────────────────────────────────────────────────
+
 export function useBoards(projectId: string, teamId?: string | null) {
   return useQuery<BoardConfig[]>({
-    queryKey: ['projects', projectId, 'boards', { teamId: teamId ?? null }],
+    queryKey: boardKeys.list(projectId, teamId),
     queryFn: () => boardsApi.getBoards(projectId, teamId),
     enabled: !!projectId,
   });
@@ -58,11 +75,13 @@ export function useBoards(projectId: string, teamId?: string | null) {
 
 export function useBoard(projectId: string, boardId: string | null) {
   return useQuery<BoardConfig>({
-    queryKey: ['projects', projectId, 'boards', boardId],
+    queryKey: boardKeys.detail(projectId, boardId ?? ''),
     queryFn: () => boardsApi.getBoard(projectId, boardId!),
     enabled: !!projectId && !!boardId,
   });
 }
+
+// ─── Mutation hooks ───────────────────────────────────────────────────────────
 
 export function useCreateBoard(projectId: string) {
   const queryClient = useQueryClient();
@@ -80,7 +99,7 @@ export function useCreateBoard(projectId: string) {
     }) => boardsApi.createBoard(projectId, data),
     onSuccess: (newBoard) => {
       toast.showSuccess('Board created', `Created "${newBoard.name}"`);
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'boards'] });
+      queryClient.invalidateQueries({ queryKey: boardKeys.all(projectId) });
     },
     onError: (err) => {
       toast.showError('Failed to create board', formatApiError(err));
@@ -102,7 +121,7 @@ export function useUpdateBoard(projectId: string) {
     }) => boardsApi.updateBoard(projectId, boardId, data),
     onSuccess: (updated) => {
       toast.showSuccess('Board configuration saved', `Updated board "${updated.name}"`);
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'boards'] });
+      queryClient.invalidateQueries({ queryKey: boardKeys.all(projectId) });
     },
     onError: (err) => {
       toast.showError('Failed to update board', formatApiError(err));
@@ -118,7 +137,7 @@ export function useDeleteBoard(projectId: string) {
     mutationFn: (boardId: string) => boardsApi.deleteBoard(projectId, boardId),
     onSuccess: () => {
       toast.showSuccess('Board deleted');
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'boards'] });
+      queryClient.invalidateQueries({ queryKey: boardKeys.all(projectId) });
     },
     onError: (err) => {
       toast.showError('Failed to delete board', formatApiError(err));
@@ -181,7 +200,7 @@ export function useBoardMoveWorkItem(projectId: string, boardId: string | null |
     },
     onSettled: () => {
       invalidateWorkItemScopes(queryClient, projectId);
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'boards'] });
+      queryClient.invalidateQueries({ queryKey: boardKeys.all(projectId) });
     },
   });
 }

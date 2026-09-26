@@ -7,10 +7,13 @@ import { useProjectPermissions } from '@/shared/hooks/useProjectPermissions';
 import { PermissionValue } from '@/config/permissions';
 import { Project } from '@/shared/types/projects';
 import { Team } from '@/shared/types/teams';
-import { Loader2, AlertCircle, ShieldAlert } from 'lucide-react';
-import Link from 'next/link';
 import { AppShell } from '@/components/layout/app-shell';
 import { ProjectSidebar } from '@/components/layout/project-sidebar';
+import { ErrorState } from '@/components/feedback/ErrorState';
+import { LoadingScreen } from '@/components/feedback/Spinner';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ShieldAlert } from 'lucide-react';
 
 interface ProjectContextValue {
   project: Project | null;
@@ -62,6 +65,7 @@ export function ProjectLayoutClient({
   const { data: project = null, isLoading, error } = useProject(projectId);
   const { data: teamsData } = useTeams(projectId);
   const teams = teamsData ?? [];
+  const router = useRouter();
 
   const { can, canAll, canAny, role: projectRole } = useProjectPermissions(projectId);
 
@@ -88,10 +92,7 @@ export function ProjectLayoutClient({
     return (
       <AppShell>
         <div className="flex h-full w-full items-center justify-center">
-          <div className="flex flex-col items-center gap-4 text-[var(--text-secondary)]">
-            <Loader2 className="w-8 h-8 animate-spin text-[var(--brand-primary)]" />
-            <p>Loading workspace...</p>
-          </div>
+          <LoadingScreen message="Loading workspace..." />
         </div>
       </AppShell>
     );
@@ -101,20 +102,13 @@ export function ProjectLayoutClient({
     return (
       <AppShell>
         <div className="flex h-full w-full items-center justify-center p-6">
-          <div className="max-w-md w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-card)] p-8 text-center shadow-sm">
-            <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertCircle className="w-6 h-6" />
-            </div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Project Not Found</h2>
-            <p className="text-[14px] text-[var(--text-secondary)] mb-6">
-              The project you&apos;re looking for doesn&apos;t exist, or you don&apos;t have permission to access it.
-            </p>
-            <Link
-              href="/projects"
-              className="inline-flex items-center justify-center px-4 py-2 bg-[var(--brand-primary)] text-white text-[13px] font-medium rounded-[var(--radius-button)] hover:bg-[var(--brand-primary-hover)] transition-colors"
-            >
-              Back to Projects
-            </Link>
+          <div className="max-w-md w-full">
+            <ErrorState
+              error={error ?? new Error('Project not found')}
+              title="Project Not Found"
+              showDetails={false}
+              onGoBack={() => router.push('/projects')}
+            />
           </div>
         </div>
       </AppShell>
@@ -127,7 +121,7 @@ export function ProjectLayoutClient({
         <div className="flex h-full w-full items-center justify-center p-6">
           <div className="max-w-md w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-card)] p-8 text-center shadow-lg">
             <div className="w-12 h-12 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
-              <ShieldAlert className="w-6 h-6" />
+              <ShieldAlert className="w-6 h-6" aria-hidden />
             </div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">
               Organization Mismatch

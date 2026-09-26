@@ -81,7 +81,11 @@ export async function request<T = unknown>(
       authEventBus.emit('session-expired');
 
       // Redirect to login as a fallback for components that aren't listening
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      if (
+        typeof window !== 'undefined' &&
+        !window.location.pathname.startsWith('/login') &&
+        !window.location.pathname.startsWith('/register')
+      ) {
         window.location.replace(new URL('/login', window.location.origin).toString());
       }
     }

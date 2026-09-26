@@ -66,19 +66,21 @@ export function ThemeProvider({
 
   useLayoutEffect(() => {
     const root = window.document.documentElement;
-
     root.classList.remove('light', 'dark');
 
+    let effectiveTheme = theme;
     if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
-
-      root.classList.add(systemTheme);
-      return;
+      effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
 
-    root.classList.add(theme);
+    root.classList.add(effectiveTheme);
+    if (effectiveTheme === 'dark') {
+      root.style.backgroundColor = '#09090b';
+      root.style.colorScheme = 'dark';
+    } else {
+      root.style.backgroundColor = '#f9fafb';
+      root.style.colorScheme = 'light';
+    }
   }, [theme]);
 
   const value = { theme, setTheme };

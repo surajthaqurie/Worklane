@@ -27,19 +27,24 @@ export const orgKeys = {
 
 // ─── Query hooks ──────────────────────────────────────────────────────────────
 
+import { authTokens } from '@/shared/utils/authTokens';
+
 export function useOrganizations() {
+  const hasToken = typeof window !== 'undefined' ? !!authTokens.getAccessToken() : false;
   return useQuery<Organization[]>({
     queryKey: orgKeys.list(),
     queryFn: () => organizationsApi.getOrganizations(),
+    enabled: hasToken,
     staleTime: 5 * 60 * 1000,
   });
 }
 
 export function useOrganization(organizationId?: string | null) {
+  const hasToken = typeof window !== 'undefined' ? !!authTokens.getAccessToken() : false;
   return useQuery<Organization>({
     queryKey: orgKeys.detail(organizationId ?? ''),
     queryFn: () => organizationsApi.getOrganization(organizationId!),
-    enabled: !!organizationId,
+    enabled: !!organizationId && hasToken,
     staleTime: 5 * 60 * 1000,
   });
 }

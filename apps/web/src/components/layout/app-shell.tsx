@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppSidebar } from './app-sidebar';
 import { AppTopbar } from './app-topbar';
@@ -19,9 +19,9 @@ import { CommandPaletteProvider } from '@/components/navigation/CommandPalettePr
  *  - Top bar with command palette trigger, breadcrumbs, user menu
  *  - Main content area (scrollable)
  *
- * Route protection: redirects to /login when the session is gone.
+ * Route protection: redirects to /login inside useEffect when session is missing.
  * Uses router.replace (not push) so the protected URL doesn't land in history.
- * Returns null while auth is loading to prevent a flash of the protected shell.
+ * Returns LoadingScreen while auth is loading or redirecting to prevent render side effects.
  */
 export function AppShell({
   children,
@@ -35,13 +35,14 @@ export function AppShell({
   const { isCollapsed, toggle } = useSidebarState();
   const router = useRouter();
 
-  // Route protection — redirect without adding to history
-  if (!isLoading && !user) {
-    router.replace('/login');
-    return null;
-  }
+  // Route protection — redirect inside useEffect to avoid updating Router state during render
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.replace('/login');
+    }
+  }, [isLoading, user, router]);
 
-  if (isLoading) {
+  if (isLoading || !user) {
     return (
       <div className="flex h-screen items-center justify-center bg-[var(--bg-app)]">
         <LoadingScreen message="Loading session..." />

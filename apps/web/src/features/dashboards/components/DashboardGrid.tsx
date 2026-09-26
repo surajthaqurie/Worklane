@@ -124,17 +124,55 @@ export function DashboardGrid({
     }
   };
 
-  const handleResizeWidget = (widgetId: string, colSpan: number) => {
-    const newLayout = sortedWidgets.map((w) =>
-      w.id === widgetId ? { ...w, colSpan } : w,
+  const handleResizeWidget = (widgetIdOrType: string, colSpan: number) => {
+    const exists = sortedWidgets.some(
+      (w) => w.id === widgetIdOrType || w.type === widgetIdOrType,
     );
+    let newLayout: WidgetLayout[];
+
+    if (exists) {
+      newLayout = sortedWidgets.map((w) =>
+        w.id === widgetIdOrType || w.type === widgetIdOrType ? { ...w, colSpan } : w,
+      );
+    } else {
+      const def = getWidgetDefinition(widgetIdOrType as any);
+      const newWidget: WidgetLayout = {
+        id: `widget-${widgetIdOrType.toLowerCase().replace(/_/g, '-')}`,
+        type: widgetIdOrType as any,
+        position: sortedWidgets.length,
+        colSpan,
+        rowSpan: 1,
+        visible: true,
+      };
+      newLayout = [...sortedWidgets, newWidget];
+    }
     updateLayoutMutation.mutate(newLayout);
   };
 
-  const handleToggleWidgetVisibility = (widgetId: string) => {
-    const newLayout = sortedWidgets.map((w) =>
-      w.id === widgetId ? { ...w, visible: !w.visible } : w,
+  const handleToggleWidgetVisibility = (widgetIdOrType: string) => {
+    const exists = sortedWidgets.some(
+      (w) => w.id === widgetIdOrType || w.type === widgetIdOrType,
     );
+    let newLayout: WidgetLayout[];
+
+    if (exists) {
+      newLayout = sortedWidgets.map((w) =>
+        w.id === widgetIdOrType || w.type === widgetIdOrType
+          ? { ...w, visible: !w.visible }
+          : w,
+      );
+    } else {
+      const def = getWidgetDefinition(widgetIdOrType as any);
+      const newWidget: WidgetLayout = {
+        id: `widget-${widgetIdOrType.toLowerCase().replace(/_/g, '-')}`,
+        type: widgetIdOrType as any,
+        position: sortedWidgets.length,
+        colSpan: def?.defaultColSpan || 1,
+        rowSpan: 1,
+        visible: true,
+      };
+      newLayout = [...sortedWidgets, newWidget];
+    }
     updateLayoutMutation.mutate(newLayout);
   };
 

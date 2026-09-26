@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 import { Providers } from "@/shared/components/providers";
 
@@ -19,6 +18,8 @@ export const metadata: Metadata = {
   description: "Azure Boards-inspired project management platform for high-performance teams.",
 };
 
+const themeScript = `(function(){try{var t=localStorage.getItem("worklane-theme")||localStorage.getItem("worklane_theme");var resolved=t==="light"||t==="dark"?t:(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");var root=document.documentElement;root.classList.remove("light","dark");root.classList.add(resolved);if(resolved==="dark"){root.style.backgroundColor="#09090b";root.style.colorScheme="dark"}else{root.style.backgroundColor="#f9fafb";root.style.colorScheme="light"}}catch(e){}})()`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
@@ -27,11 +28,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
-        <Script
-          id="theme-hydration"
-          strategy="beforeInteractive"
+        <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("worklane-theme")||localStorage.getItem("taskforge-theme");var resolved=t==="light"||t==="dark"?t:(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");var root=document.documentElement;root.classList.remove("light","dark");root.classList.add(resolved)}catch(e){}})()`,
+            __html: themeScript,
           }}
         />
       </head>

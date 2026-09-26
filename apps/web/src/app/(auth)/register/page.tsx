@@ -4,18 +4,24 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/shared/context/AuthContext';
 import { useToast } from '@/shared/components/ui/Toast';
+import { useTheme } from '@/shared/components/providers';
 import { formatApiError } from '@/shared/utils/error';
-import { UserPlus, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { UserPlus, AlertCircle, ArrowRight, Eye, EyeOff, Sun, Moon } from 'lucide-react';
 
 export default function RegisterPage() {
   const { register } = useAuth();
   const { showError, showSuccess } = useToast();
+  const { theme, setTheme } = useTheme();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,17 +49,39 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--bg-app,#f8fafc)] p-4">
-      <div className="max-w-md w-full space-y-8 p-8 bg-[var(--bg-surface,#ffffff)] border border-[var(--border-subtle,#e2e8f0)] rounded-xl shadow-lg transition-all">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--bg-app,#f9fafb)] p-4 relative transition-colors duration-200">
+      {/* Top right Theme Toggle Switch */}
+      <div className="absolute top-4 right-4 z-20">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--border-default,#e5e7eb)] bg-[var(--bg-surface,#ffffff)] text-[var(--text-secondary,#4b5563)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-all cursor-pointer shadow-sm text-xs font-semibold"
+        >
+          {theme === 'dark' ? (
+            <>
+              <Sun className="w-4 h-4 text-amber-400" />
+              <span>Light Mode</span>
+            </>
+          ) : (
+            <>
+              <Moon className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+              <span>Dark Mode</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="max-w-md w-full space-y-8 p-8 bg-[var(--bg-surface,#ffffff)] border border-[var(--border-default,#e5e7eb)] rounded-xl shadow-lg transition-colors duration-200">
         {/* Header */}
         <div className="text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600 text-white mb-4 shadow-md">
             <UserPlus className="w-6 h-6" />
           </div>
-          <h2 className="text-2xl font-bold text-[var(--text-primary,#0f172a)] tracking-tight">
+          <h2 className="text-2xl font-bold text-[var(--text-primary,#111827)] tracking-tight">
             Create your account
           </h2>
-          <p className="mt-2 text-sm text-[var(--text-secondary,#64748b)]">
+          <p className="mt-2 text-sm text-[var(--text-secondary,#4b5563)]">
             Get started with Worklane project management
           </p>
         </div>
@@ -68,7 +96,7 @@ export default function RegisterPage() {
         {/* Form */}
         <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary,#64748b)] mb-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary,#4b5563)] mb-1.5">
               Full Name
             </label>
             <input
@@ -77,12 +105,12 @@ export default function RegisterPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Jane Doe"
-              className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border-subtle,#cbd5e1)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary,#94a3b8)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border-default,#d1d5db)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted,#9ca3af)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary,#64748b)] mb-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary,#4b5563)] mb-1.5">
               Email Address
             </label>
             <input
@@ -91,12 +119,12 @@ export default function RegisterPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border-subtle,#cbd5e1)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary,#94a3b8)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border-default,#d1d5db)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted,#9ca3af)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary,#64748b)] mb-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary,#4b5563)] mb-1.5">
               Password
             </label>
             <div className="relative flex items-center">
@@ -105,8 +133,8 @@ export default function RegisterPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimum 6 characters"
-                className="w-full px-3.5 py-2.5 pr-10 text-sm rounded-lg border border-[var(--border-subtle,#cbd5e1)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary,#94a3b8)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                placeholder="Minimum 8 characters"
+                className="w-full px-3.5 py-2.5 pr-10 text-sm rounded-lg border border-[var(--border-default,#d1d5db)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted,#9ca3af)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               />
               <button
                 type="button"
@@ -136,7 +164,7 @@ export default function RegisterPage() {
         </form>
 
         {/* Footer */}
-        <div className="pt-4 border-t border-[var(--border-subtle,#e2e8f0)] text-center text-sm text-[var(--text-secondary,#64748b)]">
+        <div className="pt-4 border-t border-[var(--border-subtle,#e5e7eb)] text-center text-sm text-[var(--text-secondary,#4b5563)]">
           <p>
             Already have an account?{' '}
             <Link href="/login" className="font-semibold text-blue-600 hover:underline">
@@ -148,4 +176,3 @@ export default function RegisterPage() {
     </div>
   );
 }
-

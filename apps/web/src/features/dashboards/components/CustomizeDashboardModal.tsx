@@ -10,7 +10,7 @@ export interface CustomizeDashboardModalProps {
   onClose: () => void;
 }
 
-export function CustomizeDashboardModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export function CustomizeDashboardModal({ isOpen, onClose }: CustomizeDashboardModalProps) {
   const {
     layout,
     onToggleWidgetVisibility,
@@ -44,6 +44,7 @@ export function CustomizeDashboardModal({ isOpen, onClose }: { isOpen: boolean; 
             const colSpan = getWidgetColSpan(def.type);
             const Icon = def.icon;
             const widgetItem = layout.find((w) => w.type === def.type);
+            const targetIdOrType = widgetItem ? widgetItem.id : def.type;
 
             return (
               <div
@@ -76,14 +77,14 @@ export function CustomizeDashboardModal({ isOpen, onClose }: { isOpen: boolean; 
 
                 <div className="flex items-center gap-3 shrink-0">
                   {/* Size selector if visible */}
-                  {visible && widgetItem && (
+                  {visible && (
                     <div className="flex items-center rounded-[var(--radius-button)] border border-[var(--border-subtle)] p-0.5 text-[11px]">
                       {[1, 2, 3].map((size) => (
                         <button
                           key={size}
                           type="button"
-                          onClick={() => onResizeWidget(widgetItem.id, size)}
-                          className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                          onClick={() => onResizeWidget(targetIdOrType, size)}
+                          className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
                             colSpan === size
                               ? 'bg-[var(--brand-primary)] text-white'
                               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -98,11 +99,7 @@ export function CustomizeDashboardModal({ isOpen, onClose }: { isOpen: boolean; 
                   {/* Visibility Toggle Button */}
                   <button
                     type="button"
-                    onClick={() => {
-                      if (widgetItem) {
-                        onToggleWidgetVisibility(widgetItem.id);
-                      }
-                    }}
+                    onClick={() => onToggleWidgetVisibility(targetIdOrType)}
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-button)] text-xs font-medium transition-colors cursor-pointer ${
                       visible
                         ? 'bg-[var(--bg-surface-hover)] text-[var(--text-primary)] hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400'

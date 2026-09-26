@@ -1,0 +1,68 @@
+/**
+ * Central domain enums for the Worklane Web Application.
+ * Provides typed const assertions matching backend definitions.
+ */
+
+export const WorkItemTypeEnum = {
+  EPIC: 'EPIC',
+  FEATURE: 'FEATURE',
+  STORY: 'STORY',
+  TASK: 'TASK',
+  BUG: 'BUG',
+} as const;
+
+export type WorkItemTypeEnum = (typeof WorkItemTypeEnum)[keyof typeof WorkItemTypeEnum];
+
+export const WorkItemPriorityEnum = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  URGENT: 'URGENT',
+} as const;
+
+export type WorkItemPriorityEnum = (typeof WorkItemPriorityEnum)[keyof typeof WorkItemPriorityEnum];
+
+export const SeverityLevelEnum = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  CRITICAL: 'CRITICAL',
+} as const;
+
+export type SeverityLevelEnum = (typeof SeverityLevelEnum)[keyof typeof SeverityLevelEnum];
+
+export const StateCategoryEnum = {
+  PROPOSED: 'PROPOSED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  RESOLVED: 'RESOLVED',
+  COMPLETED: 'COMPLETED',
+} as const;
+
+export type StateCategoryEnum = (typeof StateCategoryEnum)[keyof typeof StateCategoryEnum];
+
+export const ProjectRoleEnum = {
+  ADMIN: 'ADMIN',
+  MEMBER: 'MEMBER',
+  VIEWER: 'VIEWER',
+} as const;
+
+export type ProjectRoleEnum = (typeof ProjectRoleEnum)[keyof typeof ProjectRoleEnum];
+
+export const OrganizationRoleEnum = {
+  OWNER: 'OWNER',
+  ADMIN: 'ADMIN',
+  MEMBER: 'MEMBER',
+  GUEST: 'GUEST',
+} as const;
+
+export type OrganizationRoleEnum = (typeof OrganizationRoleEnum)[keyof typeof OrganizationRoleEnum];
+
+export const NotificationTypeEnum = {
+  ASSIGNED: 'ASSIGNED',
+  MENTIONED: 'MENTIONED',
+  STATUS_CHANGED: 'STATUS_CHANGED',
+  COMMENT_ADDED: 'COMMENT_ADDED',
+  SYSTEM: 'SYSTEM',
+} as const;
+
+export type NotificationTypeEnum = (typeof NotificationTypeEnum)[keyof typeof NotificationTypeEnum];

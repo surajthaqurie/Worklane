@@ -55,7 +55,7 @@ export function OrganizationProvider({
     if (routeOrgId) return routeOrgId;
     if (initialOrgId) return initialOrgId;
 
-    if (storedOrgId && organizations.some((o) => o.id === storedOrgId)) {
+    if (storedOrgId && (isOrgsLoading || organizations.some((o) => o.id === storedOrgId))) {
       return storedOrgId;
     }
 
@@ -64,7 +64,7 @@ export function OrganizationProvider({
     }
 
     return null;
-  }, [routeOrgId, initialOrgId, storedOrgId, organizations]);
+  }, [routeOrgId, initialOrgId, storedOrgId, organizations, isOrgsLoading]);
 
   // Sync to localStorage
   useEffect(() => {

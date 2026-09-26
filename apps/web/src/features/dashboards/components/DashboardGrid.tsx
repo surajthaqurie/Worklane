@@ -78,6 +78,12 @@ export function DashboardGrid({
 
   const rawWidgets: WidgetLayout[] = layoutData?.widgets || [];
 
+  const defaultVisibleTypes = new Set<string>(
+    projectId
+      ? ['SPRINT_SUMMARY', 'BURNDOWN', 'MY_WORK_ITEMS', 'BLOCKED_ITEMS', 'VELOCITY', 'TEAM_PROGRESS', 'ACTIVITY']
+      : ['MY_WORK_ITEMS', 'BLOCKED_ITEMS', 'ACTIVITY'],
+  );
+
   // Ensure all registry widgets exist in the layout model
   const allRegistryTypes = Object.keys(WIDGET_REGISTRY) as Array<keyof typeof WIDGET_REGISTRY>;
   const existingTypes = new Set(rawWidgets.map((w) => w.type));
@@ -93,7 +99,7 @@ export function DashboardGrid({
         position: nextPos++,
         colSpan: def.defaultColSpan,
         rowSpan: 1,
-        visible: false, // newly registered defaults start hidden if not in custom layout
+        visible: rawWidgets.length === 0 ? defaultVisibleTypes.has(regType) : false,
       });
     }
   }
@@ -249,7 +255,13 @@ export function DashboardGrid({
         </div>
 
         {/* Responsive Grid Layout with Drag and Drop */}
-        {visibleWidgets.length === 0 ? (
+        {isLayoutLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
+            <div className="h-64 rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 animate-pulse col-span-1 md:col-span-2" />
+            <div className="h-64 rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 animate-pulse col-span-1" />
+            <div className="h-64 rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 animate-pulse col-span-1 md:col-span-2" />
+          </div>
+        ) : visibleWidgets.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-center rounded-[var(--radius-card)] border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)]">
             <LayoutGrid className="h-10 w-10 text-[var(--text-muted)] mb-3 opacity-50" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
